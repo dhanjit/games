@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Saptaloka" />
+  <meta name="theme-color" content="#0b0613" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Saptaloka — Ascend the Seven Worlds</title>
+</head>
+<body>
+  <div id="app">
+    <!-- HUD -->
+    <header id="hud">
+      <div class="realm-bar">
+        <div class="realm-name" id="realmName">Bhuloka</div>
+        <div class="realm-progress" id="realmProgress"></div>
+      </div>
+      <div class="stats">
+        <div class="stat" data-stat="prana"   title="Prana — life force">
+          <span class="glyph">❤︎</span><span class="val">50</span>
+        </div>
+        <div class="stat" data-stat="tejas"   title="Tejas — divine radiance">
+          <span class="glyph">✸</span><span class="val">50</span>
+        </div>
+        <div class="stat" data-stat="karma"   title="Karma — moral weight">
+          <span class="glyph">☸</span><span class="val">50</span>
+        </div>
+        <div class="stat" data-stat="bhakti"  title="Bhakti — devotion">
+          <span class="glyph">✿</span><span class="val">50</span>
+        </div>
+      </div>
+      <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+    </header>
+
+    <!-- Card stack -->
+    <main id="stage">
+      <div id="card" class="card">
+        <div class="card-art" id="cardArt">ॐ</div>
+        <div class="card-speaker" id="cardSpeaker">The Wheel</div>
+        <div class="card-text" id="cardText">A new soul approaches the gates of Bhuloka.</div>
+        <div class="choice left"  id="choiceLeft">←</div>
+        <div class="choice right" id="choiceRight">→</div>
+      </div>
+      <div id="hint" class="hint">swipe</div>
+    </main>
+
+    <!-- Title / start screen -->
+    <section id="titleScreen" class="overlay">
+      <div class="title-art">सप्तलोक</div>
+      <h1>Saptaloka</h1>
+      <p class="tagline">Ascend the seven worlds. Swipe your dharma.</p>
+      <div class="meta-summary" id="metaSummary"></div>
+      <button class="primary" id="startBtn">Begin Ascent</button>
+      <button class="ghost" id="mirrorBtn">Mirror of Maya</button>
+      <p class="footnote">Swipe left or right on each encounter. Keep all four virtues between 0 and 100.</p>
+    </section>
+
+    <!-- Death screen -->
+    <section id="deathScreen" class="overlay hidden">
+      <div class="title-art" id="deathGlyph">☠</div>
+      <h2 id="deathTitle">The wheel turns again</h2>
+      <p id="deathReason">Your prana faded.</p>
+      <div class="run-stats" id="runStats"></div>
+      <button class="primary" id="reincarnateBtn">Reincarnate</button>
+      <button class="ghost"   id="visitMirrorBtn">Mirror of Maya</button>
+    </section>
+
+    <!-- Mirror of Maya -->
+    <section id="mirrorScreen" class="overlay hidden">
+      <div class="title-art">माया दर्पण</div>
+      <h2>Mirror of Maya</h2>
+      <p class="tagline">Punya: <span id="punyaCount">0</span></p>
+      <div class="upgrades" id="upgrades"></div>
+      <button class="ghost" id="closeMirror">Back</button>
+    </section>
+
+    <!-- Victory screen -->
+    <section id="victoryScreen" class="overlay hidden">
+      <div class="title-art">🪷</div>
+      <h2>Moksha</h2>
+      <p id="victoryReason">You have ascended Satyaloka.</p>
+      <div class="run-stats" id="victoryStats"></div>
+      <button class="primary" id="victoryBtn">Begin Anew</button>
+    </section>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="cards.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
