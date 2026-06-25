@@ -1,5 +1,8 @@
 # Saptaloka
 
+**▶ Play: [games.dhanjit.me](https://games.dhanjit.me)** — works on phone or
+desktop; on iOS, Share → *Add to Home Screen* to install it as an app.
+
 A mythology rogue-like for the phone. Swipe through the seven lokas, survive
 encounters with gods and asuras, ascend toward mokṣa.
 
@@ -9,7 +12,8 @@ required, but it can be added to the iPhone Home Screen as a PWA.
 
 ## How to play
 
-1. Open `index.html` in a browser (mobile or desktop) and tap **Begin Ascent**.
+1. Open [games.dhanjit.me](https://games.dhanjit.me) (or any served copy — see
+   *Local development*) and tap **Begin Ascent**.
 2. Each card is an encounter. **Swipe left** for the left choice, **right** for
    the right choice. On desktop, click-and-drag the card.
 3. You have four virtues: **Prāṇa** (life), **Tejas** (radiance), **Karma**
@@ -49,6 +53,19 @@ python3 -m http.server 8080
 Then visit `http://localhost:8080` on your phone (over the same wifi as your
 machine, using your machine's LAN IP). On iOS Safari, tap the share icon →
 **Add to Home Screen** for a fullscreen install.
+
+## Hosting
+
+Served from **Cloudflare Pages**, connected to this repo's `main` branch —
+every push auto-deploys. It's a pure static site, so the Pages build config is:
+
+- **Framework preset:** None
+- **Build command:** *(none)*
+- **Build output directory:** `/`
+
+The custom domain `games.dhanjit.me` is attached via the Pages **Custom
+domains** tab (the `dhanjit.me` zone is on Cloudflare, so the CNAME and TLS are
+provisioned automatically).
 
 ## Adding content
 
