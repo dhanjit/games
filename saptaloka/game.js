@@ -2,7 +2,7 @@
 // Reigns-style card swipe rogue-like, mythology-themed, mobile-first.
 
 (() => {
-  const { REALMS, CARDS } = window.SAPTALOKA;
+  const { REALMS, CARDS, CUTSCENES } = window.SAPTALOKA;
   const STATS = ['prana', 'tejas', 'karma', 'bhakti'];
 
   // ---------- Persistent meta-progression ----------
@@ -100,6 +100,19 @@
   const toast        = $('toast');
   const statEls      = Object.fromEntries(STATS.map(s => [s, document.querySelector(`.stat[data-stat="${s}"]`)]));
   const statVals     = Object.fromEntries(STATS.map(s => [s, statEls[s].querySelector('.val')]));
+  const hud          = $('hud');
+  const statsEl      = document.querySelector('.stats');
+  const statInfo     = $('statInfo');
+  const rulesScreen  = $('rulesScreen');
+  const rulesBody    = $('rulesBody');
+  const rulesBtn     = $('rulesBtn');
+  const closeRules   = $('closeRules');
+  const statAnnounce = $('statAnnounce');
+  const cutscene     = $('cutscene');
+  const csDevanagari = $('csDevanagari');
+  const csRoman      = $('csRoman');
+  const csMeaning    = $('csMeaning');
+  const csNarration  = $('csNarration');
 
   // ---------- Game state ----------
 
@@ -117,6 +130,7 @@
     preview: false,
     graceBonus: 0,
     nextCardOverride: null,
+    cutscenePaused: false,
   };
 
   // ---------- Card selection ----------
@@ -178,6 +192,7 @@
   // ---------- UI rendering ----------
 
   function renderHud() {
+    closeStatInfo();
     const r = REALMS[state.realmIdx];
     realmName.textContent = r.name;
     realmProg.innerHTML = '';
@@ -224,6 +239,148 @@
     showToast._t = setTimeout(() => toast.classList.add('hidden'), ms);
   }
 
+  // ---------- Stat info (hover on desktop, tap to toggle on touch) ----------
+  // Copy MUST stay accurate to checkEnd(): tejas dies at 0 AND 100; karma/bhakti
+  // hit 100 as an early-mokṣa WIN; prāṇa dies only at 0 and caps at 100.
+
+  const STAT_INFO = {
+    prana: {
+      glyph: '❤︎',
+      title: 'Prāṇa — life force',
+      oneLiner: 'The only "more is better" virtue.',
+      detail: 'Your vital breath. At 0 your prāṇa fails and the wheel claims you — Second Breath can postpone that once per run. It caps at 100 and any excess is simply held, never fatal. The one virtue where a big gain is purely good.',
+    },
+    tejas: {
+      glyph: '✸',
+      title: 'Tejas — divine radiance',
+      oneLiner: 'Both extremes are fatal.',
+      detail: 'Sacred fire — the radiant splendor of gods and sages, kindled by austerity. At 0 your light dims and you vanish into shadow. At 100 it overflows and you burn yourself away. Fatal at both ends — keep it near the middle, never starved, never over-stoked.',
+    },
+    karma: {
+      glyph: '☸',
+      title: 'Karma — moral weight',
+      oneLiner: '0 damns you · 100 wins.',
+      detail: 'The ledger of your deeds. At 0 sin overtakes you and Yama drags you to Naraka. At 100 you are pure to the marrow and ascend to early mokṣa — an instant win that ends the run before the climb is done.',
+    },
+    bhakti: {
+      glyph: '✿',
+      title: 'Bhakti — devotion',
+      oneLiner: '0 erases you · 100 deifies you.',
+      detail: "The world's love for you. At 0 the world forgets you and no one chants your name. At 100 devotion consumes you and you become a deity — an early mokṣa, your story complete.",
+    },
+  };
+
+  // Use hover only on a true pointer with NO touch. Phones and hybrid touch+mouse
+  // laptops both report (any-pointer: coarse), so they take the tap-to-toggle path
+  // — otherwise a finger tap can open but never toggle shut on a hybrid.
+  const STAT_HOVER = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+                  && !window.matchMedia('(any-pointer: coarse)').matches;
+  const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let openStat = null;
+
+  function positionStatInfo(el) {
+    const hudRect = hud.getBoundingClientRect();
+    const sRect = el.getBoundingClientRect();
+    const pw = statInfo.offsetWidth;
+    const center = sRect.left + sRect.width / 2 - hudRect.left;
+    let left = center - pw / 2;
+    left = Math.max(8, Math.min(left, hudRect.width - pw - 8));
+    statInfo.style.left = left + 'px';
+    statInfo.style.top = (sRect.bottom - hudRect.top + 8) + 'px';
+    // Keep the caret out of the rounded corners when the box clamps to an edge.
+    const caret = Math.max(14, Math.min(center - left, pw - 14));
+    statInfo.style.setProperty('--caret-x', caret + 'px');
+  }
+
+  function openStatInfo(stat, el) {
+    const info = STAT_INFO[stat];
+    if (!info) return;
+    statInfo.className = 'stat-info info-' + stat;
+    statInfo.innerHTML =
+      `<b>${info.glyph} ${info.title}</b>` +
+      `<span class="si-one">${info.oneLiner}</span>` +
+      `<p>${info.detail}</p>`;
+    statInfo.classList.add('open');
+    positionStatInfo(el);
+    statInfo.setAttribute('aria-hidden', 'false');
+    for (const s of STATS) {
+      const on = s === stat;
+      statEls[s].setAttribute('aria-expanded', String(on));
+      // Tie the live popover text to the stat so a screen reader voices the detail.
+      if (on) statEls[s].setAttribute('aria-describedby', 'statInfo');
+      else statEls[s].removeAttribute('aria-describedby');
+    }
+    openStat = stat;
+  }
+
+  function closeStatInfo() {
+    if (!openStat) return;
+    statInfo.classList.remove('open');
+    statInfo.setAttribute('aria-hidden', 'true');
+    for (const s of STATS) {
+      statEls[s].setAttribute('aria-expanded', 'false');
+      statEls[s].removeAttribute('aria-describedby');
+    }
+    openStat = null;
+  }
+
+  function toggleStatInfo(stat, el) {
+    if (openStat === stat) closeStatInfo();
+    else openStatInfo(stat, el);
+  }
+
+  // ---------- How to Play ----------
+
+  function fatePills(stat) {
+    const pills = {
+      prana:  ['<span class="pill death">0 → death</span>', '<span class="pill safe">100 → safe (caps)</span>'],
+      tejas:  ['<span class="pill death">0 → death</span>', '<span class="pill death">100 → burnout</span>'],
+      karma:  ['<span class="pill death">0 → death</span>', '<span class="pill win">100 → mokṣa</span>'],
+      bhakti: ['<span class="pill death">0 → death</span>', '<span class="pill win">100 → mokṣa</span>'],
+    };
+    return pills[stat].join('');
+  }
+
+  function renderRules() {
+    const virtues = STATS.map((s) => {
+      const info = STAT_INFO[s];
+      return (
+        `<div class="rule-virtue info-${s}">` +
+          `<span class="rv-glyph">${info.glyph}</span>` +
+          `<div class="rv-body">` +
+            `<div class="rv-title">${info.title}</div>` +
+            `<div class="rv-one">${info.oneLiner}</div>` +
+            `<div class="rv-pills">${fatePills(s)}</div>` +
+          `</div>` +
+        `</div>`
+      );
+    }).join('');
+    rulesBody.innerHTML =
+      `<section class="rule-sec">` +
+        `<h3>The Goal</h3>` +
+        `<p>Each encounter, swipe to choose. Every choice shifts your four virtues. Keep all four alive across the seven realms — Bhūloka to Satyaloka — to reach <b>Mokṣa</b>.</p>` +
+      `</section>` +
+      `<section class="rule-sec">` +
+        `<h3>Controls</h3>` +
+        `<p>Swipe or click-drag the card <b>left</b> or <b>right</b> — the labels show each choice. Commit past a third of the card's width, or flick it. Unlock the <b>Sage's Eye</b> to preview the stat changes a choice will make — though some fated encounters stay veiled until you commit.</p>` +
+      `</section>` +
+      `<section class="rule-sec">` +
+        `<h3>The Four Virtues</h3>` +
+        `<p class="rule-legend"><span class="pill death">death</span><span class="pill safe">safe</span><span class="pill win">win</span></p>` +
+        virtues +
+        `<p class="rule-note">Two virtues you <i>win</i> by maxing — Karma and Bhakti. One kills you at the top — Tejas burns out. Prāṇa alone is safe when full.</p>` +
+      `</section>` +
+      `<section class="rule-sec">` +
+        `<h3>Realms &amp; Bosses</h3>` +
+        `<p>Climb Bhūloka up through Satyaloka. Each realm ends in a <b>boss</b> encounter. Survive all seven to ascend to Mokṣa.</p>` +
+      `</section>` +
+      `<section class="rule-sec">` +
+        `<h3>Between Lives</h3>` +
+        `<p>Death keeps the <b>Puṇya</b> you earned. Spend it in the <b>Mirror of Maya</b> on upgrades that carry into every future ascent.</p>` +
+      `</section>` +
+      `<p class="rule-hint">Tip: ${STAT_HOVER ? 'hover' : 'tap'} any virtue in the top bar to recall what it does.</p>`;
+  }
+
   // ---------- Stat preview & application ----------
 
   function fxFor(choice) {
@@ -242,8 +399,12 @@
     }
     if (!fx || !state.preview) return;
     for (const s of STATS) {
-      const d = fx[s];
+      let d = fx[s];
       if (!d) continue;
+      // Prāṇa caps at 100 in applyFx; preview only the deliverable gain so the
+      // badge matches the floating delta after commit.
+      if (s === 'prana' && d > 0) d = Math.min(d, 100 - state.prana);
+      if (!d) continue; // gain fully absorbed by the cap → no badge
       statEls[s].classList.add(d > 0 ? 'preview-up' : 'preview-dn');
       statEls[s].setAttribute('data-delta', (d > 0 ? '+' : '') + d);
     }
@@ -300,9 +461,10 @@
     deathScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
     victoryScreen.classList.add('hidden');
-    drawNextCard();
+    rulesScreen.classList.add('hidden');
     renderHud();
-    showToast(`Bhūloka — ${REALMS[0].subtitle}`);
+    // Opening cutscene; the first card is drawn when the player taps through.
+    playCutscene(0, () => { drawNextCard(); });
   }
 
   function drawNextCard() {
@@ -319,9 +481,51 @@
     renderCard(next);
   }
 
+  // Cinematic realm-entry interstitial. Pauses the swipe, shows the realm's
+  // Devanagari name / meaning / narration, and runs onDone (draw next card) only
+  // when the player taps. cutscenePaused is set synchronously so a fast finger
+  // mid-flyOff can't start a swipe before the veil is up.
+  function playCutscene(realmIdx, onDone, announcePrefix) {
+    const realm = REALMS[realmIdx];
+    const cs = (CUTSCENES && CUTSCENES[realmIdx]) || {};
+    state.cutscenePaused = true;
+    closeStatInfo();
+    csDevanagari.textContent = cs.deva || realm.name;
+    csRoman.textContent      = realm.name;
+    csMeaning.textContent    = realm.subtitle;
+    csNarration.textContent  = cs.narration || '';
+    if (statAnnounce) {
+      // Fold the boss-kill deltas into the same write so the live region doesn't
+      // announce them and then immediately overwrite (they'd never be voiced).
+      const lead = announcePrefix ? announcePrefix + '. ' : '';
+      statAnnounce.textContent =
+        `${lead}Entering ${realm.name}, ${realm.subtitle}. ${cs.narration || ''} Tap to continue.`;
+    }
+    cutscene.classList.remove('hidden', 'play');
+    if (!REDUCED_MOTION) { void cutscene.offsetWidth; cutscene.classList.add('play'); }
+    cutscene.focus();
+    const dismiss = () => {
+      cutscene.removeEventListener('click', dismiss);
+      cutscene.removeEventListener('keydown', onKey);
+      cutscene.classList.add('hidden');
+      cutscene.classList.remove('play');
+      state.cutscenePaused = false;
+      if (onDone) onDone();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); dismiss(); }
+    };
+    cutscene.addEventListener('click', dismiss);
+    cutscene.addEventListener('keydown', onKey);
+  }
+
   function commitChoice(side) {
+    // Drop a stale fly-off commit queued during another commit's 260ms defer:
+    // once the cutscene veil is up (or the run has ended) the card is gone.
+    if (state.cutscenePaused || !state.inRun) return;
     const choice = side === 'left' ? state.currentCard.left : state.currentCard.right;
     const fx = fxFor(choice);
+    const before = { prana: state.prana, tejas: state.tejas, karma: state.karma, bhakti: state.bhakti };
     applyFx(fx);
     state.runEncounters++;
 
@@ -342,27 +546,82 @@
     state.realmStep++;
     const realm = REALMS[state.realmIdx];
     if (state.realmStep >= realm.length) {
-      // Realm complete (boss already commited above when drawn)
+      // Realm complete (boss already committed above when drawn).
       state.runPunya += 5;
       if (state.realmIdx + 1 >= REALMS.length) {
         return endRun({ kind: 'moksha', reason: 'You ascend Satyaloka. Liberation is yours.' });
       }
       state.realmIdx++;
       state.realmStep = 0;
-      const next = REALMS[state.realmIdx];
-      showToast(`${next.name} — ${next.subtitle}`);
+      renderHud();
+      floatDeltas(before);
+      // Ascension cutscene; deltas ride along in its single announcement; the
+      // next realm's first card is drawn on tap.
+      playCutscene(state.realmIdx, () => { drawNextCard(); }, deltaText(before));
+      return;
     }
     renderHud();
+    floatDeltas(before);
+    announceDeltas(before);
     drawNextCard();
   }
 
+  // Pop the glyph (not the chip) on big hits — scaling the chip would also scale
+  // its floating-delta child mid-rise and snap it back when the transform clears.
   function flashStat(s, dir) {
+    const g = statEls[s].querySelector('.glyph');
+    if (!g) return;
+    g.style.transform = 'scale(1.3)';
+    setTimeout(() => { g.style.transform = ''; }, 220);
+  }
+
+  // Floating combat text: each changed virtue spits its delta out of the number —
+  // green and rising for a gain, red and dropping for a loss.
+  function floatDelta(s, d) {
     const el = statEls[s];
-    el.style.transform = 'scale(1.15)';
-    setTimeout(() => { el.style.transform = ''; }, 220);
+    const span = document.createElement('span');
+    span.className = 'stat-float ' + (d > 0 ? 'up' : 'dn');
+    span.textContent = (d > 0 ? '+' : '') + d;
+    el.appendChild(span);
+    span.addEventListener('animationend', () => span.remove());
+    setTimeout(() => { if (span.isConnected) span.remove(); }, 1200); // safety net
+    const val = statVals[s];
+    val.classList.remove('bump');
+    void val.offsetWidth; // restart the pop if it fired last commit
+    val.classList.add('bump');
+  }
+
+  // `before` is a snapshot of the stats prior to applyFx; we float the EFFECTIVE
+  // change (post-clamp) so the rising number always equals the number's real move.
+  function floatDeltas(before) {
+    if (REDUCED_MOTION || !before) return;
+    for (const s of STATS) {
+      const d = state[s] - before[s];
+      if (d) floatDelta(s, d);
+    }
+  }
+
+  // Non-visual delta cue for screen-reader and reduced-motion players (the float
+  // is motion-only). deltaText builds the string so the cutscene can fold it into
+  // its own live-region message instead of clobbering it.
+  function deltaText(before) {
+    if (!before) return '';
+    const names = { prana: 'Prāṇa', tejas: 'Tejas', karma: 'Karma', bhakti: 'Bhakti' };
+    const parts = [];
+    for (const s of STATS) {
+      const d = state[s] - before[s];
+      if (d) parts.push(`${names[s]} ${d > 0 ? '+' : ''}${d}`);
+    }
+    return parts.join(', ');
+  }
+
+  function announceDeltas(before) {
+    if (!statAnnounce) return;
+    statAnnounce.textContent = deltaText(before);
   }
 
   function endRun(end) {
+    closeStatInfo();
     state.inRun = false;
     if (end.kind === 'moksha') {
       meta.moksha = (meta.moksha || 0) + 1;
@@ -454,7 +713,7 @@
   let pointer = null;
 
   function onPointerDown(ev) {
-    if (!state.inRun) return;
+    if (!state.inRun || state.cutscenePaused) return;
     const p = pointFrom(ev);
     pointer = { x0: p.x, y0: p.y, x: p.x, y: p.y, t0: performance.now() };
     card.style.transition = '';
@@ -557,10 +816,74 @@
     }
   });
 
-  // Disable double-tap zoom on iOS
+  // Stat info: hover on desktop, tap-to-toggle on touch. Stats live in #hud, away
+  // from the #card swipe area, so this never interferes with the gesture handlers.
+  if (STAT_HOVER) {
+    statsEl.addEventListener('mouseover', (e) => {
+      const s = e.target.closest('.stat');
+      if (s) openStatInfo(s.dataset.stat, s);
+    });
+    statsEl.addEventListener('mouseout', (e) => {
+      const s = e.target.closest('.stat');
+      if (s && document.activeElement === s) return; // keyboard focus holds it open
+      if (s && !s.contains(e.relatedTarget)) closeStatInfo();
+    });
+    statsEl.addEventListener('focusin', (e) => {
+      const s = e.target.closest('.stat');
+      if (s) openStatInfo(s.dataset.stat, s);
+    });
+    statsEl.addEventListener('focusout', closeStatInfo);
+  } else {
+    statsEl.addEventListener('click', (e) => {
+      const s = e.target.closest('.stat');
+      if (!s) return;
+      e.stopPropagation();
+      toggleStatInfo(s.dataset.stat, s);
+    });
+  }
+  statsEl.addEventListener('keydown', (e) => {
+    const s = e.target.closest('.stat');
+    if (!s) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleStatInfo(s.dataset.stat, s);
+    }
+  });
+  // Tap/click anywhere outside an open popover dismisses it (touch flow).
+  document.addEventListener('pointerdown', (e) => {
+    if (!openStat) return;
+    if (e.target.closest('.stat') || e.target.closest('#statInfo')) return;
+    closeStatInfo();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeStatInfo(); hideRules(); }
+  });
+
+  // How to Play. Move focus into the overlay on open and back to the trigger on
+  // close so keyboard users aren't left on a control hidden behind the panel.
+  let rulesOpener = null;
+  rulesBtn.addEventListener('click', () => {
+    rulesOpener = document.activeElement;
+    renderRules();
+    rulesScreen.classList.remove('hidden');
+    closeRules.focus();
+  });
+  function hideRules() {
+    if (rulesScreen.classList.contains('hidden')) return;
+    rulesScreen.classList.add('hidden');
+    if (rulesOpener && rulesOpener.focus) rulesOpener.focus();
+    rulesOpener = null;
+  }
+  closeRules.addEventListener('click', hideRules);
+
+  // Disable double-tap zoom on iOS. Stat / popover taps are exempt: preventing
+  // their touchend would suppress the synthesized click that opens/toggles the
+  // popover, leaving rapid open→close taps dead. (Zoom on the tiny HUD chips is
+  // a non-issue.) We still record lastTap so later taps keep correct timing.
   let lastTap = 0;
   document.addEventListener('touchend', (e) => {
     const now = Date.now();
+    if (e.target.closest('.stat') || e.target.closest('#statInfo') || e.target.closest('#cutscene')) { lastTap = now; return; }
     if (now - lastTap < 350) e.preventDefault();
     lastTap = now;
   }, { passive: false });
@@ -568,9 +891,11 @@
   // ---------- Boot ----------
 
   function showTitle() {
+    closeStatInfo();
     deathScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
     victoryScreen.classList.add('hidden');
+    rulesScreen.classList.add('hidden');
     titleScreen.classList.remove('hidden');
     renderMetaSummary();
   }
