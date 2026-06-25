@@ -1,0 +1,17 @@
+# Cloudflare / wrangler local state (contains account id cache — never commit)
+.wrangler/
+
+# Secrets / env
+.env
+.env.*
+.dev.vars
+.infisical.json
+
+# Tooling / editor / OS
+.claude/
+node_modules/
+.DS_Store
+
+# Scratch
+*.diff
+*.bak
