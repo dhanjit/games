@@ -21,8 +21,15 @@ required, but it can be added to the iPhone Home Screen as a PWA.
    (deeds), **Bhakti** (devotion). Keep all four between 0 and 100.
 4. Each realm has a final **boss** card — a major asura or trial. Defeat it to
    advance to the next loka.
-5. When you die, you keep the **Puṇya** you earned. Spend it in the **Mirror of
+5. When a run ends, you keep the **Puṇya** you earned. Spend it in the **Mirror of
    Maya** for permanent upgrades that carry into future runs.
+
+**The only true win is ascending all seven lokas to Satyaloka — that is mokṣa.**
+Beware the *false summits*: maxing **Karma** lifts you to *Svarga* and maxing
+**Bhakti** crowns you a *Deva*, but both are heavens still turning inside saṃsāra
+— the run ends, yet it isn't liberation. Each way a run can end (five deaths, two
+false summits, one mokṣa) has its own ending. The Mirror's **Equanimity** upgrade
+is the key to surviving the long climb.
 
 ## Realms (in ascent order)
 
@@ -42,7 +49,7 @@ folder; the root `index.html` is a hub that links to them.
 ```
 index.html            → hub / landing page (games.dhanjit.me)
 saptaloka/            → the Saptaloka game (games.dhanjit.me/saptaloka)
-├── index.html          shell + HUD, title/death/mirror/victory overlays
+├── index.html          shell + HUD, title / unified end / mirror overlays
 ├── style.css           mobile-first dark UI, iOS safe-area aware
 ├── game.js             engine: swipe gesture, deck, realm flow, meta-progression
 ├── cards.js            encounter content (data only)

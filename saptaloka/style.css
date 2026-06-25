@@ -512,6 +512,54 @@ body {
   }
 }
 
+/* ---------- Ending screen ---------- */
+
+.end-art {
+  width: min(58vw, 200px);
+  margin-bottom: 4px;
+  filter: drop-shadow(0 8px 34px rgba(0,0,0,0.6));
+}
+.end-art svg { width: 100%; height: auto; display: block; }
+
+.end-deva {
+  font-family: inherit;              /* sans, so Devanagari conjuncts render */
+  font-size: 30px;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  margin-bottom: 2px;
+  text-shadow: 0 0 22px rgba(245,201,122,0.4);
+}
+#endReason {
+  margin: 4px 0 8px;
+  color: var(--ink-dim);
+  font-size: 15px;
+  line-height: 1.55;
+  max-width: 32ch;
+}
+
+/* Per-ending mood. .overlay base (position/flex/centering/padding) still applies. */
+.overlay.end-death {
+  background: radial-gradient(120% 80% at 50% 30%, rgba(28,10,18,0.96) 0%, rgba(8,4,12,0.99) 100%);
+}
+.overlay.end-falsesummit {
+  background: radial-gradient(120% 80% at 50% 34%, rgba(42,30,63,0.96) 0%, rgba(11,6,19,0.98) 100%);
+}
+.overlay.end-win {
+  background: radial-gradient(120% 80% at 50% 34%, rgba(64,44,18,0.96) 0%, rgba(11,6,19,0.98) 100%);
+}
+.overlay.end-win #endTitle      { color: var(--gold); text-shadow: 0 0 26px rgba(245,201,122,0.55); }
+.overlay.end-falsesummit #endTitle { color: var(--gold); opacity: 0.9; }
+.overlay.end-falsesummit .end-deva { color: var(--bhakti, #9b7bff); }
+
+/* Staged reveal (skipped under reduced-motion — JS only adds .play then). */
+#endScreen.play .end-art    { animation: endArtIn 0.9s cubic-bezier(.2,.8,.3,1) both; }
+#endScreen.play .end-deva   { animation: csFadeUp 0.6s ease-out 0.50s both; }
+#endScreen.play #endTitle   { animation: csFadeUp 0.6s ease-out 0.70s both; }
+#endScreen.play #endReason  { animation: csFadeUp 0.7s ease-out 0.95s both; }
+#endScreen.play .run-stats  { animation: csFadeUp 0.5s ease-out 1.20s both; }
+#endScreen.play button      { animation: csFadeUp 0.5s ease-out 1.40s both; }
+@keyframes endArtIn { 0% { opacity: 0; transform: translateY(22px) scale(0.82); } 100% { opacity: 1; transform: none; } }
+
 .title-art {
   font-family: "Iowan Old Style", "Palatino", serif;
   font-size: 56px;
@@ -572,6 +620,57 @@ button.ghost {
   border: 1px solid rgba(255,255,255,0.2);
 }
 button.ghost:active { background: rgba(255,255,255,0.08); }
+
+/* ---------- Title-screen Satyaloka goal track ---------- */
+
+.goal {
+  width: 100%;
+  max-width: 320px;
+  margin: 2px 0 4px;
+}
+.goal-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+  margin-bottom: 5px;
+}
+.goal-rail-row { display: flex; align-items: center; }
+.goal-pip {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.14);
+  flex: 0 0 auto;
+}
+.goal-pip.reached { background: var(--gold); box-shadow: 0 0 6px rgba(245,201,122,0.6); }
+.goal-pip.goal {
+  width: 14px; height: 14px;
+  transform: rotate(45deg);          /* diamond marks the destination */
+  border-radius: 3px;
+  background: transparent;
+  border: 1.5px solid var(--gold-deep);
+}
+.goal-pip.goal.reached {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: 0 0 12px rgba(245,201,122,0.85);
+}
+.goal-rail {
+  flex: 1 1 auto;
+  height: 2px;
+  background: rgba(255,255,255,0.12);
+  margin: 0 3px;
+}
+.goal-rail.reached { background: var(--gold-deep); }
+.goal-cta {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  text-align: center;
+}
+.goal-cta b { color: var(--gold); font-weight: 700; }
 
 .meta-summary {
   display: flex;
@@ -709,6 +808,7 @@ button.ghost:active { background: rgba(255,255,255,0.08); }
 .pill.death { color: var(--danger);  background: rgba(194,56,74,0.15);  border-color: rgba(194,56,74,0.4); }
 .pill.safe  { color: var(--emerald); background: rgba(77,191,139,0.15);  border-color: rgba(77,191,139,0.4); }
 .pill.win   { color: var(--gold);    background: rgba(245,201,122,0.15); border-color: rgba(245,201,122,0.45); }
+.pill.false { color: var(--stat-bhakti); background: rgba(155,123,255,0.14); border-color: rgba(155,123,255,0.4); }
 
 .rule-note {
   margin-top: 10px !important;
