@@ -133,11 +133,6 @@
 
   function clamp(v) { return Math.max(0, Math.min(100, v)); }
 
-  function realmFor(card) {
-    if (card.realm) return card.realm;
-    return null;
-  }
-
   function eligibleCards() {
     const realmNum = state.realmIdx + 1;
     return CARDS.filter(card => {
