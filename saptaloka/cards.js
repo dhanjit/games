@@ -93,8 +93,8 @@ const CARDS = [
     realmMin: 1, realmMax: 3, weight: 1,
     art: '🌊', speaker: 'The Ganga',
     text: 'The river-mother whispers from the foam. "Drink, and remember a former life. Or pass dry-mouthed."',
-    left:  { label: 'Drink deeply',   fx: { prana: -5, bhakti: +8, tejas: +2 } },
-    right: { label: 'Cross dry-shod', fx: { prana: +4, bhakti: -3 } },
+    left:  { label: 'Cross dry-shod', fx: { prana: +4, bhakti: -3 } },
+    right: { label: 'Drink deeply',   fx: { prana: -5, bhakti: +8, tejas: +2 } },
   }),
 
   c('forest_tiger', {
@@ -109,8 +109,8 @@ const CARDS = [
     realmMin: 1, realmMax: 2, weight: 1,
     art: '🧒', speaker: 'A village child',
     text: '"A demon took my mother into the well. Please. Climb down with me."',
-    left:  { label: 'Descend the well', fx: { prana: -9, karma: +6, bhakti: +3 } },
-    right: { label: 'Tell her to flee', fx: { prana: +4, karma: -8, tejas: +1 } },
+    left:  { label: 'Tell her to flee', fx: { prana: +4, karma: -8, tejas: +1 } },
+    right: { label: 'Descend the well', fx: { prana: -9, karma: +6, bhakti: +3 } },
   }),
 
   // ---------- Bhuvarloka (2) - storms, yakshas, in-between beings ----------
@@ -119,8 +119,8 @@ const CARDS = [
     realmMin: 2, realmMax: 4, weight: 2,
     art: '🌀', speaker: 'A yaksha by a pond',
     text: '"What is heavier than the earth, swifter than wind, more numerous than blades of grass?"',
-    left:  { label: '"A mother\'s love."', fx: { karma: +5, bhakti: +5, tejas: -2 } },
-    right: { label: '"I have no time for games."', fx: { prana: -10, tejas: +4 } },
+    left:  { label: '"I have no time for games."', fx: { prana: -10, tejas: +4 } },
+    right: { label: '"A mother\'s love."', fx: { karma: +5, bhakti: +5, tejas: -2 } },
   }),
 
   c('gandharva_song', {
@@ -151,16 +151,16 @@ const CARDS = [
     realmMin: 2, realmMax: 3, weight: 1,
     art: '⛈', speaker: 'A wandering ascetic in the rain',
     text: '"Vow to fast for seven days, and I will teach you the wind\'s name."',
-    left:  { label: 'Take the vow',  fx: { prana: -9, tejas: +7, bhakti: +3 } },
-    right: { label: 'Decline politely', fx: { prana: +2, tejas: -4 } },
+    left:  { label: 'Decline politely', fx: { prana: +2, tejas: -4 } },
+    right: { label: 'Take the vow',  fx: { prana: -9, tejas: +7, bhakti: +3 } },
   }),
 
   c('garuda_offer', {
     realmMin: 2, realmMax: 5, weight: 1, tag: 'god',
     art: '🦅', speaker: 'Garuḍa, mount of Viṣṇu',
     text: '"Climb my back. But every feather I lend you, you owe in dharma."',
-    left:  { label: 'Climb on',     fx: { karma: -6, tejas: +7, bhakti: +3 } },
-    right: { label: 'Walk on foot', fx: { karma: +2, prana: -3 } },
+    left:  { label: 'Walk on foot', fx: { karma: +2, prana: -3 } },
+    right: { label: 'Climb on',     fx: { karma: -6, tejas: +7, bhakti: +3 } },
   }),
 
   // ---------- Svarloka (3) - Indra's heaven, devas everywhere ----------
@@ -217,8 +217,8 @@ const CARDS = [
     realmMin: 1, realmMax: 6, weight: 1, tag: 'god',
     art: '🐒', speaker: 'Hanumān, son of the wind',
     text: '"Lift this boulder, even an inch. Whatever I see in you, I lend you."',
-    left:  { label: 'Strain with all you have', fx: { prana: -5, tejas: +4, bhakti: +8 } },
-    right: { label: 'Admit you cannot',         fx: { karma: +4, bhakti: +3 } },
+    left:  { label: 'Admit you cannot',         fx: { karma: +4, bhakti: +3 } },
+    right: { label: 'Strain with all you have', fx: { prana: -5, tejas: +4, bhakti: +8 } },
   }),
 
   c('ganesha_path', {
@@ -241,8 +241,8 @@ const CARDS = [
     realmMin: 2, realmMax: 6, weight: 1,
     art: '🪨', speaker: 'Sage Durvāsa',
     text: 'His glare is famous. "I am hungry. Cook for me, NOW. Burn the rice and I curse your line."',
-    left:  { label: 'Cook with care', fx: { prana: -5, tejas: -2, karma: +4, bhakti: +3 } },
-    right: { label: 'Refuse to serve', fx: { prana: -12, karma: +1, tejas: +4 } },
+    left:  { label: 'Refuse to serve', fx: { prana: -12, karma: +1, tejas: +4 } },
+    right: { label: 'Cook with care', fx: { prana: -5, tejas: -2, karma: +4, bhakti: +3 } },
   }),
 
   // ---------- Maharloka (4) - the great sages ----------
@@ -259,8 +259,8 @@ const CARDS = [
     realmMin: 4, realmMax: 6, weight: 1,
     art: '🧘', speaker: 'Sage Vasiṣṭha',
     text: '"Sit. Say nothing for a hundred breaths. The world will offer everything to break you."',
-    left:  { label: 'Sit silent',     fx: { tejas: -6, karma: +5, bhakti: +5, prana: -2 } },
-    right: { label: 'Stand and walk', fx: { tejas: +4, karma: -4 } },
+    left:  { label: 'Stand and walk', fx: { tejas: +4, karma: -4 } },
+    right: { label: 'Sit silent',     fx: { tejas: -6, karma: +5, bhakti: +5, prana: -2 } },
   }),
 
   c('agastya_ocean', {
@@ -275,8 +275,8 @@ const CARDS = [
     realmMin: 3, realmMax: 6, weight: 1,
     art: '🌑', speaker: 'A wronged ṛṣi',
     text: '"You stepped on my deer\'s shadow. Apologize at my feet, or be reborn as a worm."',
-    left:  { label: 'Kneel and apologize', fx: { tejas: -8, karma: +4, bhakti: +3 } },
-    right: { label: 'Stand your ground',   fx: { prana: -14, tejas: +5 } },
+    left:  { label: 'Stand your ground',   fx: { prana: -14, tejas: +5 } },
+    right: { label: 'Kneel and apologize', fx: { tejas: -8, karma: +4, bhakti: +3 } },
   }),
 
   // ---------- Tempters (asuras) - any realm ----------
@@ -319,8 +319,8 @@ const CARDS = [
     realmMin: 5, realmMax: 7, weight: 1, tag: 'god',
     art: '🌌', speaker: 'A spark from Brahmā\'s mouth',
     text: '"Speak the syllable that began the universe. Mispronounce it, and a galaxy ages."',
-    left:  { label: 'Whisper "OṂ"',   fx: { tejas: +6, bhakti: +6, prana: -3 } },
-    right: { label: 'Stay silent',    fx: { karma: +4, tejas: -4 } },
+    left:  { label: 'Stay silent',    fx: { karma: +4, tejas: -4 } },
+    right: { label: 'Whisper "OṂ"',   fx: { tejas: +6, bhakti: +6, prana: -3 } },
   }),
 
   c('shiva_dance', {
@@ -359,8 +359,8 @@ const CARDS = [
     realmMin: 5, realmMax: 7, weight: 1, tag: 'god',
     art: '🐍', speaker: 'Viṣṇu on the cosmic serpent',
     text: 'He half-opens an eye. "Wake me with a true name, or let me dream — and the universe with me."',
-    left:  { label: 'Speak a name', fx: { bhakti: +11, prana: -5, tejas: +2 } },
-    right: { label: 'Let him sleep', fx: { karma: +5, bhakti: -2 } },
+    left:  { label: 'Let him sleep', fx: { karma: +5, bhakti: -2 } },
+    right: { label: 'Speak a name', fx: { bhakti: +11, prana: -5, tejas: +2 } },
   }),
 
   c('yama_ledger', {
@@ -385,16 +385,16 @@ const CARDS = [
     realmMin: 1, realmMax: 4, weight: 1,
     art: '🗡', speaker: 'A dying soldier',
     text: '"Take my sword. Promise to use it for the side I betrayed."',
-    left:  { label: 'Take it',           fx: { tejas: +5, karma: -6 } },
-    right: { label: 'Bury it with him',  fx: { karma: +4, bhakti: +3, tejas: -2 } },
+    left:  { label: 'Bury it with him',  fx: { karma: +4, bhakti: +3, tejas: -2 } },
+    right: { label: 'Take it',           fx: { tejas: +5, karma: -6 } },
   }),
 
   c('runaway_bride', {
     realmMin: 1, realmMax: 3, weight: 1,
     art: '👰', speaker: 'A bride hiding behind a banyan',
     text: '"They marry me to a man twice my age tomorrow. Hide me a single night."',
-    left:  { label: 'Hide her',     fx: { karma: +5, bhakti: +3, prana: -3 } },
-    right: { label: 'Send her back', fx: { tejas: +2, karma: -6 } },
+    left:  { label: 'Send her back', fx: { tejas: +2, karma: -6 } },
+    right: { label: 'Hide her',     fx: { karma: +5, bhakti: +3, prana: -3 } },
   }),
 
   c('thief_at_temple', {
@@ -433,8 +433,8 @@ const CARDS = [
     realmMin: 2, realmMax: 6, weight: 1,
     art: '🪞', speaker: 'Your own reflection',
     text: '"You\'re not who you pretend to be. Admit it, and one truth becomes a power."',
-    left:  { label: 'Admit it',     fx: { karma: +4, tejas: +4, bhakti: +3, prana: -3 } },
-    right: { label: 'Walk on',      fx: { tejas: +1, bhakti: -2 } },
+    left:  { label: 'Walk on',      fx: { tejas: +1, bhakti: -2 } },
+    right: { label: 'Admit it',     fx: { karma: +4, tejas: +4, bhakti: +3, prana: -3 } },
   }),
 
   c('snake_charmer', {
@@ -483,8 +483,8 @@ const CARDS = [
     realmMin: 6, realmMax: 7, weight: 1,
     art: '⚜', speaker: 'A formless voice',
     text: '"Name what you cling to most. Whatever you name, I take. Refuse, and the climb resets a step."',
-    left:  { label: 'Name a virtue', fx: { tejas: -10, karma: +5, bhakti: +6 } },
-    right: { label: 'Refuse',        fx: { prana: -5, tejas: -2 } },
+    left:  { label: 'Refuse',        fx: { prana: -5, tejas: -2 } },
+    right: { label: 'Name a virtue', fx: { tejas: -10, karma: +5, bhakti: +6 } },
   }),
 
   c('boatman_styx', {
