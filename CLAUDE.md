@@ -4,10 +4,16 @@ A Reigns-style mythology rogue-like, mobile-web. Pure static — no build, no
 deps. Player-facing docs are in [README.md](README.md); this file captures
 non-obvious things for editing the code.
 
+## Repo layout
+
+This repo serves multiple games under `games.dhanjit.me`. The **root
+`index.html` is a hub** (plain landing page) linking to each game; **Saptaloka
+itself lives in `saptaloka/`**. All paths below are inside `saptaloka/`.
+
 ## Architecture in 30 seconds
 
 ```
-index.html  → loads cards.js, then game.js (order matters)
+saptaloka/index.html  → loads cards.js, then game.js (order matters)
 cards.js    → exposes window.SAPTALOKA = { REALMS, CARDS } (data only)
 game.js     → IIFE; reads window.SAPTALOKA at boot
 style.css   → CSS vars in :root drive the theme; mobile-first, safe-area aware
@@ -28,8 +34,9 @@ cd /Users/dhanjit/Code/games
 python3 -m http.server 8080
 ```
 
-Then open `http://localhost:8080`. For phone testing on the same wifi, use the
-machine's LAN IP. iOS PWA install: Share → Add to Home Screen.
+Then open `http://localhost:8080/saptaloka/` for the game (or
+`http://localhost:8080` for the hub). For phone testing on the same wifi, use
+the machine's LAN IP. iOS PWA install: Share → Add to Home Screen.
 
 ## Card data — invariants and gotchas
 

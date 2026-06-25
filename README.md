@@ -1,5 +1,9 @@
 # Saptaloka
 
+**▶ Play: [games.dhanjit.me/saptaloka](https://games.dhanjit.me/saptaloka/)** —
+works on phone or desktop; on iOS, Share → *Add to Home Screen* to install it as
+an app. (The hub at [games.dhanjit.me](https://games.dhanjit.me) lists all games.)
+
 A mythology rogue-like for the phone. Swipe through the seven lokas, survive
 encounters with gods and asuras, ascend toward mokṣa.
 
@@ -9,7 +13,8 @@ required, but it can be added to the iPhone Home Screen as a PWA.
 
 ## How to play
 
-1. Open `index.html` in a browser (mobile or desktop) and tap **Begin Ascent**.
+1. Open [games.dhanjit.me/saptaloka](https://games.dhanjit.me/saptaloka/) (or any
+   served copy — see *Local development*) and tap **Begin Ascent**.
 2. Each card is an encounter. **Swipe left** for the left choice, **right** for
    the right choice. On desktop, click-and-drag the card.
 3. You have four virtues: **Prāṇa** (life), **Tejas** (radiance), **Karma**
@@ -29,26 +34,51 @@ required, but it can be added to the iPhone Home Screen as a PWA.
 6. **Tapoloka** — realm of austerity
 7. **Satyaloka** — realm of truth
 
+## Repo layout
+
+This repo hosts multiple games under one domain. Each game lives in its own
+folder; the root `index.html` is a hub that links to them.
+
+```
+index.html            → hub / landing page (games.dhanjit.me)
+saptaloka/            → the Saptaloka game (games.dhanjit.me/saptaloka)
+├── index.html          shell + HUD, title/death/mirror/victory overlays
+├── style.css           mobile-first dark UI, iOS safe-area aware
+├── game.js             engine: swipe gesture, deck, realm flow, meta-progression
+├── cards.js            encounter content (data only)
+└── manifest.webmanifest  PWA install metadata
+```
+
+To add a game later, drop it in a new top-level folder and add a card to the
+hub's `index.html`.
+
 ## Local development
 
-No build step. Files:
-
-- `index.html` — shell + HUD, title/death/mirror/victory overlays
-- `style.css` — mobile-first dark UI, iOS safe-area aware
-- `game.js` — engine: swipe gesture, deck, realm flow, meta-progression
-- `cards.js` — encounter content (data only)
-- `manifest.webmanifest` — PWA install metadata
-
-To run:
+No build step. To run:
 
 ```
 cd /home/user/games
 python3 -m http.server 8080
 ```
 
-Then visit `http://localhost:8080` on your phone (over the same wifi as your
-machine, using your machine's LAN IP). On iOS Safari, tap the share icon →
-**Add to Home Screen** for a fullscreen install.
+Then visit `http://localhost:8080` for the hub, or `http://localhost:8080/saptaloka/`
+for the game directly — on your phone use the same wifi and your machine's LAN
+IP. On iOS Safari, tap the share icon → **Add to Home Screen** for a fullscreen
+install.
+
+## Hosting
+
+Served from **Cloudflare Pages**, connected to this repo's `main` branch —
+every push auto-deploys. It's a pure static site, so the Pages build config is:
+
+- **Framework preset:** None
+- **Build command:** *(none)*
+- **Build output directory:** `/`
+
+The repo root is served as-is: the hub at `/` and each game under its own path
+(e.g. `/saptaloka/`). The custom domain `games.dhanjit.me` is attached via the
+Pages **Custom domains** tab (the `dhanjit.me` zone is on Cloudflare, so the
+CNAME and TLS are provisioned automatically).
 
 ## Adding content
 
