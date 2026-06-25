@@ -2,7 +2,7 @@
 // Reigns-style card swipe rogue-like, mythology-themed, mobile-first.
 
 (() => {
-  const { REALMS, CARDS, CUTSCENES } = window.SAPTALOKA;
+  const { REALMS, CARDS, CUTSCENES, ENDINGS } = window.SAPTALOKA;
   const STATS = ['prana', 'tejas', 'karma', 'bhakti'];
 
   // ---------- Persistent meta-progression ----------
@@ -32,18 +32,14 @@
       desc: 'Begin each ascent with +6 Prāṇa per level.',
       costs: [10, 15, 25, 40, 60],
       apply: (s, lvl) => { s.prana += 6 * lvl; } },
-    { id: 'inner_flame', glyph: '✸', name: 'Inner Flame',
-      desc: 'Begin each ascent with +6 Tejas per level.',
-      costs: [10, 15, 25, 40, 60],
-      apply: (s, lvl) => { s.tejas += 6 * lvl; } },
-    { id: 'true_compass', glyph: '☸', name: 'True Compass',
-      desc: 'Begin each ascent with +6 Karma per level.',
-      costs: [10, 15, 25, 40, 60],
-      apply: (s, lvl) => { s.karma += 6 * lvl; } },
-    { id: 'open_heart', glyph: '✿', name: 'Open Heart',
-      desc: 'Begin each ascent with +6 Bhakti per level.',
-      costs: [10, 15, 25, 40, 60],
-      apply: (s, lvl) => { s.bhakti += 6 * lvl; } },
+    { id: 'temperance', glyph: '☯', name: 'Equanimity',
+      desc: 'The world resists your extremes: Tejas, Karma and Bhakti rise more gently near their fatal peaks. Stronger each level — the key to surviving the climb to Satyaloka.',
+      costs: [30, 45, 70],
+      apply: (s, lvl) => { s.temperanceFactor = [1, 0.7, 0.55, 0.45][lvl]; } },
+    { id: 'pilgrim_stamina', glyph: '🥾', name: "Pilgrim's Stamina",
+      desc: 'Prāṇa drains bite softer — −15% per level.',
+      costs: [25, 40],
+      apply: (s, lvl) => { s.pranaDrainFactor = [1, 0.85, 0.7][lvl]; } },
     { id: 'sages_eye', glyph: '👁', name: "Sage's Eye",
       desc: 'See exact stat changes as you swipe.',
       costs: [25],
@@ -78,25 +74,23 @@
   const realmProg   = $('realmProgress');
   const hint        = $('hint');
   const titleScreen = $('titleScreen');
-  const deathScreen = $('deathScreen');
   const mirrorScreen = $('mirrorScreen');
-  const victoryScreen = $('victoryScreen');
   const startBtn     = $('startBtn');
   const mirrorBtn    = $('mirrorBtn');
   const closeMirror  = $('closeMirror');
-  const reincarnateBtn = $('reincarnateBtn');
-  const visitMirrorBtn = $('visitMirrorBtn');
-  const victoryBtn   = $('victoryBtn');
   const menuBtn      = $('menuBtn');
   const upgradesEl   = $('upgrades');
   const punyaCount   = $('punyaCount');
   const metaSummary  = $('metaSummary');
-  const deathTitle   = $('deathTitle');
-  const deathReason  = $('deathReason');
-  const deathGlyph   = $('deathGlyph');
-  const runStatsEl   = $('runStats');
-  const victoryStatsEl = $('victoryStats');
-  const victoryReason  = $('victoryReason');
+  const goalTrack    = $('goalTrack');
+  const endScreen    = $('endScreen');
+  const endArt       = $('endArt');
+  const endDeva      = $('endDeva');
+  const endTitle     = $('endTitle');
+  const endReason    = $('endReason');
+  const endStats     = $('endStats');
+  const endPrimary   = $('endPrimary');
+  const endMirror    = $('endMirror');
   const toast        = $('toast');
   const statEls      = Object.fromEntries(STATS.map(s => [s, document.querySelector(`.stat[data-stat="${s}"]`)]));
   const statVals     = Object.fromEntries(STATS.map(s => [s, statEls[s].querySelector('.val')]));
@@ -131,6 +125,8 @@
     graceBonus: 0,
     nextCardOverride: null,
     cutscenePaused: false,
+    temperanceFactor: 1,   // <1 softens approach to the tejas/karma/bhakti caps (Equanimity upgrade)
+    pranaDrainFactor: 1,   // <1 reduces prāṇa drains (Pilgrim's Stamina upgrade)
   };
 
   // ---------- Card selection ----------
@@ -139,6 +135,8 @@
     state.preview = false;
     state.secondBreath = false;
     state.graceBonus = 0;
+    state.temperanceFactor = 1;
+    state.pranaDrainFactor = 1;
     for (const u of UPGRADES) {
       const lvl = upgradeLevel(u.id);
       if (lvl > 0) u.apply(state, lvl);
@@ -240,8 +238,9 @@
   }
 
   // ---------- Stat info (hover on desktop, tap to toggle on touch) ----------
-  // Copy MUST stay accurate to checkEnd(): tejas dies at 0 AND 100; karma/bhakti
-  // hit 100 as an early-mokṣa WIN; prāṇa dies only at 0 and caps at 100.
+  // Copy MUST stay accurate to checkEnd(): tejas dies at 0 AND 100; karma 100 →
+  // Svarga and bhakti 100 → Deva are NON-win "false summits" (a heaven, not mokṣa);
+  // prāṇa dies only at 0 and caps at 100. The only win is reaching Satyaloka.
 
   const STAT_INFO = {
     prana: {
@@ -259,14 +258,14 @@
     karma: {
       glyph: '☸',
       title: 'Karma — moral weight',
-      oneLiner: '0 damns you · 100 wins.',
-      detail: 'The ledger of your deeds. At 0 sin overtakes you and Yama drags you to Naraka. At 100 you are pure to the marrow and ascend to early mokṣa — an instant win that ends the run before the climb is done.',
+      oneLiner: '0 damns you · 100 strands you in Svarga.',
+      detail: 'The ledger of your deeds. At 0 sin overtakes you and Yama drags you to Naraka. At 100 your merit ripens and the gates of Svarga open — but that heaven still turns inside saṃsāra, and when the puṇya is spent you fall again. A false summit, not mokṣa, and not the win.',
     },
     bhakti: {
       glyph: '✿',
       title: 'Bhakti — devotion',
-      oneLiner: '0 erases you · 100 deifies you.',
-      detail: "The world's love for you. At 0 the world forgets you and no one chants your name. At 100 devotion consumes you and you become a deity — an early mokṣa, your story complete.",
+      oneLiner: '0 erases you · 100 enthrones you as a Deva.',
+      detail: "The world's love for you. At 0 the world forgets you and no one chants your name. At 100 devotion crowns you a worshipped Deva — but the idol cannot leave; saṃsāra still turns behind your halo. A false summit, not mokṣa, and not the win.",
     },
   };
 
@@ -335,8 +334,8 @@
     const pills = {
       prana:  ['<span class="pill death">0 → death</span>', '<span class="pill safe">100 → safe (caps)</span>'],
       tejas:  ['<span class="pill death">0 → death</span>', '<span class="pill death">100 → burnout</span>'],
-      karma:  ['<span class="pill death">0 → death</span>', '<span class="pill win">100 → mokṣa</span>'],
-      bhakti: ['<span class="pill death">0 → death</span>', '<span class="pill win">100 → mokṣa</span>'],
+      karma:  ['<span class="pill death">0 → death</span>', '<span class="pill false">100 → Svarga (not mokṣa)</span>'],
+      bhakti: ['<span class="pill death">0 → death</span>', '<span class="pill false">100 → Deva (not mokṣa)</span>'],
     };
     return pills[stat].join('');
   }
@@ -366,9 +365,9 @@
       `</section>` +
       `<section class="rule-sec">` +
         `<h3>The Four Virtues</h3>` +
-        `<p class="rule-legend"><span class="pill death">death</span><span class="pill safe">safe</span><span class="pill win">win</span></p>` +
+        `<p class="rule-legend"><span class="pill death">death</span><span class="pill safe">safe</span><span class="pill false">false summit</span></p>` +
         virtues +
-        `<p class="rule-note">Two virtues you <i>win</i> by maxing — Karma and Bhakti. One kills you at the top — Tejas burns out. Prāṇa alone is safe when full.</p>` +
+        `<p class="rule-note">Maxing Karma or Bhakti does <i>not</i> win — it strands you in a false heaven (Svarga / Deva), still inside saṃsāra. Tejas burns out at the top; Prāṇa alone is safe when full. The one true victory is reaching <b>Satyaloka</b>.</p>` +
       `</section>` +
       `<section class="rule-sec">` +
         `<h3>Realms &amp; Bosses</h3>` +
@@ -401,10 +400,17 @@
     for (const s of STATS) {
       let d = fx[s];
       if (!d) continue;
-      // Prāṇa caps at 100 in applyFx; preview only the deliverable gain so the
-      // badge matches the floating delta after commit.
-      if (s === 'prana' && d > 0) d = Math.min(d, 100 - state.prana);
-      if (!d) continue; // gain fully absorbed by the cap → no badge
+      // Mirror every applyFx transform so the badge equals the post-commit (floating)
+      // delta: prāṇa cap + Pilgrim's Stamina drain-softening + Equanimity damping.
+      if (s === 'prana') {
+        if (d < 0) d = Math.round(d * state.pranaDrainFactor);
+        else d = Math.min(d, 100 - state.prana);
+      } else if ((s === 'karma' || s === 'bhakti') && state.temperanceFactor < 1) {
+        let nv = state[s] + d;
+        if (nv > 82) nv = Math.round(82 + (nv - 82) * state.temperanceFactor);
+        d = nv - state[s];
+      }
+      if (!d) continue; // fully absorbed → no badge
       statEls[s].classList.add(d > 0 ? 'preview-up' : 'preview-dn');
       statEls[s].setAttribute('data-delta', (d > 0 ? '+' : '') + d);
     }
@@ -420,14 +426,28 @@
   function applyFx(fx) {
     if (!fx) return;
     for (const s of STATS) {
-      if (fx[s]) state[s] = state[s] + fx[s];
+      if (!fx[s]) continue;
+      let d = fx[s];
+      // Pilgrim's Stamina softens prāṇa drains only.
+      if (s === 'prana' && d < 0) d = Math.round(d * state.pranaDrainFactor);
+      state[s] += d;
     }
     // Allow prana > 100 to be clamped (excess life is fine, just capped).
     state.prana = Math.min(100, state.prana);
+    // Equanimity softens the approach to the karma/bhakti "false-summit" exits, so
+    // the over-virtue off-ramp stops ending the climb early. Tejas is deliberately
+    // NOT damped — burnout (tejas >= 100) stays a real, player-managed death, so the
+    // run-end condition is preserved (no auto-clamp on the death stats).
+    if (state.temperanceFactor < 1) {
+      for (const s of ['karma', 'bhakti']) {
+        if (state[s] > 82) state[s] = Math.round(82 + (state[s] - 82) * state.temperanceFactor);
+      }
+    }
   }
 
+  // Returns an ENDINGS key, or null if the run continues. karma/bhakti >= 100 are
+  // NON-win "false summits" (a heaven, not liberation); only the full climb wins.
   function checkEnd() {
-    // Prana 0 always dies; Second Breath can save.
     if (state.prana <= 0) {
       if (state.secondBreath) {
         state.secondBreath = false;
@@ -435,14 +455,14 @@
         showToast('Second Breath — death postponed.');
         return null;
       }
-      return { kind: 'death', stat: 'prana', reason: 'Your prāṇa fails. The wheel claims you.' };
+      return 'death_prana';
     }
-    if (state.tejas <= 0)  return { kind: 'death', stat: 'tejas',  reason: 'Your inner light dims. You vanish into shadow.' };
-    if (state.tejas >= 100) return { kind: 'death', stat: 'tejas',  reason: 'Tejas overflows — you burn yourself away.' };
-    if (state.karma <= 0)  return { kind: 'death', stat: 'karma',  reason: 'Sin overtakes you. Yama drags you to Naraka.' };
-    if (state.karma >= 100) return { kind: 'moksha-early', stat: 'karma', reason: 'Pure to the marrow — you ascend before the climb is done.' };
-    if (state.bhakti <= 0) return { kind: 'death', stat: 'bhakti', reason: 'The world forgets you. No one chants your name.' };
-    if (state.bhakti >= 100) return { kind: 'moksha-early', stat: 'bhakti', reason: 'Devotion consumes you — you become a deity, story ended.' };
+    if (state.tejas <= 0)   return 'death_tejas_low';
+    if (state.tejas >= 100) return 'death_tejas_burn';
+    if (state.karma <= 0)   return 'death_karma';
+    if (state.karma >= 100) return 'false_karma';
+    if (state.bhakti <= 0)  return 'death_bhakti';
+    if (state.bhakti >= 100) return 'false_bhakti';
     return null;
   }
 
@@ -458,9 +478,8 @@
     applyStartingUpgrades();
     state.inRun = true;
     titleScreen.classList.add('hidden');
-    deathScreen.classList.add('hidden');
+    endScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
-    victoryScreen.classList.add('hidden');
     rulesScreen.classList.add('hidden');
     renderHud();
     // Opening cutscene; the first card is drawn when the player taps through.
@@ -537,19 +556,20 @@
       if (Math.abs(fx[s] || 0) >= 10) flashStat(s, (fx[s] > 0 ? 'up' : 'dn'));
     }
 
-    const end = checkEnd();
-    if (end) {
-      if (end.kind === 'death') return endRun(end);
-      if (end.kind === 'moksha-early') return endRun({ kind: 'moksha-early', reason: end.reason });
-    }
+    const realm = REALMS[state.realmIdx];
+    const isFinalStep = state.realmIdx === REALMS.length - 1 && state.realmStep >= realm.length - 1;
+    let endKey = checkEnd();
+    // On the last step of the last realm, completing the climb wins — don't let a
+    // virtue overshooting to 100 demote it to a false summit. Deaths still fire.
+    if (isFinalStep && (endKey === 'false_karma' || endKey === 'false_bhakti')) endKey = null;
+    if (endKey) return endRun(endKey);
 
     state.realmStep++;
-    const realm = REALMS[state.realmIdx];
     if (state.realmStep >= realm.length) {
       // Realm complete (boss already committed above when drawn).
       state.runPunya += 5;
       if (state.realmIdx + 1 >= REALMS.length) {
-        return endRun({ kind: 'moksha', reason: 'You ascend Satyaloka. Liberation is yours.' });
+        return endRun('win_moksha');
       }
       state.realmIdx++;
       state.realmStep = 0;
@@ -620,10 +640,15 @@
     statAnnounce.textContent = deltaText(before);
   }
 
-  function endRun(end) {
+  let lastEndKind = 'death';
+
+  function endRun(endKey) {
+    const e = ENDINGS[endKey] || ENDINGS.death_prana;
+    lastEndKind = e.kind;
     closeStatInfo();
     state.inRun = false;
-    if (end.kind === 'moksha') {
+    // Only the true Satyaloka win counts as mokṣa; false summits and deaths do not.
+    if (e.kind === 'win') {
       meta.moksha = (meta.moksha || 0) + 1;
       state.runPunya += 25;
     }
@@ -632,17 +657,17 @@
     meta.bestRealm = Math.max(meta.bestRealm || 0, state.realmIdx + 1);
     saveMeta();
 
-    if (end.kind === 'moksha' || end.kind === 'moksha-early') {
-      victoryReason.textContent = end.reason;
-      victoryStatsEl.innerHTML = runStatsHtml();
-      victoryScreen.classList.remove('hidden');
-      return;
-    }
-    deathGlyph.textContent = '☠';
-    deathTitle.textContent = 'The wheel turns again';
-    deathReason.textContent = end.reason;
-    runStatsEl.innerHTML = runStatsHtml();
-    deathScreen.classList.remove('hidden');
+    endScreen.className = 'overlay end-' + e.kind;
+    endArt.innerHTML = e.svg || '';
+    endDeva.textContent = e.deva || '';
+    endTitle.textContent = e.title || '';
+    endReason.textContent = e.narration || '';
+    endStats.innerHTML = runStatsHtml();
+    endPrimary.textContent = e.kind === 'win' ? 'Begin Anew' : 'Reincarnate';
+    if (statAnnounce) statAnnounce.textContent = `${e.title}. ${e.narration || ''}`;
+    void endScreen.offsetWidth;
+    if (!REDUCED_MOTION) endScreen.classList.add('play');
+    endScreen.focus();
   }
 
   function runStatsHtml() {
@@ -706,6 +731,30 @@
       <span>Best <b>${meta.bestRealm ? bestRealm : '—'}</b></span>
       <span>Mokṣa <b>${meta.moksha || 0}</b></span>
     `;
+  }
+
+  // The goal: an ascent track of the seven worlds, filled to your best, with
+  // Satyaloka marked as the destination — and a call to reach it.
+  function renderGoal() {
+    const best = meta.bestRealm || 0;
+    const total = REALMS.length;
+    let track = '';
+    for (let i = 0; i < total; i++) {
+      const n = i + 1;
+      const reached = n <= best;
+      const isGoal = n === total;
+      track += `<span class="goal-pip${isGoal ? ' goal' : ''}${reached ? ' reached' : ''}" title="${REALMS[i].name}"></span>`;
+      if (i < total - 1) track += `<span class="goal-rail${n < best ? ' reached' : ''}"></span>`;
+    }
+    const cta = (meta.moksha || 0) > 0
+      ? `Liberated <b>${meta.moksha}×</b>. Break the wheel again.`
+      : best >= total
+        ? `Satyaloka stands open — claim <b>mokṣa</b>.`
+        : `Climb all seven worlds to <b>Satyaloka</b> — break the wheel, win <b>mokṣa</b>.`;
+    goalTrack.innerHTML =
+      `<div class="goal-ends"><span>Bhūloka</span><span>Satyaloka</span></div>` +
+      `<div class="goal-rail-row">${track}</div>` +
+      `<p class="goal-cta">${cta}</p>`;
   }
 
   // ---------- Swipe gesture ----------
@@ -784,23 +833,24 @@
   window.addEventListener('mouseup',   onPointerUp);
 
   startBtn.addEventListener('click', startRun);
-  reincarnateBtn.addEventListener('click', startRun);
-  victoryBtn.addEventListener('click', () => {
-    victoryScreen.classList.add('hidden');
-    showTitle();
+  endPrimary.addEventListener('click', () => {
+    if (lastEndKind === 'win') { endScreen.classList.add('hidden'); showTitle(); }
+    else startRun();   // startRun hides the end screen itself
   });
-
-  mirrorBtn.addEventListener('click', () => {
+  let mirrorOpener = null;
+  function openMirror() {
+    mirrorOpener = document.activeElement;
     renderMirror();
     mirrorScreen.classList.remove('hidden');
-  });
-  visitMirrorBtn.addEventListener('click', () => {
-    renderMirror();
-    mirrorScreen.classList.remove('hidden');
-  });
+    closeMirror.focus();
+  }
+  endMirror.addEventListener('click', openMirror);
+  mirrorBtn.addEventListener('click', openMirror);
   closeMirror.addEventListener('click', () => {
     mirrorScreen.classList.add('hidden');
     renderMetaSummary();
+    if (mirrorOpener && mirrorOpener.focus) mirrorOpener.focus();
+    mirrorOpener = null;
   });
 
   menuBtn.addEventListener('click', () => {
@@ -892,12 +942,12 @@
 
   function showTitle() {
     closeStatInfo();
-    deathScreen.classList.add('hidden');
+    endScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
-    victoryScreen.classList.add('hidden');
     rulesScreen.classList.add('hidden');
     titleScreen.classList.remove('hidden');
     renderMetaSummary();
+    renderGoal();
   }
 
   showTitle();

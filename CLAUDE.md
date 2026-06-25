@@ -64,20 +64,41 @@ the machine's LAN IP. iOS PWA install: Share → Add to Home Screen.
 Range is 0..100 nominal but the engine deliberately leaves room above/below
 during `applyFx` so `checkEnd` can detect overflow:
 
-| stat   | dies at 0 | dies at 100        | clamped before check |
-|--------|-----------|--------------------|----------------------|
-| prana  | yes       | no (caps at 100)   | yes (capped to 100)  |
-| tejas  | yes       | yes (burnout)      | no                   |
-| karma  | yes (sin) | early mokṣa (win)  | no                   |
-| bhakti | yes       | early mokṣa (win)  | no                   |
+| stat   | dies at 0 | hits 100                       | clamped before check |
+|--------|-----------|--------------------------------|----------------------|
+| prana  | yes       | no (caps at 100)               | yes (capped to 100)  |
+| tejas  | yes       | yes (burnout death)            | no                   |
+| karma  | yes (sin) | false summit (Svarga, non-win) | no                   |
+| bhakti | yes       | false summit (Deva, non-win)   | no                   |
 
-So a `+30` swing that pushes karma past 100 is a **win condition**, not an
-overflow bug. Prāṇa is the only "more is better, capped" stat. When designing
-boss fx, remember the `>=100` exits exist — overshooting karma/bhakti on a
-boss is a viable narrative ending.
+`checkEnd()` returns a key string (e.g. `'death_prana'`, `'false_karma'`) or
+`null`; `endRun` looks it up in `ENDINGS`. Karma/bhakti `>=100` return
+`false_karma` / `false_bhakti` (`kind: 'falsesummit'`) — these end the run as a
+non-win dead-end: **no `meta.moksha++`, no +25 puṇya** (granted only by the true
+win). So a `+30` swing that pushes karma past 100 is **not** a win — it ends the
+run at a false summit (Svarga/Deva). The **only** win is completing realm 7,
+which calls `endRun('win_moksha')` (`kind: 'win'`). Prāṇa is the only "more is
+better, capped" stat. When designing boss fx, remember the `>=100` exits exist —
+overshooting karma/bhakti on a boss is a viable false-summit ending, but it does
+not grant mokṣa.
 
 `Second Breath` only saves prāṇa-zero deaths. The other four end conditions
 ignore it.
+
+Two Mirror upgrades add post-effect transforms in `applyFx` (default off — both
+factors are 1 without the upgrade):
+- **Pilgrim's Stamina** (`pranaDrainFactor` < 1) scales *negative* prāṇa deltas
+  only (drains hit softer).
+- **Equanimity** (`temperanceFactor` < 1) soft-compresses **karma and bhakti**
+  above 82 toward the cap, to blunt the over-virtue "false-summit" exits. It does
+  **not** touch tejas — burnout (`tejas >= 100`) must stay reachable, so don't add
+  tejas to that loop. The `showPreview` (Sage's Eye) badge mirrors all three
+  transforms (prāṇa cap, drain-softening, karma/bhakti damping) so the preview
+  equals the floating delta — keep them in sync if you change `applyFx`.
+
+Realms were trimmed to 5·6·6·7·7·8·8 (47 encounters) and card-gain magnitudes
+softened so the full climb to Satyaloka is reachable with skill; the Mirror is
+the difficulty ramp. Re-run `/tmp`-style engine simulations after balance edits.
 
 ## Meta-progression / persistence
 
@@ -90,8 +111,9 @@ ignore it.
 - Adding an upgrade: append to `UPGRADES` in [game.js](game.js). The `apply`
   function mutates `state` at run-start (called from `applyStartingUpgrades`).
   Costs are an array — length defines the max level. State flags set here
-  (`secondBreath`, `preview`, `graceBonus`) must also be reset at run-start in
-  `applyStartingUpgrades` (currently hand-listed at the top of that function).
+  (`secondBreath`, `preview`, `graceBonus`, `temperanceFactor`,
+  `pranaDrainFactor`) must also be reset at run-start in `applyStartingUpgrades`
+  (currently hand-listed at the top of that function).
 - `meta.bestRealm` is 1-indexed; the realm-name lookup compensates.
 
 ## Swipe / input
@@ -117,8 +139,10 @@ hard-coding colors elsewhere.
 - Don't add a framework, bundler, or package.json.
 - Don't break the `cards.js` → `game.js` script order, or the
   `window.SAPTALOKA` global handoff.
-- Don't auto-clamp `tejas` / `karma` / `bhakti` to 100 — that disables two of
-  the run-end conditions.
+- Don't auto-clamp `tejas` / `karma` / `bhakti` to 100 — that disables the
+  run-end conditions. (Equanimity *soft-compresses* karma/bhakti above 82 only
+  when the upgrade is owned, and never touches tejas, so the burnout death stays
+  reachable — keep it that way.)
 - Don't reuse the localStorage key for an incompatible meta shape.
 - Don't reach for `fetch`/network calls — the game must work fully offline
   once cached.

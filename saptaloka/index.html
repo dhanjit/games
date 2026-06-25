@@ -59,6 +59,7 @@
       <div class="title-art">सप्तलोक</div>
       <h1>Saptaloka</h1>
       <p class="tagline">Ascend the seven worlds. Swipe your dharma.</p>
+      <div class="goal" id="goalTrack"></div>
       <div class="meta-summary" id="metaSummary"></div>
       <button class="primary" id="startBtn">Begin Ascent</button>
       <button class="ghost" id="mirrorBtn">Mirror of Maya</button>
@@ -66,14 +67,15 @@
       <p class="footnote">Swipe left or right on each encounter. Keep all four virtues between 0 and 100.</p>
     </section>
 
-    <!-- Death screen -->
-    <section id="deathScreen" class="overlay hidden">
-      <div class="title-art" id="deathGlyph">☠</div>
-      <h2 id="deathTitle">The wheel turns again</h2>
-      <p id="deathReason">Your prana faded.</p>
-      <div class="run-stats" id="runStats"></div>
-      <button class="primary" id="reincarnateBtn">Reincarnate</button>
-      <button class="ghost"   id="visitMirrorBtn">Mirror of Maya</button>
+    <!-- Unified ending screen: SVG art + Devanagari + title + narration per ending. -->
+    <section id="endScreen" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="endTitle" tabindex="-1">
+      <div class="end-art" id="endArt" aria-hidden="true"></div>
+      <div class="end-deva" id="endDeva" aria-hidden="true"></div>
+      <h2 id="endTitle"></h2>
+      <p id="endReason"></p>
+      <div class="run-stats" id="endStats"></div>
+      <button class="primary" id="endPrimary">Reincarnate</button>
+      <button class="ghost" id="endMirror">Mirror of Maya</button>
     </section>
 
     <!-- Mirror of Maya -->
@@ -83,15 +85,6 @@
       <p class="tagline">Punya: <span id="punyaCount">0</span></p>
       <div class="upgrades" id="upgrades"></div>
       <button class="ghost" id="closeMirror">Back</button>
-    </section>
-
-    <!-- Victory screen -->
-    <section id="victoryScreen" class="overlay hidden">
-      <div class="title-art">🪷</div>
-      <h2>Moksha</h2>
-      <p id="victoryReason">You have ascended Satyaloka.</p>
-      <div class="run-stats" id="victoryStats"></div>
-      <button class="primary" id="victoryBtn">Begin Anew</button>
     </section>
 
     <!-- How to Play -->
