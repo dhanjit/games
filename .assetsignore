@@ -1,0 +1,11 @@
+.git
+.gitignore
+.github
+.claude
+.wrangler
+node_modules
+*.md
+*.diff
+*.bak
+wrangler.jsonc
+.assetsignore

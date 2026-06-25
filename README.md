@@ -75,17 +75,24 @@ install.
 
 ## Hosting
 
-Served from **Cloudflare Pages**, connected to this repo's `main` branch —
-every push auto-deploys. It's a pure static site, so the Pages build config is:
+Served from a Cloudflare **Worker** (static assets) named `games`, on the custom
+domain `games.dhanjit.me`. The repo root is served as-is — the hub at `/` and
+each game under its own path (e.g. `/saptaloka/`). Deploy config is in
+[`wrangler.jsonc`](wrangler.jsonc); dev/doc files are kept out of the served
+bundle by [`.assetsignore`](.assetsignore).
 
-- **Framework preset:** None
-- **Build command:** *(none)*
-- **Build output directory:** `/`
+Deploy manually with:
 
-The repo root is served as-is: the hub at `/` and each game under its own path
-(e.g. `/saptaloka/`). The custom domain `games.dhanjit.me` is attached via the
-Pages **Custom domains** tab (the `dhanjit.me` zone is on Cloudflare, so the
-CNAME and TLS are provisioned automatically).
+```
+wrangler deploy
+```
+
+**Auto-deploy on push to `main`:** connect this repo to the `games` Worker once,
+in the Cloudflare dashboard → *Workers & Pages → games → Settings → Build →
+Connect to Git* (branch `main`). Cloudflare's **Workers Builds** then runs
+`wrangler deploy` on every push — no API token or GitHub Action needed
+(Cloudflare's GitHub app handles auth). Note: this is a Worker, **not** Pages,
+and it does **not** auto-deploy until that one-time connection is made.
 
 ## Adding content
 
