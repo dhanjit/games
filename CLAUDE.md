@@ -134,6 +134,26 @@ All colors live as CSS vars in `:root`. Per-stat colors are
 the dark mythology palette is one block in [style.css](style.css); avoid
 hard-coding colors elsewhere.
 
+## PWA / Android packaging
+
+The game is wrapped as a Trusted Web Activity for the Play Store (see the
+`saptaloka-android-play` memory). Three things in `saptaloka/` exist for that and
+have non-obvious rules:
+
+- **`sw.js`** is a stale-while-revalidate service worker that precaches the static
+  assets (offline + installability). **Bump `CACHE` (`saptaloka-v1` → `-v2` …)
+  whenever you change any cached file** (`ASSETS` list), or returning players keep
+  the old build. Add new asset files to the `ASSETS` array too.
+- **`icons/*.png`** are real raster icons (Android/Play can't use the inline-SVG
+  data-URI favicon). Regenerate from the ॐ glyph with `@resvg/resvg-js` + the
+  Windows `Nirmala.ttc` Devanagari font if the look changes; `manifest.webmanifest`
+  references them (192 `any`, 512 `any`, 512 `maskable` as **separate** entries).
+  `apple-touch-icon.png` is iOS-only (iOS ignores manifest icons).
+- **Digital Asset Links**: the TWA needs `/.well-known/assetlinks.json` at the
+  **domain root** (`games.dhanjit.me`, NOT under `/saptaloka/`), carrying the Play
+  **app-signing** key SHA-256 (not the upload key). That file lives at the repo root,
+  not in `saptaloka/`.
+
 ## What not to do
 
 - Don't add a framework, bundler, or package.json.
@@ -144,5 +164,6 @@ hard-coding colors elsewhere.
   when the upgrade is owned, and never touches tejas, so the burnout death stays
   reachable — keep it that way.)
 - Don't reuse the localStorage key for an incompatible meta shape.
-- Don't reach for `fetch`/network calls — the game must work fully offline
-  once cached.
+- Don't reach for `fetch`/network calls in **game code** — the game must work
+  fully offline once cached. (`sw.js` uses `fetch` for caching; that's the only
+  place it belongs.)
