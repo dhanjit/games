@@ -15,6 +15,19 @@ const REALMS = [
   { name: 'Satyaloka',    subtitle: 'realm of truth',        length: 10 },
 ];
 
+// Realm-entry cutscene copy, parallel to REALMS by index: the Devanagari name +
+// a one-line narration shown when entering each realm. For realms 2-7 the line
+// looks back at the boss just defeated. Keep this file UTF-8.
+const CUTSCENES = [
+  { deva: 'भूलोक',    narration: 'Dust and prayer underfoot, a mortal road ahead — the long climb to truth begins here.' },
+  { deva: 'भुवर्लोक',  narration: 'The buffalo-demon falls behind you; now the storm-air opens its mouth, and yakshas wheel in the in-between sky.' },
+  { deva: 'स्वर्लोक',  narration: "You drowned the drought-serpent below; rivers run free, and heaven's bright gates blaze ahead." },
+  { deva: 'महर्लोक',  narration: 'The dharmic king is passed; above the gods now wait the silent, burning sages.' },
+  { deva: 'जनलोक',    narration: 'The deathless tyrant is undone; ascend to where mind-born beings shape the worlds.' },
+  { deva: 'तपोलोक',   narration: 'Tārakāsura is broken; enter the fierce silence where the ascetics burn with tapas.' },
+  { deva: 'सत्यलोक',  narration: "The ten-headed king has fallen; before you waits Brahmā's abode — the last threshold of mokṣa." },
+];
+
 // Helper to keep card definitions terse.
 function c(id, def) { return Object.assign({ id }, def); }
 
@@ -522,4 +535,4 @@ function randomNagaEffect() {
 }
 
 // Expose to game.js
-window.SAPTALOKA = { REALMS, CARDS };
+window.SAPTALOKA = { REALMS, CARDS, CUTSCENES };
