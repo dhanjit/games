@@ -1,0 +1,11 @@
+{
+  // Static-assets Worker that serves this repo as games.dhanjit.me.
+  // The repo root is the hub; each game lives in its own folder (e.g. /saptaloka/).
+  // Deploy: `wrangler deploy`. Auto-deploy: connect this repo to the `games`
+  // Worker via Cloudflare → Workers Builds (it runs `wrangler deploy` on push).
+  "name": "games",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "."
+  }
+}
