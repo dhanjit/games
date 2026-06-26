@@ -54,6 +54,11 @@ saptaloka/            → the Saptaloka game (games.dhanjit.me/saptaloka)
 ├── game.js             engine: swipe gesture, deck, realm flow, meta-progression
 ├── cards.js            encounter content (data only)
 └── manifest.webmanifest  PWA install metadata
+runner/               → Runner, a stick-figure endless runner (games.dhanjit.me/runner)
+├── index.html          canvas + menu/game-over overlays
+├── style.css           full-bleed canvas shell, safe-area aware
+├── game.js             engine: fixed-timestep loop, procedural skeleton, spawner, juice
+└── manifest.webmanifest  PWA install metadata
 ```
 
 To add a game later, drop it in a new top-level folder and add a card to the
