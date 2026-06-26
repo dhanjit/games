@@ -149,6 +149,12 @@ Saptaloka-specific packaging files and their non-obvious rules:
   `apple-touch-icon.png` is iOS-only (iOS ignores manifest icons).
 - **`store/`** holds Play-listing artifacts (feature graphic, store icon, listing
   copy, runbook) — kept inside this folder so Saptaloka stays self-contained.
+- **`splash/`** holds iOS launch images (portrait, per current iPhone resolution),
+  referenced by `apple-touch-startup-image` `<link>` tags in `index.html` so an
+  installed iOS PWA shows the ॐ splash instead of a white flash. Regenerate with
+  `@resvg/resvg-js` + Nirmala/Georgia. iOS is the only viable "app" target (no native
+  build on Windows; Apple rejects webview wrappers under guideline 4.2) — the PWA
+  Add-to-Home-Screen IS the iOS app.
 - **Digital Asset Links** are the one exception that *can't* live in this folder:
   the TWA needs `/.well-known/assetlinks.json` at the **domain root**
   (`games.dhanjit.me`, NOT under `/saptaloka/`), carrying the Play **app-signing**
