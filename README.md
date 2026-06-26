@@ -54,12 +54,21 @@ saptaloka/            → the Saptaloka game (games.dhanjit.me/saptaloka)
 ├── game.js             engine: swipe gesture, deck, realm flow, meta-progression
 ├── cards.js            encounter content (data only)
 └── manifest.webmanifest  PWA install metadata
-runner/               → Runner, a stick-figure endless runner (games.dhanjit.me/runner)
-├── index.html          canvas + menu/game-over overlays
-├── style.css           full-bleed canvas shell, safe-area aware
-├── game.js             engine: fixed-timestep loop, procedural skeleton, spawner, juice
-└── manifest.webmanifest  PWA install metadata
+runner/               → Runner 626, a stick-figure survival race (games.dhanjit.me/runner)
+├── index.html          canvas + menu/over/pause overlays + portrait rotate prompt
+├── style.css           landscape, web-first, responsive shell
+├── game.js             engine: fixed-timestep race sim, rivals/AI, weaving lanes,
+│                         the Omicron ray, boosts/hazards/items, procedural neon art
+└── manifest.webmanifest  PWA install metadata (landscape)
 ```
+
+**Runner 626** is a landscape side-scroller: you (yellow) race rival creatures
+across 3 weaving lanes while Omicron's disintegration ray devours whoever falls
+to the back. Tap = jump (hold higher) / punch a crystal; swipe ↕ = switch lane to
+grab boost pads and dodge energy rays. Hit boosts and items (turbo, shield,
+shockwave, mines) to grow your lead; stumbles let the ray gain. Inspired by
+MayhemStudio's 2007 J2ME game of the same name. Best played on desktop or a phone
+held sideways.
 
 To add a game later, drop it in a new top-level folder and add a card to the
 hub's `index.html`.

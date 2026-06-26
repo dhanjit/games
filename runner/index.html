@@ -5,63 +5,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Runner" />
+  <meta name="apple-mobile-web-app-title" content="Runner 626" />
   <meta name="theme-color" content="#0b0613" />
-  <meta name="description" content="A stick-figure endless runner. Jump, slide, and don't stop." />
+  <meta name="description" content="A stick-figure survival race. Outrun rivals and the disintegration ray across weaving lanes." />
   <link rel="manifest" href="manifest.webmanifest" />
-  <!-- Inline favicon keeps the game asset-free (no stray /favicon.ico 404). -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0613'/%3E%3Cg%20stroke='%2354e6c8'%20stroke-width='4'%20stroke-linecap='round'%20fill='none'%3E%3Ccircle%20cx='34'%20cy='20'%20r='6'%20fill='%2354e6c8'%20stroke='none'/%3E%3Cpath%20d='M34%2026%20L30%2040'/%3E%3Cpath%20d='M30%2032%20L42%2028'/%3E%3Cpath%20d='M30%2032%20L20%2030'/%3E%3Cpath%20d='M30%2040%20L40%2050'/%3E%3Cpath%20d='M30%2040%20L20%2050'/%3E%3C/g%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0613'/%3E%3Cg%20stroke='%23ffd23f'%20stroke-width='4'%20stroke-linecap='round'%20fill='none'%3E%3Ccircle%20cx='34'%20cy='20'%20r='6'%20fill='%23ffd23f'%20stroke='none'/%3E%3Cpath%20d='M34%2026%20L30%2040'/%3E%3Cpath%20d='M30%2032%20L42%2028'/%3E%3Cpath%20d='M30%2032%20L20%2030'/%3E%3Cpath%20d='M30%2040%20L40%2050'/%3E%3Cpath%20d='M30%2040%20L20%2050'/%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
-  <title>Runner — Don't Stop</title>
+  <title>Runner 626 — Survival Race</title>
 </head>
 <body>
   <div id="app">
-    <!-- The whole game renders here; overlays sit on top for menus only. -->
     <canvas id="game"></canvas>
 
-    <!-- Top HUD: score is drawn on canvas, but pause/mute live as real buttons. -->
     <div id="topbar">
       <button id="muteBtn" class="icon-btn" aria-label="Toggle sound" aria-pressed="false">♪</button>
       <button id="pauseBtn" class="icon-btn" aria-label="Pause" hidden>❚❚</button>
     </div>
 
-    <!-- Title / start screen -->
+    <!-- Title / start -->
     <section id="titleScreen" class="overlay">
-      <div class="logo" aria-hidden="true">
-        <span class="logo-run">RUN</span><span class="logo-ner">NER</span>
-      </div>
-      <p class="tagline">Jump. Slide. Don't stop.</p>
+      <div class="logo" aria-hidden="true"><span class="logo-run">RUNNER</span><span class="logo-ner">626</span></div>
+      <p class="tagline">Survival race — don't finish last.</p>
 
       <div class="best-line">Best <strong id="bestScore">0</strong> m</div>
 
-      <button class="primary" id="playBtn">Tap to run</button>
+      <button class="primary" id="playBtn">Tap to race</button>
 
       <div class="how">
-        <div class="how-row"><span class="key">tap&nbsp;/&nbsp;↑&nbsp;/&nbsp;space</span><span>jump — hold for higher</span></div>
-        <div class="how-row"><span class="key">swipe&nbsp;down&nbsp;/&nbsp;↓</span><span>slide under bars</span></div>
+        <div class="how-row"><span class="key">tap&nbsp;/&nbsp;space</span><span>jump — hold higher · tap a crystal to punch it</span></div>
+        <div class="how-row"><span class="key">swipe&nbsp;↕&nbsp;/&nbsp;↑↓</span><span>switch lane — grab boosts, dodge rays</span></div>
       </div>
-      <p class="footnote">One mistake ends the run. The world only gets faster.</p>
+      <p class="footnote">Omicron's ray vaporises whoever falls to the back. Hit boost pads, grab items, and stay ahead of the pack.</p>
     </section>
 
-    <!-- Game-over screen -->
+    <!-- Run over -->
     <section id="overScreen" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overTitle" tabindex="-1">
-      <h2 id="overTitle">Wiped out</h2>
+      <h2 id="overTitle">Disintegrated</h2>
       <div class="score-big"><span id="finalScore">0</span><span class="unit">m</span></div>
       <div class="score-sub" id="overSub">Best 0 m</div>
       <div class="newbest hidden" id="newBest">New best!</div>
-      <button class="primary" id="againBtn">Run again</button>
+      <button class="primary" id="againBtn">Race again</button>
       <button class="ghost" id="menuBtn">Menu</button>
     </section>
 
-    <!-- Pause screen -->
+    <!-- Pause -->
     <section id="pauseScreen" class="overlay hidden" role="dialog" aria-modal="true" tabindex="-1">
       <h2>Paused</h2>
       <button class="primary" id="resumeBtn">Resume</button>
       <button class="ghost" id="quitBtn">Quit to menu</button>
     </section>
 
-    <!-- Polite live region for screen readers (run start / death). -->
     <div id="announce" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Shown only on a phone held in portrait (CSS media query); the game is a
+         landscape side-scroller race. -->
+    <div id="rotate" aria-hidden="true">
+      <div class="rotate-icon">⟲</div>
+      <p class="rotate-title">Rotate your device</p>
+      <p class="rotate-sub">Runner 626 is a landscape race</p>
+    </div>
   </div>
 
   <script src="game.js"></script>
