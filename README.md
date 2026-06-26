@@ -62,13 +62,15 @@ runner/               → Runner 626, a stick-figure survival race (games.dhanji
 └── manifest.webmanifest  PWA install metadata (landscape)
 ```
 
-**Runner 626** is a landscape side-scroller: you (yellow) race rival creatures
+**Runner 626** is a landscape side-scroller race. Pick a runner from a roster
+(each with different speed / jump / grit / accel stats) and duel one rival 1v1
 across 3 weaving lanes while Omicron's disintegration ray devours whoever falls
-to the back. Tap = jump (hold higher) / punch a crystal; swipe ↕ = switch lane to
-grab boost pads and dodge energy rays. Hit boosts and items (turbo, shield,
-shockwave, mines) to grow your lead; stumbles let the ray gain. Inspired by
-MayhemStudio's 2007 J2ME game of the same name. Best played on desktop or a phone
-held sideways.
+to the back. The runners do a ninja/Naruto run (arms swept back). Tap = jump
+(hold higher) / punch a crystal; swipe ↕ = switch lane to grab boost pads and
+dodge energy rays. Hit boosts and items (turbo, shield, shockwave, mines) to grow
+your lead; stumbles let the ray gain. Inspired by MayhemStudio's 2007 J2ME game
+of the same name. Best played on desktop or a phone held sideways. (1v1 vs a bot
+for now; online multiplayer is the planned next step.)
 
 To add a game later, drop it in a new top-level folder and add a card to the
 hub's `index.html`.
