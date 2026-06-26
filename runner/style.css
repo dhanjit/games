@@ -1,14 +1,16 @@
-/* Runner — a stick-figure endless runner.
-   Mobile-first, dark, drawn entirely on <canvas>. The CSS here is only the
-   shell: full-bleed canvas + the menu/game-over overlays that sit on top. */
+/* Runner 626 — a stick-figure survival race.
+   Landscape side-scroller, web-first + responsive, drawn entirely on <canvas>.
+   The CSS here is only the shell: full-bleed canvas, the menu/over/pause
+   overlays that sit on top, and a phone "rotate to landscape" prompt. */
 
 :root {
   --bg:      #0b0613;   /* matches the games-hub background */
   --bg-2:    #150d24;
   --ink:     #ece6f5;
   --muted:   #9b8fb5;
-  --accent:  #54e6c8;   /* electric teal — the runner's signature */
-  --accent-2:#ff6b9d;   /* hot pink — danger / new best */
+  --accent:  #54e6c8;   /* electric teal — boosts / UI */
+  --player:  #ffd23f;   /* the Runner 626 hero is yellow */
+  --accent-2:#ff5470;   /* hot pink — danger / the ray */
   --line:    rgba(84, 230, 200, 0.22);
 }
 
@@ -109,7 +111,7 @@ html, body {
   line-height: 0.9;
 }
 .logo-run { color: var(--ink); }
-.logo-ner { color: var(--accent); }
+.logo-ner { color: var(--player); margin-left: 0.12em; }
 
 .tagline {
   margin: -6px 0 2px;
@@ -222,4 +224,57 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   .overlay, .newbest { animation: none; }
+}
+
+/* ---- Rotate-to-landscape prompt (phones only) ---------------------------- */
+/* Hidden by default; shown only on a touch device held in portrait. Desktop
+   (fine pointer) never sees it, even in a tall/narrow window. */
+#rotate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.rotate-icon {
+  font-size: 64px;
+  color: var(--player);
+  animation: rotate-hint 2.4s ease-in-out infinite;
+}
+.rotate-title { margin: 0; font-size: 22px; font-weight: 700; }
+.rotate-sub { margin: 0; color: var(--muted); font-size: 14px; }
+@keyframes rotate-hint {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(-90deg); }
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-icon { animation: none; }
+}
+
+/* ---- Responsive shell (web-first; scales down to phones) ------------------ */
+/* Keep menu content from sprawling on very wide desktop monitors. */
+.overlay { gap: clamp(12px, 2.2vh, 20px); }
+.logo { font-size: clamp(44px, 12vmin, 110px); }
+@media (min-width: 900px) {
+  .how { width: 420px; }
+  .footnote { max-width: 46ch; }
+}
+/* Short landscape (phone turned sideways): tighten vertical rhythm. */
+@media (orientation: landscape) and (max-height: 480px) {
+  .overlay { gap: 8px; padding: 12px 20px; }
+  .logo { font-size: clamp(34px, 11vh, 60px); }
+  .tagline { font-size: 13px; }
+  .how { display: none; }            /* save vertical space; footnote keeps the gist */
+  .footnote { margin-top: 2px; }
+  .primary { padding: 11px 30px; font-size: 16px; }
 }
