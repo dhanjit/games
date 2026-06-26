@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Saptaloka Ascent" />
+  <meta name="theme-color" content="#0b0613" />
+  <meta name="description" content="A 2.5D climb of the seven lokas. Hop upward toward mokṣa, ahead of the rising flood of saṃsāra." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0613'/%3E%3Cg%20fill='none'%20stroke='%23f5c97a'%20stroke-width='3'%20stroke-linecap='round'%3E%3Cpath%20d='M14%2050h12M22%2040h12M30%2030h12M38%2020h12'/%3E%3C/g%3E%3Ccircle%20cx='44'%20cy='15'%20r='4'%20fill='%23f5c97a'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Saptaloka Ascent — Climb the Seven Worlds</title>
+</head>
+<body>
+  <div id="app">
+    <canvas id="game"></canvas>
+
+    <div id="topbar">
+      <button id="muteBtn" class="icon-btn" aria-label="Toggle sound" aria-pressed="false">♪</button>
+      <button id="pauseBtn" class="icon-btn" aria-label="Pause" hidden>❚❚</button>
+    </div>
+
+    <!-- Title -->
+    <section id="titleScreen" class="overlay">
+      <div class="logo">
+        <span class="logo-main">Saptaloka</span>
+        <span class="logo-sub">Ascent</span>
+      </div>
+      <p class="tagline">Climb the seven worlds. Outrun saṃsāra. Reach mokṣa.</p>
+      <div class="best-line" id="bestLine"></div>
+
+      <div class="shop">
+        <div class="shop-head"><span>The Mirror</span><span class="punya">◈ <strong id="punyaCount">0</strong> puṇya</span></div>
+        <div id="upgrades" class="upgrades"></div>
+      </div>
+
+      <button class="primary" id="playBtn">Begin the climb</button>
+
+      <div class="how">
+        <div class="how-row"><span class="key">tap ◀ left</span><span>hop up-and-left</span></div>
+        <div class="how-row"><span class="key">tap right ▶</span><span>hop up-and-right</span></div>
+      </div>
+      <p class="footnote">tejas fuels each hop · soma restores prāṇa · the flood rises · only Satyaloka is true mokṣa — over-virtue ends at a false heaven.</p>
+    </section>
+
+    <!-- Run over / win -->
+    <section id="overScreen" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overTitle" tabindex="-1">
+      <h2 id="overTitle" class="over-title">—</h2>
+      <p id="overSub" class="over-sub">—</p>
+      <div id="overStat" class="over-stat"></div>
+      <div id="overReward" class="over-reward"></div>
+      <button class="primary" id="againBtn">Climb again</button>
+      <button class="ghost" id="menuBtn">The Mirror</button>
+    </section>
+
+    <!-- Pause -->
+    <section id="pauseScreen" class="overlay hidden" role="dialog" aria-modal="true" tabindex="-1">
+      <h2 class="over-title">Stillness</h2>
+      <button class="primary" id="resumeBtn">Resume</button>
+      <button class="ghost" id="quitBtn">Quit to menu</button>
+    </section>
+  </div>
+
+  <script src="realms.js"></script>
+  <script src="game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    }
+  </script>
+</body>
+</html>
