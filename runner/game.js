@@ -56,13 +56,27 @@
     punchRangeW: 0.06,    // crystal punch reach ahead (×W)
   };
 
-  // racer palette — player is yellow (the Runner 626 hero), rivals are distinct hues
-  const RACER_COLORS = [
-    { core: '#ffe98a', glow: 'rgba(255,210,63,0.55)', body: '#ffd23f', name: '626' },   // player
-    { core: '#b6ffce', glow: 'rgba(84,230,128,0.5)',  body: '#54e680', name: 'Sigma' },
-    { core: '#bfeaff', glow: 'rgba(90,180,255,0.5)',  body: '#5ab4ff', name: 'Rocket' },
-    { core: '#ffc6ea', glow: 'rgba(255,84,180,0.5)',  body: '#ff54b4', name: 'Balrog' },
+  // Pick-your-runner roster (Runner 626-inspired). Stats are 1..5 and change how
+  // the runner plays; `type` drives a small visual trait on the figure.
+  //   speed → clean pace vs the ray   jump → jump height
+  //   grit  → shrugs off stumbles      accel → boost/turbo potency
+  const CHARACTERS = [
+    { id: 'z626',   name: '626',    type: 'human',  body: '#ffd23f', core: '#fff1ad', glow: 'rgba(255,210,63,0.55)',  speed: 3, accel: 3, jump: 3, grit: 3 },
+    { id: 'sigma',  name: 'Sigma',  type: 'insect', body: '#54e680', core: '#c6ffd9', glow: 'rgba(84,230,128,0.55)',  speed: 4, accel: 4, jump: 2, grit: 2 },
+    { id: 'rocket', name: 'Rocket', type: 'mech',   body: '#5ab4ff', core: '#cdeaff', glow: 'rgba(90,180,255,0.55)',  speed: 3, accel: 5, jump: 4, grit: 1 },
+    { id: 'balrog', name: 'Balrog', type: 'beast',  body: '#ff5470', core: '#ffc6d2', glow: 'rgba(255,84,112,0.55)',  speed: 2, accel: 2, jump: 3, grit: 5 },
+    { id: 'tagma',  name: 'Tagma',  type: 'mech',   body: '#b98cff', core: '#e6d6ff', glow: 'rgba(170,120,255,0.55)', speed: 3, accel: 3, jump: 5, grit: 3 },
+    { id: 'sidkas', name: 'Sidkas', type: 'beast',  body: '#ff9a3f', core: '#ffd6a8', glow: 'rgba(255,140,40,0.55)',  speed: 2, accel: 3, jump: 4, grit: 4 },
   ];
+  function statMods(ch) {
+    return {
+      cleanMult: 1.0 + (ch.speed - 3) * 0.02,            // 0.96 .. 1.04 — pace vs the ray
+      jumpMul:   0.85 + ch.jump * 0.05,                  // 0.90 .. 1.10
+      stumbleTMul: 1.25 - ch.grit * 0.09,                // 1.16 .. 0.80 — grit = shorter stumbles
+      boostMul:  T.boostMult + (ch.accel - 3) * 0.09,    // boost/turbo potency
+    };
+  }
+  let chosenChar = 0;
   const C = {
     danger: '#ff5470', crystal: '#c79bff', beam: '#ff3da6', orb: '#ff7ad9',
     boost: '#54e6c8', item: '#ffd76b', ray: '#ff2e6e', text: '#ece6f5', muted: '#9b8fb5',
@@ -100,9 +114,10 @@
   const STATE = { TITLE: 'title', PLAY: 'play', PAUSE: 'pause', DEAD: 'dead' };
   let gameState = STATE.TITLE;
 
-  function newRacer(i, isPlayer) {
+  function newRacer(charIndex, isPlayer) {
+    const col = CHARACTERS[charIndex];
     return {
-      i, isPlayer, col: RACER_COLORS[i],
+      charIndex, isPlayer, col, mods: statMods(col),
       worldX: 0, lane: 1, laneF: 1,           // laneF = smooth interpolated lane
       jumpH: 0, vy: 0, onGround: true,
       speed: 0, mult: 1, boostT: 0, turboT: 0, stumbleT: 0, punchT: 0,
@@ -137,6 +152,7 @@
   function loadPrefs() {
     try { const r = localStorage.getItem(LS_META); if (r) Object.assign(meta, JSON.parse(r)); } catch {}
     try { muted = localStorage.getItem(LS_MUTE) === '1'; } catch {}
+    try { const ci = parseInt(localStorage.getItem('runner.char.v1'), 10); if (ci >= 0 && ci < CHARACTERS.length) chosenChar = ci; } catch {}
     run.best = meta.best | 0; bestScoreEl.textContent = run.best; reflectMute();
   }
   function saveMeta() { meta.best = Math.max(meta.best | 0, run.best); try { localStorage.setItem(LS_META, JSON.stringify(meta)); } catch {} }
@@ -180,7 +196,7 @@
   function tryJump(r) {
     const can = r.onGround || r.coyote > 0;
     if (can && (r.buffer > 0 || !r.isPlayer)) {
-      r.vy = -T.jumpVel * H(); r.onGround = false; r.coyote = 0; r.buffer = 0; r.jumpHeld = true;
+      r.vy = -T.jumpVel * r.mods.jumpMul * H(); r.onGround = false; r.coyote = 0; r.buffer = 0; r.jumpHeld = true;
       if (r.isPlayer) { sfx.jump(); spawnDust(PX, feetScreenY(r), 5); }
     }
   }
@@ -231,6 +247,8 @@
       keyHeld.jump = true; pressJump();
     } else if (k === 'arrowup') { e.preventDefault(); if (gameState === STATE.PLAY) changeLane(player, +1); }
     else if (k === 'arrowdown' || k === 's') { e.preventDefault(); if (gameState === STATE.PLAY) changeLane(player, -1); }
+    else if (k === 'arrowleft' || k === 'a') { if (gameState === STATE.TITLE) { e.preventDefault(); selectChar(chosenChar - 1); } }
+    else if (k === 'arrowright' || k === 'd') { if (gameState === STATE.TITLE) { e.preventDefault(); selectChar(chosenChar + 1); } }
     else if (k === 'p' || k === 'escape') { if (gameState === STATE.PLAY) pauseGame(); else if (gameState === STATE.PAUSE) resumeGame(); }
     else if (k === 'm') toggleMute();
   });
@@ -332,11 +350,12 @@
     // smooth lane interpolation
     r.laneF += (r.lane - r.laneF) * Math.min(1, dt / T.laneSwitch);
 
-    // speed: pace × multipliers, eased
-    let mult = 1;
+    // speed: pace × multipliers; clean pace and boost potency come from the
+    // runner's stats (speed / accel).
+    let mult = r.mods.cleanMult;
     if (r.stumbleT > 0) { mult = T.stumbleMult; r.stumbleT -= dt; }
-    else if (r.turboT > 0) { mult = T.boostMult; r.turboT -= dt; }
-    else if (r.boostT > 0) { mult = T.boostMult; r.boostT -= dt; }
+    else if (r.turboT > 0) { mult = r.mods.boostMul; r.turboT -= dt; }
+    else if (r.boostT > 0) { mult = r.mods.boostMul; r.boostT -= dt; }
     if (r.punchT > 0) { mult += T.punchBonus; r.punchT -= dt; }
     if (r.shieldT > 0) r.shieldT -= dt;
     if (r.mineT > 0) { r.mineT -= dt; if (Math.random() < dt * 6) mines.push({ worldX: r.worldX - BODY, lane: r.lane }); }
@@ -392,7 +411,7 @@
     if (f) f.hit = true;
     if (r.shieldT > 0) { r.shieldT = 0; if (r.isPlayer) { flash = Math.min(0.3, flash + 0.16); addFloater(PX, feetScreenY(r) - BODY, 'SHIELD!', C.boost, 0.7, 0.8); } spawnSpark(PX, feetScreenY(r) - BODY * 0.5, C.boost, 10); return; }
     if (r.stumbleT > 0) return;
-    r.stumbleT = T.stumbleTime;
+    r.stumbleT = T.stumbleTime * r.mods.stumbleTMul;
     if (r.isPlayer) { sfx.stumble(); shake = reduceMotion ? 0 : H() * 0.012; spawnSpark(PX, feetScreenY(r) - BODY * 0.5, C.danger, 12); addFloater(PX, feetScreenY(r) - BODY, 'STUMBLE', C.danger, 0.7, 0.75); }
   }
 
@@ -424,11 +443,12 @@
 
   // ---- simple but competent rival AI ----
   function updateAI(r, dt) {
-    // rubber-band base multiplier so rivals stay in the pack and fight the ray
-    const behind = (player.worldX - r.worldX) / W();
-    let aim = r.skill + behind * 0.10;                 // chase if behind
-    if (r.worldX - run.rayX < W() * 0.35) aim += 0.25; // sprint when the ray is close
-    r.aiMult = (r.aiMult || 1) + (Math.max(0.7, Math.min(1.5, aim)) - (r.aiMult || 1)) * Math.min(1, dt * 3);
+    // Strong rubber-band so the 1v1 rival stays a visible, neck-and-neck duel:
+    // it backs off when ahead and surges when behind, keeping it near the player.
+    const behind = (player.worldX - r.worldX) / W();   // >0 = rival is behind you
+    let aim = r.skill + behind * 0.85;                  // converge hard toward your position
+    if (r.worldX - run.rayX < W() * 0.35) aim += 0.3;  // panic-sprint when the ray is close
+    r.aiMult = (r.aiMult || 1) + (Math.max(0.45, Math.min(1.7, aim)) - (r.aiMult || 1)) * Math.min(1, dt * 4);
 
     r.think -= dt;
     if (r.think > 0) return;
@@ -513,12 +533,12 @@
   }
 
   function drawTrack() {
-    const w = view.w, playerLane = Math.round(player.laneF);
+    const w = view.w, playerLane = Math.round(player.laneF), hotCol = player.col ? player.col.body : C.laneHot;
     for (let lane = 0; lane < T.nLanes; lane++) {
       const hot = lane === playerLane && player.alive;
-      ctx.strokeStyle = hot ? C.laneHot : C.lane;
+      ctx.strokeStyle = hot ? hotCol : C.lane;
       ctx.lineWidth = hot ? Math.max(2.5, H() * 0.004) : Math.max(1.5, H() * 0.0025);
-      ctx.shadowColor = hot ? C.laneHot : 'transparent'; ctx.shadowBlur = hot ? H() * 0.012 : 0;
+      ctx.shadowColor = hot ? hotCol : 'transparent'; ctx.shadowBlur = hot ? H() * 0.012 : 0;
       ctx.beginPath();
       for (let sx = -20; sx <= w + 20; sx += 14) { const wx = run.camera + sx; const y = laneY(lane, wx); if (sx === -20) ctx.moveTo(sx, y); else ctx.lineTo(sx, y); }
       ctx.stroke();
@@ -568,36 +588,80 @@
     for (const m of mines) { const sx = m.worldX - run.camera; if (sx < -20 || sx > view.w + 20) continue; const y = laneY(m.lane, m.worldX); ctx.fillStyle = C.danger; ctx.beginPath(); ctx.arc(sx, y - BODY * 0.06, BODY * 0.08, 0, 6.2832); ctx.fill(); }
   }
 
-  // stick-figure racer
-  function drawRacer(r) {
-    if (!r.alive && !r.isPlayer) return;
-    const sx = r.worldX - run.camera; if (sx < -BODY * 2 || sx > view.w + BODY * 2) return;
-    const feetY = feetScreenY(r);
-    const fh = BODY, col = r.col;
+  // Ninja-run stick figure — reusable for both the live racers and the
+  // character-select icons. Draws at the current origin with feet at (0,0),
+  // facing right. Pose: strong forward lean, arms swept straight back, a
+  // fluttering headband, plus a small per-type trait.
+  function strokeSeg(g, p) { g.beginPath(); g.moveTo(p[0].x, p[0].y); for (let i = 1; i < p.length; i++) g.lineTo(p[i].x, p[i].y); g.stroke(); }
+
+  function drawFigure(g, fh, char, pose, bright, shielded) {
     const thigh = fh * 0.26, shin = fh * 0.26, torso = fh * 0.34, neck = fh * 0.06, headR = fh * 0.12, upper = fh * 0.2, fore = fh * 0.2;
-    const phase = r.runPhase, air = r.jumpH > BODY * 0.1, stum = r.stumbleT > 0;
-    ctx.save(); ctx.translate(sx, feetY);
+    const phase = pose.phase, mode = pose.mode, vyUp = pose.vyUp;
+    const air = mode === 'air', stum = mode === 'stum';
     let pelvisY, lean;
-    if (stum) { pelvisY = -(thigh + shin) * 0.8; lean = -0.4 + Math.sin(now() / 50) * 0.2; }
-    else if (air) { pelvisY = -(thigh + shin) * 0.96; lean = r.vy < 0 ? 0.2 : 0.44; }
-    else { pelvisY = -(thigh + shin) * 0.92 - Math.abs(Math.sin(phase)) * fh * 0.03; lean = 0.28 + Math.sin(phase) * 0.04; }
+    if (stum) { pelvisY = -(thigh + shin) * 0.82; lean = -0.3 + Math.sin(now() / 50) * 0.18; }   // stagger back, arms fly forward
+    else if (air) { pelvisY = -(thigh + shin) * 0.95; lean = vyUp ? 0.5 : 0.66; }                 // leaning leap
+    else { pelvisY = -(thigh + shin) * 0.9 - Math.abs(Math.sin(phase)) * fh * 0.03; lean = 0.82 + Math.sin(phase) * 0.05; }  // hard forward ninja lean
     const pelvis = { x: 0, y: pelvisY };
     const neckP = { x: Math.sin(lean) * torso, y: pelvisY - Math.cos(lean) * torso };
     const headP = { x: neckP.x + Math.sin(lean) * (neck + headR), y: neckP.y - Math.cos(lean) * (neck + headR) };
-    function leg(ph) { let ta, kb; if (stum) { ta = 0.3; kb = 0.6; } else if (air) { ta = 1.0; kb = 0.7; } else { ta = Math.sin(ph) * 0.95; kb = (0.6 - 0.6 * Math.cos(ph)) + 0.25; } const knee = { x: Math.sin(ta) * thigh, y: pelvisY + Math.cos(ta) * thigh }; const sa = ta - kb; return [pelvis, knee, { x: knee.x + Math.sin(sa) * shin, y: knee.y + Math.cos(sa) * shin }]; }
-    function arm(ph) { let sa, eb; if (stum) { sa = lean + 2.6; eb = 0.4; } else { sa = lean + Math.PI + Math.sin(ph) * 0.85; eb = 1.1; } const el = { x: neckP.x + Math.sin(sa) * upper, y: neckP.y + Math.cos(sa) * upper }; const ha = sa + eb; return [neckP, el, { x: el.x + Math.sin(ha) * fore, y: el.y + Math.cos(ha) * fore }]; }
+    function leg(ph) { let ta, kb; if (stum) { ta = 0.3; kb = 0.6; } else if (air) { ta = 1.0; kb = 0.7; } else { ta = Math.sin(ph) * 1.05; kb = (0.6 - 0.6 * Math.cos(ph)) + 0.25; } const knee = { x: Math.sin(ta) * thigh, y: pelvisY + Math.cos(ta) * thigh }; const sa = ta - kb; return [pelvis, knee, { x: knee.x + Math.sin(sa) * shin, y: knee.y + Math.cos(sa) * shin }]; }
+    // ninja arms: both swept STRAIGHT BACK (opposite the lean) and nearly rigid
+    function arm(ph) { let sa, eb; if (stum) { sa = lean + 2.6; eb = 0.4; } else { sa = lean + Math.PI + Math.sin(ph) * 0.1; eb = 0.12; } const el = { x: neckP.x + Math.sin(sa) * upper, y: neckP.y + Math.cos(sa) * upper }; const ha = sa + eb; return [neckP, el, { x: el.x + Math.sin(ha) * fore, y: el.y + Math.cos(ha) * fore }]; }
     const lw = fh * 0.085;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.shadowColor = r.shieldT > 0 ? C.boost : col.glow; ctx.shadowBlur = fh * (r.shieldT > 0 ? 0.16 : 0.1);
-    ctx.strokeStyle = col.body;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.shadowColor = shielded ? C.boost : char.glow; g.shadowBlur = fh * (shielded ? 0.16 : 0.1);
+    g.strokeStyle = char.body;
     const segs = [leg(phase + Math.PI), arm(phase), [pelvis, neckP], leg(phase), arm(phase + Math.PI)];
-    for (let i = 0; i < segs.length; i++) { ctx.globalAlpha = i < 2 ? 0.55 : 1; ctx.lineWidth = i === 2 ? lw * 1.15 : lw; stroke(segs[i]); }
-    ctx.globalAlpha = 1; ctx.fillStyle = col.body; ctx.beginPath(); ctx.arc(headP.x, headP.y, headR, 0, 6.2832); ctx.fill();
-    ctx.shadowBlur = 0;
-    // bright core (front limbs + head) for the player
-    if (r.isPlayer) { ctx.strokeStyle = col.core; for (let i = 3; i < segs.length; i++) { ctx.lineWidth = lw * 0.36; stroke(segs[i]); } ctx.fillStyle = col.core; ctx.beginPath(); ctx.arc(headP.x - headR * 0.28, headP.y - headR * 0.28, headR * 0.42, 0, 6.2832); ctx.fill(); }
+    for (let i = 0; i < segs.length; i++) { g.globalAlpha = i < 2 ? 0.55 : 1; g.lineWidth = i === 2 ? lw * 1.15 : lw; strokeSeg(g, segs[i]); }
+    g.globalAlpha = 1; g.fillStyle = char.body; g.beginPath(); g.arc(headP.x, headP.y, headR, 0, 6.2832); g.fill();
+    g.shadowBlur = 0;
+    // fluttering headband ribbons trailing back (the ninja signature)
+    g.strokeStyle = char.core; g.lineWidth = lw * 0.42; g.globalAlpha = 0.9;
+    for (let rb = 0; rb < 2; rb++) {
+      const a = lean + Math.PI - 0.12 + rb * 0.24, tw = now() / 110 + rb * 1.4;
+      const bx = headP.x + Math.sin(a) * headR * 0.5, by = headP.y + Math.cos(a) * headR * 0.5;
+      const ex = bx + Math.sin(a) * headR * 2.1 + Math.sin(tw) * headR * 0.5, ey = by + Math.cos(a) * headR * 2.1 + Math.cos(tw * 1.2) * headR * 0.5;
+      g.beginPath(); g.moveTo(bx, by); g.quadraticCurveTo(bx + Math.sin(a) * headR, by + Math.cos(a) * headR + Math.sin(tw) * headR * 0.4, ex, ey); g.stroke();
+    }
+    g.globalAlpha = 1;
+    drawTrait(g, char.type, headP, headR, pelvis, char, lw);
+    // bright inner core (front limbs + head) — the player and select icons
+    if (bright) { g.strokeStyle = char.core; for (let i = 3; i < segs.length; i++) { g.lineWidth = lw * 0.36; strokeSeg(g, segs[i]); } g.fillStyle = char.core; g.beginPath(); g.arc(headP.x - headR * 0.28, headP.y - headR * 0.28, headR * 0.42, 0, 6.2832); g.fill(); }
+  }
+
+  function drawTrait(g, type, headP, headR, pelvis, char, lw) {
+    g.strokeStyle = char.core; g.lineCap = 'round'; g.globalAlpha = 1;
+    const hx = headP.x, hy = headP.y;
+    if (type === 'insect') {            // two antennae sweeping up-back
+      g.lineWidth = lw * 0.45;
+      g.beginPath(); g.moveTo(hx, hy - headR * 0.7); g.lineTo(hx - headR * 1.1, hy - headR * 2.0); g.stroke();
+      g.beginPath(); g.moveTo(hx, hy - headR * 0.7); g.lineTo(hx - headR * 0.2, hy - headR * 2.2); g.stroke();
+    } else if (type === 'mech') {       // a visor band across the head
+      g.lineWidth = headR * 0.5; g.beginPath(); g.moveTo(hx - headR * 0.75, hy + headR * 0.05); g.lineTo(hx + headR * 0.7, hy - headR * 0.18); g.stroke();
+    } else if (type === 'beast') {      // horns + a trailing tail
+      g.lineWidth = lw * 0.6;
+      g.beginPath(); g.moveTo(hx - headR * 0.5, hy - headR * 0.6); g.lineTo(hx - headR * 0.95, hy - headR * 1.5); g.stroke();
+      g.beginPath(); g.moveTo(hx + headR * 0.5, hy - headR * 0.6); g.lineTo(hx + headR * 0.35, hy - headR * 1.6); g.stroke();
+      g.lineWidth = lw * 0.8; g.beginPath(); g.moveTo(pelvis.x, pelvis.y); g.quadraticCurveTo(pelvis.x - headR * 1.6, pelvis.y + headR * 0.4, pelvis.x - headR * 2.3, pelvis.y - headR * 0.6 + Math.sin(now() / 150) * headR * 0.4); g.stroke();
+    }
+  }
+
+  function drawRacer(r) {
+    if (!r.alive && !r.isPlayer) return;
+    const sx = r.worldX - run.camera; if (sx < -BODY * 2 || sx > view.w + BODY * 2) return;
+    const mode = r.stumbleT > 0 ? 'stum' : (r.jumpH > BODY * 0.1 ? 'air' : 'run');
+    ctx.save(); ctx.translate(sx, feetScreenY(r));
+    drawFigure(ctx, BODY, r.col, { phase: r.runPhase, mode, vyUp: r.vy < 0 }, r.isPlayer, r.shieldT > 0);
     ctx.restore();
-    function stroke(p) { ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y); for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y); ctx.stroke(); }
+  }
+
+  // static figure for a character-select chip
+  function drawCharIcon(cv, char) {
+    const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height);
+    g.save(); g.translate(cv.width * 0.52, cv.height * 0.94);
+    drawFigure(g, cv.height * 0.6, char, { phase: 1.0, mode: 'run', vyUp: false }, true, false);
+    g.restore();
   }
 
   function drawRay() {
@@ -685,17 +749,20 @@
   function show(el) { el.classList.remove('hidden'); } function hide(el) { el.classList.add('hidden'); }
   function startRun() {
     ensureAudio(); if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-    racers = []; for (let i = 0; i < RACER_COLORS.length; i++) racers.push(newRacer(i, i === 0));
-    player = racers[0];
-    // stagger the field a little so it reads as a pack
-    for (let i = 0; i < racers.length; i++) { racers[i].worldX = (Math.random() - 0.5) * W() * 0.3; racers[i].lane = i % T.nLanes; racers[i].laneF = racers[i].lane; }
+    // 1v1: you (your chosen runner) vs one bot rival (a different character).
+    let oppIdx = (chosenChar + 1 + ((Math.random() * (CHARACTERS.length - 1)) | 0)) % CHARACTERS.length;
+    racers = [newRacer(chosenChar, true), newRacer(oppIdx, false)];
+    player = racers[0]; const opp = racers[1];
     player.worldX = 0; player.lane = 1; player.laneF = 1;
+    opp.worldX = -W() * 0.04; opp.lane = (player.lane + 1) % T.nLanes; opp.laneF = opp.lane;
     features.length = 0; mines.length = 0; particles.length = 0; floaters.length = 0;
     run.t = 0; run.pace = T.paceV0 * W(); run.camera = player.worldX - PX; run.rayX = -T.leadStart * W(); run.stage = 1;
     run.meters = 0; run.spawnX = W() * 0.8; run.stageBanner = 0; run.passedBest = false; run.lastFeatureLane = 1;
     shake = 0; flash = 0; hitStop = 0; slowmo = 0; rayDanger = 0; clearInput();
     hide(titleScreen); hide(overScreen); hide(pauseScreen); pauseBtn.hidden = false;
-    gameState = STATE.PLAY; last = 0; acc = 0; announce('Race!');
+    gameState = STATE.PLAY; last = 0; acc = 0;
+    addFloater(W() * 0.5, H() * 0.34, player.col.name + '  vs  ' + opp.col.name, opp.col.body, 1.8, 1.0);
+    announce('Race! ' + player.col.name + ' versus ' + opp.col.name);
   }
   function pauseGame() { if (gameState !== STATE.PLAY) return; gameState = STATE.PAUSE; clearInput(); show(pauseScreen); pauseScreen.focus(); }
   function resumeGame() { if (gameState !== STATE.PAUSE) return; hide(pauseScreen); gameState = STATE.PLAY; last = 0; acc = 0; }
@@ -704,11 +771,39 @@
   function announce(m) { announceEl.textContent = m; }
 
   const titleScreen = document.getElementById('titleScreen'), overScreen = document.getElementById('overScreen'), pauseScreen = document.getElementById('pauseScreen');
-  const againBtn = document.getElementById('againBtn'), menuBtn = document.getElementById('menuBtn'), resumeBtn = document.getElementById('resumeBtn'), quitBtn = document.getElementById('quitBtn');
-  const pauseBtn = document.getElementById('pauseBtn'), muteBtn = document.getElementById('muteBtn');
+  const playBtn = document.getElementById('playBtn'), againBtn = document.getElementById('againBtn'), menuBtn = document.getElementById('menuBtn'), resumeBtn = document.getElementById('resumeBtn'), quitBtn = document.getElementById('quitBtn');
+  const pauseBtn = document.getElementById('pauseBtn'), muteBtn = document.getElementById('muteBtn'), charSelect = document.getElementById('charSelect');
   const bestScoreEl = document.getElementById('bestScore'), finalScoreEl = document.getElementById('finalScore'), overSubEl = document.getElementById('overSub'), overTitleEl = document.getElementById('overTitle'), newBestEl = document.getElementById('newBest'), announceEl = document.getElementById('announce');
 
-  titleScreen.addEventListener('click', startRun);
+  // ---- character select ----
+  function statDots(label, v) { let d = ''; for (let k = 0; k < 5; k++) d += `<i class="dot${k < v ? ' on' : ''}"></i>`; return `<span class="srow"><b>${label}</b>${d}</span>`; }
+  function buildCharSelect() {
+    charSelect.innerHTML = '';
+    CHARACTERS.forEach((ch, i) => {
+      const chip = document.createElement('button');
+      chip.className = 'char-chip' + (i === chosenChar ? ' selected' : '');
+      chip.setAttribute('role', 'radio'); chip.setAttribute('aria-checked', String(i === chosenChar)); chip.setAttribute('aria-label', ch.name);
+      chip.style.setProperty('--c', ch.body);
+      const cv = document.createElement('canvas'); cv.width = 88; cv.height = 96; cv.className = 'char-fig';
+      const nm = document.createElement('div'); nm.className = 'char-name'; nm.textContent = ch.name;
+      const st = document.createElement('div'); st.className = 'char-stats';
+      st.innerHTML = statDots('SPD', ch.speed) + statDots('JMP', ch.jump) + statDots('GRT', ch.grit) + statDots('ACC', ch.accel);
+      chip.append(cv, nm, st);
+      chip.addEventListener('click', (e) => { e.stopPropagation(); selectChar(i); });
+      charSelect.appendChild(chip);
+      drawCharIcon(cv, ch);
+    });
+  }
+  function selectChar(i) {
+    chosenChar = ((i % CHARACTERS.length) + CHARACTERS.length) % CHARACTERS.length;
+    try { localStorage.setItem('runner.char.v1', String(chosenChar)); } catch {}
+    [...charSelect.children].forEach((c, k) => { const on = k === chosenChar; c.classList.toggle('selected', on); c.setAttribute('aria-checked', String(on)); });
+    const sel = charSelect.children[chosenChar]; if (sel) sel.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    // recolour the idle title runner to the picked character
+    if (gameState === STATE.TITLE && player) { player.col = CHARACTERS[chosenChar]; player.mods = statMods(player.col); }
+  }
+
+  playBtn.addEventListener('click', startRun);
   againBtn.addEventListener('click', () => { if (canRestart()) startRun(); });
   menuBtn.addEventListener('click', quitToMenu); resumeBtn.addEventListener('click', resumeGame); quitBtn.addEventListener('click', quitToMenu);
   pauseBtn.addEventListener('click', pauseGame); muteBtn.addEventListener('click', toggleMute);
@@ -721,8 +816,8 @@
   } catch {}
 
   // ──────────────────────────────── Boot ────────────────────────────────────
-  resize(); initStars(); loadPrefs();
-  // a calm idle racer on the title
-  racers = [newRacer(0, true)]; player = racers[0]; player.worldX = 0; run.camera = -PX;
+  resize(); initStars(); loadPrefs(); buildCharSelect();
+  // a calm idle racer on the title (the chosen runner)
+  racers = [newRacer(chosenChar, true)]; player = racers[0]; player.worldX = 0; run.camera = -PX;
   requestAnimationFrame(frame);
 })();
