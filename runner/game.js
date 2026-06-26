@@ -62,7 +62,7 @@
   //   grit  → shrugs off stumbles      accel → boost/turbo potency
   const CHARACTERS = [
     { id: 'z626',   name: '626',    type: 'human',  body: '#ffd23f', core: '#fff1ad', glow: 'rgba(255,210,63,0.55)',  speed: 3, accel: 3, jump: 3, grit: 3 },
-    { id: 'sigma',  name: 'Sigma',  type: 'insect', body: '#54e680', core: '#c6ffd9', glow: 'rgba(84,230,128,0.55)',  speed: 4, accel: 4, jump: 2, grit: 2 },
+    { id: 'sigma',  name: 'Sigma',  type: 'insect', body: '#2ad6b0', core: '#bafff0', glow: 'rgba(42,214,176,0.55)',  speed: 4, accel: 4, jump: 2, grit: 2 },
     { id: 'rocket', name: 'Rocket', type: 'mech',   body: '#5ab4ff', core: '#cdeaff', glow: 'rgba(90,180,255,0.55)',  speed: 3, accel: 5, jump: 4, grit: 1 },
     { id: 'balrog', name: 'Balrog', type: 'beast',  body: '#ff5470', core: '#ffc6d2', glow: 'rgba(255,84,112,0.55)',  speed: 2, accel: 2, jump: 3, grit: 5 },
     { id: 'tagma',  name: 'Tagma',  type: 'mech',   body: '#b98cff', core: '#e6d6ff', glow: 'rgba(170,120,255,0.55)', speed: 3, accel: 3, jump: 5, grit: 3 },
@@ -77,10 +77,13 @@
     };
   }
   let chosenChar = 0;
+  // Expressway 626 — synthwave neon highway. Colour is meaning: CYAN = good/you/road,
+  // MAGENTA + AMBER = blocking obstacles, FIREWALL-RED = death only.
   const C = {
-    danger: '#ff5470', crystal: '#c79bff', beam: '#ff3da6', orb: '#ff7ad9',
-    boost: '#54e6c8', item: '#ffd76b', ray: '#ff2e6e', text: '#ece6f5', muted: '#9b8fb5',
-    lane: 'rgba(120,200,255,0.30)', laneHot: '#ffd23f',
+    void: '#0a0420', void2: '#150a2e', cy: '#19e8ff', mag: '#ff2dd4', amber: '#ffc24b', white: '#f4faff',
+    danger: '#ff1f5a', crystal: '#ff2dd4', beam: '#c23bff', orb: '#ff5cc8',
+    boost: '#19e8ff', item: '#ffc24b', ray: '#ff1f5a', text: '#eaeeff', muted: '#9a8fc4',
+    lane: 'rgba(25,232,255,0.22)', laneHot: '#ff8e3c',
   };
 
   // ──────────────────────────── Canvas (hi-DPI) ─────────────────────────────
@@ -496,12 +499,12 @@
     const final = run.meters; const isBest = final > run.best;
     if (isBest) run.best = final; meta.runs = (meta.runs | 0) + 1; saveMeta();
     finalScoreEl.textContent = final;
-    overTitleEl.textContent = 'Disintegrated';
+    overTitleEl.textContent = 'DELETED'; overTitleEl.style.color = '#ff1f5a';
     const place = 1 + racers.filter(x => x.alive && x.worldX > player.worldX).length;
     overSubEl.textContent = `Stage ${run.stage} · ${ordinal(place)} place · best ${run.best} m`;
     newBestEl.classList.toggle('hidden', !isBest);
     bestScoreEl.textContent = run.best;
-    announce('Disintegrated at ' + final + ' meters.' + (isBest ? ' New best!' : ''));
+    announce('Deleted at ' + final + ' meters.' + (isBest ? ' New best!' : ''));
     setTimeout(() => { if (gameState === STATE.DEAD) { overScreen.classList.remove('hidden'); overScreen.focus(); } }, 750);
   }
   function ordinal(n) { return n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n] || 'th'); }
@@ -511,77 +514,105 @@
 
   // ───────────────────────────── Rendering ──────────────────────────────────
   let _sky = { key: '', g: null }, _vig = { key: '', g: null };
+  const hash = (n) => { const s = Math.sin(n) * 43758.5453; return s - Math.floor(s); };
   function skyGrad() {
-    const key = Math.round(view.h) + ':' + run.stage;
+    const key = Math.round(view.h);
     if (_sky.key !== key) {
-      const hue = (220 + run.stage * 14) % 360;
       const g = ctx.createLinearGradient(0, 0, 0, view.h);
-      g.addColorStop(0, `hsl(${hue},55%,6%)`); g.addColorStop(0.5, `hsl(${(hue + 18) % 360},48%,9%)`); g.addColorStop(1, `hsl(${(hue + 40) % 360},42%,5%)`);
+      g.addColorStop(0, '#0a0420'); g.addColorStop(0.42, '#2a0f44'); g.addColorStop(0.62, '#7a1e6e');
+      g.addColorStop(0.74, '#ff3d6e'); g.addColorStop(0.80, '#ff8e3c'); g.addColorStop(0.9, '#3a0f2e'); g.addColorStop(1, '#0a0420');
       _sky = { key, g };
     }
     return _sky.g;
   }
-  function initStars() { stars.length = 0; for (let i = 0; i < 70; i++) stars.push({ x: Math.random(), y: Math.random() * 0.62, r: Math.random() < 0.8 ? 1 : 2, b: 0.3 + Math.random() * 0.6, tw: Math.random() * 6.28, sp: 1 + Math.random() * 2 }); }
+  function initStars() { stars.length = 0; for (let i = 0; i < 70; i++) stars.push({ x: Math.random(), y: Math.random() * 0.42, r: Math.random() < 0.8 ? 1 : 2, b: 0.3 + Math.random() * 0.6, tw: Math.random() * 6.28, sp: 1 + Math.random() * 2 }); }
+
+  function drawSun() {
+    const w = view.w, h = view.h, cx = w * 0.5, cy = h * 0.55, R = h * 0.2;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.clip();
+    const sg = ctx.createRadialGradient(cx, cy - R * 0.25, R * 0.1, cx, cy, R * 1.15);
+    sg.addColorStop(0, '#ffe45a'); sg.addColorStop(0.55, '#ff7a3c'); sg.addColorStop(1, '#ff2d8e');
+    ctx.fillStyle = sg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+    ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = '#000';   // OutRun horizontal cut
+    for (let i = 0; i < 6; i++) { const t = i / 6, sy = cy + R * (0.08 + t * 0.95), th = R * (0.035 + t * 0.05); ctx.fillRect(cx - R, sy, R * 2, th); }
+    ctx.restore();
+    ctx.globalCompositeOperation = 'lighter';
+    const og = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 1.8); og.addColorStop(0, 'rgba(255,120,80,0.22)'); og.addColorStop(1, 'rgba(255,80,140,0)');
+    ctx.fillStyle = og; ctx.fillRect(cx - R * 1.8, cy - R * 1.8, R * 3.6, R * 3.6);
+    ctx.globalCompositeOperation = 'source-over';
+  }
 
   function drawBackground(dt) {
     const w = view.w, h = view.h;
     ctx.fillStyle = skyGrad(); ctx.fillRect(0, 0, w, h);
-    // planet
-    const pcx = w * 0.78 - (run.camera * 0.01) % (w * 3), pcy = h * 0.26, pr = h * 0.13;
-    const pg = ctx.createRadialGradient(pcx - pr * 0.3, pcy - pr * 0.3, pr * 0.2, pcx, pcy, pr);
-    pg.addColorStop(0, '#5a2230'); pg.addColorStop(1, '#160812'); ctx.fillStyle = pg;
-    ctx.beginPath(); ctx.arc(pcx, pcy, pr, 0, 6.2832); ctx.fill();
-    // stars
-    for (const s of stars) { s.tw += dt * s.sp; ctx.globalAlpha = Math.max(0, (0.5 + Math.sin(s.tw) * 0.5) * s.b); ctx.fillStyle = '#bfe0ff'; ctx.fillRect(s.x * w, s.y * h, s.r, s.r); }
+    drawSun();
+    for (const s of stars) { s.tw += dt * s.sp; const sy = s.y * h; if (sy > h * 0.4) continue; ctx.globalAlpha = Math.max(0, (0.5 + Math.sin(s.tw) * 0.5) * s.b); ctx.fillStyle = '#cfe0ff'; ctx.fillRect(s.x * w, sy, s.r, s.r); }
     ctx.globalAlpha = 1;
-    // parallax mountains (blue alien ridges)
-    ridges(0.06, h * 0.62, h * 0.22, '#13203a', 1.7);
-    ridges(0.14, h * 0.66, h * 0.16, '#1b2f50', 3.1);
+    skyline(0.05, h * 0.66, h * 0.22, '#120a26', 'rgba(255,45,212,0.5)', 1.7);
+    skyline(0.12, h * 0.70, h * 0.14, '#0c0620', 'rgba(25,232,255,0.45)', 3.1);
+    // horizon heat-glow where the road meets the city
+    ctx.globalCompositeOperation = 'lighter';
+    const hz = ctx.createLinearGradient(0, h * 0.58, 0, h * 0.78); hz.addColorStop(0, 'rgba(255,60,150,0)'); hz.addColorStop(0.6, 'rgba(255,90,160,0.1)'); hz.addColorStop(1, 'rgba(255,140,60,0.04)');
+    ctx.fillStyle = hz; ctx.fillRect(0, h * 0.58, w, h * 0.2);
+    ctx.globalCompositeOperation = 'source-over';
   }
-  function ridges(factor, baseY, amp, color, seed) {
-    const w = view.w, off = run.camera * factor, steps = 24;
-    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, view.h);
-    for (let i = 0; i <= steps; i++) { const x = i / steps * w; const u = (x + off) / w * 1.6; ctx.lineTo(x, baseY - amp * (0.5 + 0.34 * Math.sin(u * 2.1 + seed) + 0.16 * Math.sin(u * 5.3 + seed))); }
-    ctx.lineTo(w, view.h); ctx.closePath(); ctx.fill();
+  // blocky neon skyline: near-black towers with one additive roofline rim
+  function skyline(factor, baseY, amp, fill, rim, seed) {
+    const w = view.w, tile = w * 0.055, scroll = run.camera * factor, off = scroll % tile, base = Math.floor(scroll / tile);
+    const towerH = (i) => amp * (0.32 + 0.5 * hash(i * 1.7 + seed) + 0.3 * hash(i * 4.3 + seed * 1.3));
+    ctx.fillStyle = fill; ctx.beginPath(); ctx.moveTo(-tile, view.h); ctx.lineTo(-tile, baseY);
+    for (let i = -1; i * tile - off < w + tile; i++) { const sx = i * tile - off, hgt = towerH(base + i); ctx.lineTo(sx, baseY - hgt); ctx.lineTo(sx + tile, baseY - hgt); }
+    ctx.lineTo(w + tile, baseY); ctx.lineTo(w + tile, view.h); ctx.closePath(); ctx.fill();
+    ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = rim; ctx.lineWidth = Math.max(1.5, view.h * 0.002); ctx.beginPath();
+    for (let i = -1; i * tile - off < w + tile; i++) { const sx = i * tile - off, hgt = towerH(base + i); ctx.moveTo(sx, baseY - hgt); ctx.lineTo(sx + tile, baseY - hgt); }
+    ctx.stroke(); ctx.globalCompositeOperation = 'source-over';
   }
 
-  // Each weaving rail becomes a ribbon: a translucent track-bed shelf + scrolling
-  // seam ticks + the lit rail edge on top. This gives every feature a surface.
+  // One luminous neon ROAD: a glossy deck from the top lane to below the bottom one
+  // (all edges sampled from the weave), wet sheen, bowing cyan weave-rungs, magenta
+  // centreline dashes, and cyan/amber guard-rails. Curvature is the hero.
   function drawTrack() {
-    const w = view.w, playerLane = Math.round(player.laneF), hotCol = player.col ? player.col.body : C.laneHot;
-    const TB = LGAP * 0.42, tick = BODY * 0.9, off = ((run.camera % tick) + tick) % tick;
-    for (let lane = T.nLanes - 1; lane >= 0; lane--) {   // back-to-front so nearer lanes overlap
+    const w = view.w, h = view.h, playerLane = Math.round(player.laneF);
+    const topL = T.nLanes - 1, botL = 0, apron = LGAP * 0.55;
+    const sT = laneStrip(topL, -20, w + 20, 16), sB = laneStrip(botL, -20, w + 20, 16);
+    // (1) road deck
+    ctx.beginPath(); ctx.moveTo(sT[0].x, sT[0].y);
+    for (let i = 1; i < sT.length; i++) ctx.lineTo(sT[i].x, sT[i].y);
+    for (let i = sB.length - 1; i >= 0; i--) ctx.lineTo(sB[i].x, sB[i].y + apron);
+    ctx.closePath();
+    const yTop = laneScreenY(topL, w * 0.5), yBot = laneScreenY(botL, w * 0.5) + apron;
+    const deck = ctx.createLinearGradient(0, yTop, 0, yBot);
+    deck.addColorStop(0, 'rgba(48,22,80,0.55)'); deck.addColorStop(0.35, 'rgba(18,9,44,0.93)'); deck.addColorStop(1, 'rgba(8,4,26,0.98)');
+    ctx.save(); ctx.fillStyle = deck; ctx.fill(); ctx.clip();
+    // (2) wet sheen (sunset reflected) + (3) weave-rungs, both additive, clipped to the deck
+    ctx.globalCompositeOperation = 'lighter';
+    const sheen = ctx.createLinearGradient(0, yTop, 0, yBot);
+    sheen.addColorStop(0, 'rgba(255,120,90,0.12)'); sheen.addColorStop(0.5, 'rgba(150,40,150,0.05)'); sheen.addColorStop(1, 'rgba(25,232,255,0.04)');
+    ctx.fillStyle = sheen; ctx.fillRect(0, yTop - apron, w, yBot - yTop + apron * 2);
+    const tick = BODY * 1.1 * Math.max(0.65, 1 - run.speedNorm * 0.3), off = ((run.camera % tick) + tick) % tick;
+    ctx.strokeStyle = 'rgba(25,232,255,0.1)'; ctx.lineWidth = Math.max(1, H() * 0.0016); ctx.beginPath();
+    for (let sx = -off; sx < w + tick; sx += tick) { ctx.moveTo(sx, laneScreenY(topL, sx)); ctx.lineTo(sx, laneScreenY(botL, sx) + apron); }
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over'; ctx.restore();
+    // (4) per lane: magenta centreline dashes + guard-rail edge
+    const dperiod = BODY, doff = ((run.camera % dperiod) + dperiod) % dperiod;
+    for (let lane = T.nLanes - 1; lane >= 0; lane--) {
       const hot = lane === playerLane && player.alive;
-      const strip = laneStrip(lane, -20, w + 20, 14), midY = strip[(strip.length / 2) | 0].y;
-      // 1) bed shelf
-      const bed = ctx.createLinearGradient(0, midY, 0, midY + TB);
-      if (hot) { bed.addColorStop(0, withAlpha(hotCol, 0.16)); bed.addColorStop(0.45, withAlpha(hotCol, 0.06)); bed.addColorStop(1, withAlpha(hotCol, 0)); }
-      else { bed.addColorStop(0, 'rgba(120,200,255,0.07)'); bed.addColorStop(0.45, 'rgba(110,160,230,0.03)'); bed.addColorStop(1, 'rgba(90,150,220,0)'); }
-      ctx.fillStyle = bed;
-      ctx.beginPath(); ctx.moveTo(strip[0].x, strip[0].y);
-      for (let i = 1; i < strip.length; i++) ctx.lineTo(strip[i].x, strip[i].y);
-      for (let i = strip.length - 1; i >= 0; i--) ctx.lineTo(strip[i].x, strip[i].y + TB);
-      ctx.closePath(); ctx.fill();
-      // 2) scrolling seam ticks (batched)
-      ctx.strokeStyle = hot ? 'rgba(190,225,255,0.14)' : 'rgba(150,190,240,0.07)';
-      ctx.lineWidth = Math.max(1, H() * 0.0016);
-      ctx.beginPath();
-      for (let sx = -off; sx < w; sx += tick) { const yy = laneScreenY(lane, sx); ctx.moveTo(sx, yy); ctx.lineTo(sx - TB * 0.12, yy + TB * 0.55); }
-      ctx.stroke();
-      // 3) lit rail edge
-      ctx.strokeStyle = hot ? hotCol : C.lane;
-      ctx.lineWidth = hot ? Math.max(2.5, H() * 0.004) : Math.max(1.5, H() * 0.0025);
-      ctx.shadowColor = hot ? hotCol : 'transparent'; ctx.shadowBlur = hot ? H() * 0.012 : 0;
-      ctx.beginPath(); ctx.moveTo(strip[0].x, strip[0].y);
-      for (let i = 1; i < strip.length; i++) ctx.lineTo(strip[i].x, strip[i].y);
-      ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(255,45,212,0.45)'; ctx.lineWidth = Math.max(1.5, H() * 0.0022); ctx.lineCap = 'round'; ctx.beginPath();
+      for (let sx = -doff; sx < w + dperiod; sx += dperiod) { const a = Math.max(0, sx), b = Math.min(w, sx + BODY * 0.5); if (b <= a) continue; ctx.moveTo(a, laneScreenY(lane, a) + LGAP * 0.18); ctx.lineTo(b, laneScreenY(lane, b) + LGAP * 0.18); }
+      ctx.stroke(); ctx.globalCompositeOperation = 'source-over';
+      const strip = laneStrip(lane, -20, w + 20, 14);
+      ctx.strokeStyle = hot ? C.laneHot : C.lane; ctx.lineWidth = hot ? Math.max(2.5, H() * 0.0042) : Math.max(1.5, H() * 0.0025);
+      ctx.shadowColor = hot ? C.laneHot : 'transparent'; ctx.shadowBlur = hot ? H() * 0.014 : 0;
+      ctx.beginPath(); ctx.moveTo(strip[0].x, strip[0].y); for (let i = 1; i < strip.length; i++) ctx.lineTo(strip[i].x, strip[i].y); ctx.stroke(); ctx.shadowBlur = 0;
     }
     ctx.shadowBlur = 0;
   }
 
-  const ITEM_TINT = { turbo: '#ffd76b', shield: '#7ad9ff', shockwave: '#ff3da6', mines: '#ff5470' };
-  const ITEM_HALO = { turbo: 'rgba(255,215,107,0.4)', shield: 'rgba(122,217,255,0.4)', shockwave: 'rgba(255,61,166,0.4)', mines: 'rgba(255,84,112,0.4)' };
-  const ITEM_GLYPH = { turbo: '»', shield: '◈', shockwave: '✺', mines: '✸' };
+  const ITEM_TINT = { turbo: '#ffc24b', shield: '#7adfff', shockwave: '#ff2dd4', mines: '#ff1f5a' };
+  const ITEM_HALO = { turbo: 'rgba(255,194,75,0.4)', shield: 'rgba(122,223,255,0.4)', shockwave: 'rgba(255,45,212,0.4)', mines: 'rgba(255,31,90,0.4)' };
+  const ITEM_GLYPH = { turbo: '»', shield: '◇', shockwave: '◉', mines: '※' };
 
   function drawFeatures() {
     for (const f of features) {
@@ -604,7 +635,7 @@
     }
   }
 
-  // ---- boost: an electrified slice of the lane with marching chevrons ----
+  // ---- boost: cyan accelerator road-paint with marching chevrons + magenta kerb ----
   function featBoost(f, sx) {
     const g = ctx, fw = f.w, TB = BODY * 0.34, strip = laneStrip(f.lane, sx, sx + fw, 10), topY = strip[0].y;
     g.globalCompositeOperation = 'lighter';
@@ -613,11 +644,11 @@
     for (let i = strip.length - 1; i >= 0; i--) g.lineTo(strip[i].x, strip[i].y + TB);
     g.closePath();
     const band = g.createLinearGradient(0, topY, 0, topY + TB);
-    band.addColorStop(0, 'rgba(84,230,200,0)'); band.addColorStop(0.25, 'rgba(84,230,200,0.45)'); band.addColorStop(0.55, '#54e6c8'); band.addColorStop(1, 'rgba(84,230,200,0.05)');
+    band.addColorStop(0, 'rgba(25,232,255,0)'); band.addColorStop(0.3, 'rgba(25,232,255,0.4)'); band.addColorStop(0.55, 'rgba(25,232,255,0.7)'); band.addColorStop(1, 'rgba(25,232,255,0.05)');
     g.fillStyle = band; g.fill();
-    g.save(); g.clip();   // chevrons clipped to the ribbon
+    g.save(); g.clip();   // chevrons + pulse clipped to the curved strip
     const count = Math.max(3, Math.floor(fw / (BODY * 0.5))), march = (now() / 240) % 1, s = BODY * 0.18;
-    g.strokeStyle = '#caffee'; g.lineWidth = Math.max(2.5, H() * 0.005); g.lineJoin = 'round'; g.lineCap = 'round';
+    g.strokeStyle = '#caffff'; g.lineWidth = Math.max(2.5, H() * 0.005); g.lineJoin = 'round'; g.lineCap = 'round';
     for (let i = 0; i < count; i++) {
       const t = ((i / count) + march) % 1, scx = sx + t * fw, cy = laneScreenY(f.lane, scx) + TB * 0.5, ang = Math.atan2(laneSlope(f.lane, scx), 1), fade = Math.sin(t * Math.PI);
       g.globalAlpha = 0.35 + 0.65 * fade; g.save(); g.translate(scx, cy); g.rotate(ang);
@@ -625,143 +656,152 @@
     }
     const pt = (now() / 650) % 1, pscx = sx + pt * fw, py = laneScreenY(f.lane, pscx) + TB * 0.5;
     const pulse = g.createRadialGradient(pscx, py, 1, pscx, py, BODY * 0.6);
-    pulse.addColorStop(0, 'rgba(255,255,255,0.9)'); pulse.addColorStop(0.4, 'rgba(84,230,200,0.5)'); pulse.addColorStop(1, 'rgba(84,230,200,0)');
+    pulse.addColorStop(0, 'rgba(255,255,255,0.9)'); pulse.addColorStop(0.4, 'rgba(25,232,255,0.5)'); pulse.addColorStop(1, 'rgba(25,232,255,0)');
     g.globalAlpha = 1; g.fillStyle = pulse; g.fillRect(pscx - BODY * 0.6, py - BODY * 0.6, BODY * 1.2, BODY * 1.2);
     g.restore();   // undo clip
+    // bright cyan data-channel centre seam (follows the curve)
+    g.globalAlpha = 0.8; g.strokeStyle = 'rgba(186,252,255,0.7)'; g.lineWidth = Math.max(1.5, H() * 0.002); g.beginPath();
+    for (let i = 0; i < strip.length; i++) { const x = strip[i].x, y = laneScreenY(f.lane, x) + TB * 0.5; if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke();
     g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
-    g.strokeStyle = '#aef7e6'; g.lineWidth = Math.max(2.5, H() * 0.004); g.shadowColor = C.boost; g.shadowBlur = H() * 0.014;
-    g.beginPath(); g.moveTo(strip[0].x, strip[0].y); for (let i = 1; i < strip.length; i++) g.lineTo(strip[i].x, strip[i].y); g.stroke(); g.shadowBlur = 0;
-    g.strokeStyle = C.boost; g.lineWidth = Math.max(2, H() * 0.003);
-    g.beginPath(); g.moveTo(strip[0].x, strip[0].y); g.lineTo(strip[0].x, strip[0].y + TB);
-    const last = strip[strip.length - 1]; g.moveTo(last.x, last.y); g.lineTo(last.x, last.y + TB); g.stroke();
+    // magenta kerb along the bottom edge, then cyan hero leading edge on top
+    g.strokeStyle = 'rgba(255,45,212,0.7)'; g.lineWidth = Math.max(1.5, H() * 0.0022);
+    g.beginPath(); for (let i = 0; i < strip.length; i++) { if (i === 0) g.moveTo(strip[i].x, strip[i].y + TB); else g.lineTo(strip[i].x, strip[i].y + TB); } g.stroke();
+    g.strokeStyle = '#bafcff'; g.lineWidth = Math.max(2.5, H() * 0.004); g.shadowColor = C.boost; g.shadowBlur = H() * 0.014;
+    g.beginPath(); for (let i = 0; i < strip.length; i++) { if (i === 0) g.moveTo(strip[i].x, strip[i].y); else g.lineTo(strip[i].x, strip[i].y); } g.stroke(); g.shadowBlur = 0;
   }
 
-  // ---- jump pad: an upturned ramp wedge rooted on the lane ----
+  // ---- jump pad: a cyan spring kick-plate rooted on the deck ----
   function featJumppad(f, sx) {
     const g = ctx, fw = f.w, mx = sx + fw / 2, baseY = laneScreenY(f.lane, mx), ang = Math.atan2(laneSlope(f.lane, mx), 1);
     const recoil = f.scored ? 0 : Math.sin(now() / 220) * BODY * 0.04, lipH = BODY * 0.42 + recoil;
     g.save(); g.translate(mx, baseY); g.rotate(ang);
-    const bp = g.createLinearGradient(0, -BODY * 0.08, 0, BODY * 0.03); bp.addColorStop(0, '#1a2a2c'); bp.addColorStop(1, '#0c1414');
+    const bp = g.createLinearGradient(0, -BODY * 0.08, 0, BODY * 0.03); bp.addColorStop(0, '#1a0f2c'); bp.addColorStop(1, '#0c0814');
     g.fillStyle = bp; g.fillRect(-fw / 2, -BODY * 0.05, fw, BODY * 0.09);
-    g.fillStyle = '#0c1414'; g.fillRect(-fw / 2, BODY * 0.02, BODY * 0.04, BODY * 0.05); g.fillRect(fw / 2 - BODY * 0.04, BODY * 0.02, BODY * 0.04, BODY * 0.05);
+    g.fillStyle = '#0c0814'; g.fillRect(-fw / 2, BODY * 0.02, BODY * 0.04, BODY * 0.05); g.fillRect(fw / 2 - BODY * 0.04, BODY * 0.02, BODY * 0.04, BODY * 0.05);
+    g.globalCompositeOperation = 'lighter'; g.fillStyle = 'rgba(255,194,75,0.4)'; g.fillRect(-fw / 2, BODY * 0.018, fw, BODY * 0.012); g.globalCompositeOperation = 'source-over';   // amber energised under-glow
     g.beginPath(); g.moveTo(-fw / 2, 0); g.lineTo(fw / 2, -lipH); g.lineTo(fw / 2, 0); g.closePath();
-    const rf = g.createLinearGradient(0, 0, 0, -lipH); rf.addColorStop(0, 'rgba(40,120,110,0.25)'); rf.addColorStop(1, 'rgba(84,230,200,0.85)');
+    const rf = g.createLinearGradient(0, 0, 0, -lipH); rf.addColorStop(0, 'rgba(20,60,80,0.25)'); rf.addColorStop(1, 'rgba(25,232,255,0.85)');
     g.fillStyle = rf; g.fill();
     g.strokeStyle = C.boost; g.lineWidth = Math.max(2, H() * 0.0035); g.shadowColor = C.boost; g.shadowBlur = H() * 0.012; g.lineCap = 'round';
     g.beginPath(); g.moveTo(-fw / 2, 0); g.lineTo(fw / 2, -lipH); g.stroke(); g.shadowBlur = 0;
-    g.globalCompositeOperation = 'lighter'; g.strokeStyle = 'rgba(174,247,230,0.7)'; g.lineWidth = Math.max(1.5, H() * 0.0025);
+    g.globalCompositeOperation = 'lighter'; g.strokeStyle = 'rgba(186,252,255,0.7)'; g.lineWidth = Math.max(1.5, H() * 0.0025);
     for (let k = 0; k < 3; k++) { const fx = -fw / 2 + (k + 1) / 4 * fw, fy = -(k + 1) / 4 * lipH; g.beginPath(); g.moveTo(fx - fw * 0.08, fy + BODY * 0.05); g.lineTo(fx, fy); g.lineTo(fx + fw * 0.08, fy + BODY * 0.05); g.stroke(); }
     g.globalCompositeOperation = 'source-over';
     if (!f.scored) {
-      g.strokeStyle = '#eafff9'; g.lineWidth = Math.max(2, H() * 0.004);
+      g.strokeStyle = '#eafbff'; g.lineWidth = Math.max(2, H() * 0.004);
       for (let k = 0; k < 2; k++) { const t = ((now() / 300) + k * 0.5) % 1, ay = -lipH - t * BODY * 0.5; g.globalAlpha = (1 - t) * 0.9; g.beginPath(); g.moveTo(fw * 0.5 - BODY * 0.1, ay + BODY * 0.1); g.lineTo(fw * 0.5, ay); g.lineTo(fw * 0.5 + BODY * 0.1, ay + BODY * 0.1); g.stroke(); }
       g.globalAlpha = 1;
     }
     g.restore();
   }
 
-  // ---- crystal: a faceted lavender gem rooted to the rail ----
+  // ---- crystal: a magenta holographic data-barrier you punch through ----
   function featCrystal(f, sx) {
     const g = ctx, fw = f.w, mx = sx + fw / 2, baseY = laneScreenY(f.lane, mx), ang = Math.atan2(laneSlope(f.lane, mx), 1);
     if (f.broken) {
       if (f.brokeAt && now() - f.brokeAt < 300) {
-        const p = (now() - f.brokeAt) / 300; g.save(); g.translate(mx, baseY); g.rotate(ang); g.fillStyle = C.crystal; g.globalAlpha = 0.5 * (1 - p);
-        for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + (k - 2) * 0.5, d = p * BODY * 0.7, ox = Math.cos(a) * d, oy = Math.sin(a) * d - p * BODY * 0.4; g.beginPath(); g.moveTo(ox, oy - BODY * 0.1); g.lineTo(ox + BODY * 0.06, oy + BODY * 0.04); g.lineTo(ox - BODY * 0.06, oy + BODY * 0.04); g.closePath(); g.fill(); }
-        g.restore();
+        const p = (now() - f.brokeAt) / 300; g.save(); g.translate(mx, baseY); g.rotate(ang); g.globalCompositeOperation = 'lighter';
+        g.fillStyle = `rgba(255,45,212,${0.6 * (1 - p)})`;
+        for (let k = 0; k < 8; k++) { const a = hash(k + f.worldX) * 6.28, d = p * BODY * 0.8, ox = Math.cos(a) * d, oy = Math.sin(a) * d - p * BODY * 0.5; g.fillRect(ox - 2, oy - 2, 4, 4); }
+        g.globalAlpha = 0.4 * (1 - p); g.fillStyle = '#19e8ff'; g.fillRect(-fw * 0.6 - 3, -BODY * 0.5, fw * 1.2, BODY); g.fillStyle = '#ff1f5a'; g.fillRect(-fw * 0.6 + 3, -BODY * 0.5, fw * 1.2, BODY);
+        g.globalAlpha = 1; g.restore();
       }
       return;
     }
-    const hh = BODY * 0.92, hw = fw * 0.6;
+    const pw = fw * 1.3, ph = BODY * 0.95;
     g.save(); g.translate(mx, baseY); g.rotate(ang);
-    const sk = g.createRadialGradient(0, 0, 1, 0, 0, hw * 1.8); sk.addColorStop(0, 'rgba(199,155,255,0.45)'); sk.addColorStop(1, 'rgba(199,155,255,0)');
-    g.fillStyle = sk; g.beginPath(); g.ellipse(0, 0, hw * 1.8, BODY * 0.1, 0, 0, 6.2832); g.fill();
-    g.beginPath(); g.moveTo(0, -hh); g.lineTo(hw, -hh * 0.45); g.lineTo(0, -hh * 0.04); g.lineTo(-hw, -hh * 0.45); g.closePath();
-    const bg = g.createLinearGradient(0, -hh, 0, 0); bg.addColorStop(0, '#e6d2ff'); bg.addColorStop(0.5, '#c79bff'); bg.addColorStop(1, '#7d52c8');
-    g.fillStyle = bg; g.shadowColor = C.crystal; g.shadowBlur = H() * 0.012; g.fill(); g.shadowBlur = 0;
-    g.strokeStyle = 'rgba(60,30,110,0.6)'; g.lineWidth = Math.max(1, H() * 0.0015);
-    g.beginPath(); g.moveTo(0, -hh * 0.62); g.lineTo(-hw, -hh * 0.45); g.moveTo(0, -hh * 0.62); g.lineTo(hw, -hh * 0.45); g.moveTo(0, -hh * 0.62); g.lineTo(0, -hh * 0.04); g.stroke();
-    g.strokeStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.moveTo(0, -hh); g.lineTo(0, -hh * 0.04); g.stroke();
-    const gp = (now() / 700) % 1; g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.7 * Math.sin(gp * Math.PI); g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, H() * 0.002);
-    const gy = -hh + gp * hh * 0.7; g.beginPath(); g.moveTo(hw * 0.2, gy); g.lineTo(hw * 0.5, gy + hh * 0.1); g.stroke();
-    g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.restore();
+    const pj = g.createRadialGradient(0, 0, 1, 0, 0, pw * 0.8); pj.addColorStop(0, 'rgba(255,45,212,0.4)'); pj.addColorStop(1, 'rgba(255,45,212,0)');
+    g.fillStyle = pj; g.beginPath(); g.ellipse(0, 0, pw * 0.8, BODY * 0.08, 0, 0, 6.2832); g.fill();
+    g.fillStyle = 'rgba(255,45,212,0.1)'; g.fillRect(-pw / 2, -ph, pw, ph);
+    g.globalCompositeOperation = 'lighter'; const flick = 0.6 + 0.4 * Math.sin(now() / 120 + f.worldX);
+    g.strokeStyle = `rgba(255,122,223,${0.5 * flick})`; g.lineWidth = Math.max(1, H() * 0.0014); g.beginPath();
+    for (let yy = -ph + 3; yy < -2; yy += Math.max(4, BODY * 0.06)) { g.moveTo(-pw / 2, yy); g.lineTo(pw / 2, yy); } g.stroke();
+    g.globalCompositeOperation = 'source-over';
+    g.strokeStyle = '#ff7adf'; g.lineWidth = Math.max(2, H() * 0.0035); g.shadowColor = C.crystal; g.shadowBlur = H() * 0.012; g.strokeRect(-pw / 2, -ph, pw, ph); g.shadowBlur = 0;
+    g.restore();
   }
 
-  // ---- beam: an emitter gate with a crackling energy curtain ----
+  // ---- beam: a violet laser security gate with scanning bars ----
   function featBeam(f, sx) {
     const g = ctx, fw = f.w, mx = sx + fw / 2, baseY = laneScreenY(f.lane, mx), topY = baseY - f.beamH, ang = Math.atan2(laneSlope(f.lane, mx), 1);
     g.save(); g.translate(mx, baseY); g.rotate(ang);
-    const bn = g.createLinearGradient(0, -BODY * 0.1, 0, 0); bn.addColorStop(0, '#ff3da6'); bn.addColorStop(1, '#7a0f3a');
+    const bn = g.createLinearGradient(0, -BODY * 0.1, 0, 0); bn.addColorStop(0, '#3a1a5a'); bn.addColorStop(1, '#150a22');
     g.fillStyle = bn; g.beginPath(); g.moveTo(-fw * 1.2, 0); g.lineTo(fw * 1.2, 0); g.lineTo(fw * 0.8, -BODY * 0.1); g.lineTo(-fw * 0.8, -BODY * 0.1); g.closePath(); g.fill();
     g.strokeStyle = C.beam; g.lineWidth = Math.max(1.5, H() * 0.002); g.beginPath(); g.moveTo(-fw * 0.8, -BODY * 0.1); g.lineTo(fw * 0.8, -BODY * 0.1); g.stroke();
     g.restore();
-    const cur = g.createLinearGradient(0, topY, 0, baseY); cur.addColorStop(0, 'rgba(255,61,166,0.05)'); cur.addColorStop(0.5, 'rgba(255,61,166,0.22)'); cur.addColorStop(1, 'rgba(255,61,166,0.05)');
+    const cur = g.createLinearGradient(0, topY, 0, baseY); cur.addColorStop(0, 'rgba(194,59,255,0.05)'); cur.addColorStop(0.5, 'rgba(194,59,255,0.2)'); cur.addColorStop(1, 'rgba(194,59,255,0.05)');
     g.fillStyle = cur; g.fillRect(mx - fw * 0.6, topY, fw * 1.2, f.beamH);
     g.strokeStyle = C.beam; g.lineWidth = Math.max(3, H() * 0.005); g.lineCap = 'round'; g.shadowColor = C.beam; g.shadowBlur = H() * 0.012;
     g.beginPath(); g.moveTo(mx - fw * 0.6, baseY); g.lineTo(mx - fw * 0.6, topY); g.moveTo(mx + fw * 0.6, baseY); g.lineTo(mx + fw * 0.6, topY); g.stroke();
-    g.fillStyle = C.beam; g.beginPath(); g.arc(mx - fw * 0.6, topY, Math.max(2, H() * 0.004), 0, 6.2832); g.fill(); g.beginPath(); g.arc(mx + fw * 0.6, topY, Math.max(2, H() * 0.004), 0, 6.2832); g.fill(); g.shadowBlur = 0;
-    g.globalCompositeOperation = 'lighter'; g.strokeStyle = '#ff7ad9'; g.lineWidth = Math.max(1.5, H() * 0.0025);
-    g.beginPath(); g.moveTo(mx, topY); const seg = 5, seed = Math.floor(now() / 60);
-    for (let i = 1; i <= seg; i++) { const yy = topY + f.beamH * (i / seg), jx = mx + Math.sin(seed * 1.7 + i * 3.1) * 0.5 * fw; g.lineTo(i === seg ? mx : jx, yy); } g.stroke();
-    g.strokeStyle = C.beam; g.lineWidth = Math.max(2, H() * 0.003); g.beginPath(); g.moveTo(mx - fw * 0.8, topY); g.lineTo(mx + fw * 0.8, topY); g.stroke();
+    g.fillStyle = '#e6b3ff'; g.beginPath(); g.arc(mx - fw * 0.6, topY, Math.max(2, H() * 0.004), 0, 6.2832); g.fill(); g.beginPath(); g.arc(mx + fw * 0.6, topY, Math.max(2, H() * 0.004), 0, 6.2832); g.fill(); g.shadowBlur = 0;
+    g.globalCompositeOperation = 'lighter';   // horizontal scan-bars sweeping down + top beam
+    for (let k = 0; k < 3; k++) { const t = ((now() / 600) + k / 3) % 1, by = topY + t * f.beamH; g.globalAlpha = 0.6 * Math.sin(t * Math.PI); g.strokeStyle = '#e6b3ff'; g.lineWidth = Math.max(1.5, H() * 0.0022); g.beginPath(); g.moveTo(mx - fw * 0.55, by); g.lineTo(mx + fw * 0.55, by); g.stroke(); }
+    g.globalAlpha = 1; g.strokeStyle = C.beam; g.lineWidth = Math.max(2, H() * 0.003); g.beginPath(); g.moveTo(mx - fw * 0.8, topY); g.lineTo(mx + fw * 0.8, topY); g.stroke();
     g.globalCompositeOperation = 'source-over';
   }
 
-  // ---- orb: a layered plasma sphere hovering above the lane ----
+  // ---- orb: a hover sentry drone above the lane ----
   function featOrb(f, sx) {
     const g = ctx, fw = f.w, mx = sx + fw / 2, gy = laneScreenY(f.lane, mx), bob = Math.sin(now() / 300 + f.worldX) * BODY * 0.05, oy = gy - f.orbY + bob, R = fw;
-    g.strokeStyle = 'rgba(255,122,217,0.22)'; g.lineWidth = Math.max(1, H() * 0.0015); g.setLineDash([H() * 0.006, H() * 0.006]);
+    g.strokeStyle = 'rgba(255,92,200,0.22)'; g.lineWidth = Math.max(1, H() * 0.0015); g.setLineDash([H() * 0.006, H() * 0.006]);
     g.beginPath(); g.moveTo(mx, oy + R); g.lineTo(mx, gy); g.stroke(); g.setLineDash([]);
-    g.fillStyle = 'rgba(255,122,217,0.18)'; g.beginPath(); g.ellipse(mx, gy, R * 0.8, BODY * 0.05, 0, 0, 6.2832); g.fill();
+    g.fillStyle = 'rgba(255,92,200,0.18)'; g.beginPath(); g.ellipse(mx, gy, R * 0.8, BODY * 0.05, 0, 0, 6.2832); g.fill();
     g.globalCompositeOperation = 'lighter';
-    const halo = g.createRadialGradient(mx, oy, 1, mx, oy, R * 1.8); halo.addColorStop(0, 'rgba(255,122,217,0.5)'); halo.addColorStop(1, 'rgba(255,122,217,0)');
+    const halo = g.createRadialGradient(mx, oy, 1, mx, oy, R * 1.8); halo.addColorStop(0, 'rgba(255,92,200,0.5)'); halo.addColorStop(1, 'rgba(255,92,200,0)');
     g.fillStyle = halo; g.fillRect(mx - R * 1.8, oy - R * 1.8, R * 3.6, R * 3.6);
-    const core = g.createRadialGradient(mx - R * 0.3, oy - R * 0.3, 1, mx, oy, R); core.addColorStop(0, '#fff'); core.addColorStop(0.4, '#ff7ad9'); core.addColorStop(1, '#c01a6a');
+    const core = g.createRadialGradient(mx - R * 0.3, oy - R * 0.3, 1, mx, oy, R); core.addColorStop(0, '#fff'); core.addColorStop(0.4, '#ff5cc8'); core.addColorStop(1, '#c01a6a');
     g.fillStyle = core; g.beginPath(); g.arc(mx, oy, R, 0, 6.2832); g.fill();
-    g.strokeStyle = 'rgba(255,200,240,0.8)'; g.lineWidth = Math.max(1.5, H() * 0.002);
-    g.save(); g.translate(mx, oy); g.rotate(now() / 400); g.beginPath(); g.ellipse(0, 0, R * 1.25, R * 0.5, 0, 0, 6.2832); g.stroke(); g.restore();
-    g.save(); g.translate(mx, oy); g.rotate(-now() / 300); g.beginPath(); g.ellipse(0, 0, R * 1.25, R * 0.5, 0, 0, 6.2832); g.stroke(); g.restore();
+    g.save(); g.translate(mx, oy); g.rotate(now() / 400); g.strokeStyle = 'rgba(25,232,255,0.85)'; g.lineWidth = Math.max(1.5, H() * 0.0022); g.beginPath(); g.moveTo(-R * 1.1, 0); g.lineTo(R * 1.1, 0); g.stroke(); g.restore();   // scanning cyan bar
+    g.fillStyle = 'rgba(255,45,212,0.9)'; g.fillRect(mx - R * 0.5, oy - R * 0.12, R, R * 0.24);   // lens slit
+    g.fillStyle = 'rgba(186,252,255,0.9)'; g.beginPath(); g.arc(mx - R * 1.0, oy, R * 0.12, 0, 6.2832); g.arc(mx + R * 1.0, oy, R * 0.12, 0, 6.2832); g.fill();   // rotor glints
     g.globalCompositeOperation = 'source-over';
   }
 
-  // ---- gap: a torn break in the lane with lit lips and a dark void ----
+  // ---- gap: a firewall-deleted section of road you leap ----
   function featGap(f, sx) {
-    const g = ctx, fw = f.w, yL = laneScreenY(f.lane, sx), yR = laneScreenY(f.lane, sx + fw), VD = LGAP * 0.7;
+    const g = ctx, fw = f.w, yL = laneScreenY(f.lane, sx), yR = laneScreenY(f.lane, sx + fw), VD = LGAP * 0.8;
     g.beginPath(); g.moveTo(sx, yL); g.lineTo(sx + fw, yR); g.lineTo(sx + fw, yR + VD); g.lineTo(sx, yL + VD); g.closePath();
-    const vg = g.createLinearGradient(0, yL, 0, yL + VD); vg.addColorStop(0, 'rgba(10,4,16,0.92)'); vg.addColorStop(0.3, 'rgba(20,4,14,0.55)'); vg.addColorStop(1, 'rgba(10,4,16,0)');
+    const vg = g.createLinearGradient(0, yL, 0, yL + VD); vg.addColorStop(0, 'rgba(8,3,18,0.95)'); vg.addColorStop(0.5, 'rgba(40,8,40,0.5)'); vg.addColorStop(1, 'rgba(8,3,18,0)');
     g.fillStyle = vg; g.fill();
     g.globalCompositeOperation = 'lighter';
-    const lipL = laneStrip(f.lane, sx - W() * 0.01, sx, 3), lipR = laneStrip(f.lane, sx + fw, sx + fw + W() * 0.01, 3);
+    const cg = g.createLinearGradient(0, yL + VD * 0.4, 0, yL + VD); cg.addColorStop(0, 'rgba(255,45,150,0)'); cg.addColorStop(1, 'rgba(255,45,150,0.12)'); g.fillStyle = cg; g.fillRect(sx, yL + VD * 0.4, fw, VD * 0.6);   // distant city glow
+    g.fillStyle = 'rgba(255,31,90,0.5)'; for (let k = 0; k < 3; k++) { const jy = yL + VD * (0.2 + 0.25 * k) + Math.sin(Math.floor(now() / 80) + k) * BODY * 0.05; g.fillRect(sx + fw * 0.1, jy, fw * 0.8, Math.max(1, H() * 0.0015)); }   // corruption glitch bars
+    const lipL = laneStrip(f.lane, sx - W() * 0.012, sx, 3), lipR = laneStrip(f.lane, sx + fw, sx + fw + W() * 0.012, 3);
     g.strokeStyle = C.danger; g.lineWidth = Math.max(2.5, H() * 0.004); g.shadowColor = C.danger; g.shadowBlur = H() * 0.012; g.lineCap = 'round';
     g.beginPath(); g.moveTo(lipL[0].x, lipL[0].y); for (let i = 1; i < lipL.length; i++) g.lineTo(lipL[i].x, lipL[i].y); g.stroke();
     g.beginPath(); g.moveTo(lipR[0].x, lipR[0].y); for (let i = 1; i < lipR.length; i++) g.lineTo(lipR[i].x, lipR[i].y); g.stroke(); g.shadowBlur = 0;
-    for (const [x, y] of [[sx, yL], [sx + fw, yR]]) { const bar = g.createLinearGradient(0, y, 0, y + BODY * 0.18); bar.addColorStop(0, 'rgba(255,84,112,0.5)'); bar.addColorStop(1, 'rgba(255,84,112,0)'); g.fillStyle = bar; g.fillRect(x - 1, y, 2, BODY * 0.18); }
-    g.globalCompositeOperation = 'source-over';
+    g.strokeStyle = 'rgba(255,122,24,0.6)'; g.lineWidth = Math.max(1, H() * 0.0015); g.beginPath();   // severed circuit stubs
+    for (const lip of [lipL, lipR]) for (const p of lip) { g.moveTo(p.x, p.y); g.lineTo(p.x, p.y + BODY * 0.12); } g.stroke();
+    g.strokeStyle = 'rgba(255,194,75,0.8)'; g.lineWidth = Math.max(2, H() * 0.004); g.lineJoin = 'round'; g.lineCap = 'round'; const s2 = BODY * 0.16;   // amber 'jump' warning chevrons
+    for (let k = 0; k < 2; k++) { const scx = sx - BODY * (0.35 + k * 0.4), cy = laneScreenY(f.lane, scx) + LGAP * 0.1, a = Math.atan2(laneSlope(f.lane, scx), 1); g.save(); g.translate(scx, cy); g.rotate(a); g.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(now() / 300)); g.beginPath(); g.moveTo(-s2 * 0.7, -s2 * 0.6); g.lineTo(s2 * 0.7, 0); g.lineTo(-s2 * 0.7, s2 * 0.6); g.stroke(); g.restore(); }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   }
 
-  // ---- item: a hovering gold badge with a spinning power ring ----
+  // ---- item: a hovering amber holo power-up token ----
   function featItem(f, sx) {
-    const g = ctx, fw = f.w, mx = sx + fw / 2, gy = laneScreenY(f.lane, mx), bob = Math.sin(now() / 240 + f.worldX) * BODY * 0.06, oy = gy - BODY * 0.95 + bob, R = BODY * 0.26, tint = ITEM_TINT[f.item] || '#ffd76b';
-    g.strokeStyle = 'rgba(255,215,107,0.25)'; g.lineWidth = Math.max(1, H() * 0.0015); g.setLineDash([H() * 0.006, H() * 0.006]);
+    const g = ctx, fw = f.w, mx = sx + fw / 2, gy = laneScreenY(f.lane, mx), bob = Math.sin(now() / 240 + f.worldX) * BODY * 0.06, oy = gy - BODY * 0.95 + bob, R = BODY * 0.26, tint = ITEM_TINT[f.item] || '#ffc24b';
+    g.strokeStyle = 'rgba(255,194,75,0.25)'; g.lineWidth = Math.max(1, H() * 0.0015); g.setLineDash([H() * 0.006, H() * 0.006]);
     g.beginPath(); g.moveTo(mx, oy + R); g.lineTo(mx, gy); g.stroke(); g.setLineDash([]);
-    g.fillStyle = 'rgba(255,215,107,0.16)'; g.beginPath(); g.ellipse(mx, gy, R * 0.8, BODY * 0.05, 0, 0, 6.2832); g.fill();
+    g.fillStyle = 'rgba(255,194,75,0.16)'; g.beginPath(); g.ellipse(mx, gy, R * 0.8, BODY * 0.05, 0, 0, 6.2832); g.fill();
     g.globalCompositeOperation = 'lighter';
-    const au = g.createRadialGradient(mx, oy, 1, mx, oy, R * 2.2); au.addColorStop(0, ITEM_HALO[f.item] || 'rgba(255,215,107,0.4)'); au.addColorStop(1, 'rgba(0,0,0,0)');
+    const au = g.createRadialGradient(mx, oy, 1, mx, oy, R * 2.2); au.addColorStop(0, ITEM_HALO[f.item] || 'rgba(255,194,75,0.4)'); au.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = au; g.fillRect(mx - R * 2.2, oy - R * 2.2, R * 4.4, R * 4.4); g.globalCompositeOperation = 'source-over';
     g.strokeStyle = tint; g.lineWidth = Math.max(2, H() * 0.0035); g.shadowColor = tint; g.shadowBlur = H() * 0.012;
-    g.setLineDash([R * 0.7, R * 0.5]); g.lineDashOffset = -now() / 120; g.beginPath(); g.arc(mx, oy, R * 1.15, 0, 6.2832); g.stroke(); g.setLineDash([]); g.lineDashOffset = 0; g.shadowBlur = 0;
-    g.fillStyle = 'rgba(20,12,30,0.85)'; g.beginPath(); g.arc(mx, oy, R, 0, 6.2832); g.fill(); g.strokeStyle = tint; g.lineWidth = Math.max(1.5, H() * 0.0025); g.stroke();
+    g.setLineDash([R * 0.7, R * 0.5]); g.lineDashOffset = -now() / 120; g.beginPath(); g.arc(mx, oy, R * 1.18, 0, 6.2832); g.stroke(); g.setLineDash([]); g.lineDashOffset = 0; g.shadowBlur = 0;
+    g.save(); g.translate(mx, oy); g.rotate(now() / 600); g.fillStyle = 'rgba(16,8,30,0.9)'; g.fillRect(-R, -R, R * 2, R * 2); g.strokeStyle = tint; g.lineWidth = Math.max(1.5, H() * 0.0025); g.strokeRect(-R, -R, R * 2, R * 2); g.restore();   // rotating data-token
     g.fillStyle = tint; g.font = `700 ${R * 1.05}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ITEM_GLYPH[f.item] || '?', mx, oy + 1);
   }
 
-  // ---- mine: a spiky proximity mine sitting on the lane ----
+  // ---- mine: a firewall spike-mine half-embedded in the deck ----
   function featMine(m, sx) {
     const g = ctx, baseY = laneScreenY(m.lane, sx), ang = Math.atan2(laneSlope(m.lane, sx), 1), R = BODY * 0.1;
-    g.fillStyle = 'rgba(255,84,112,0.2)'; g.beginPath(); g.ellipse(sx, baseY, R * 1.3, BODY * 0.03, 0, 0, 6.2832); g.fill();
+    g.fillStyle = 'rgba(255,31,90,0.2)'; g.beginPath(); g.ellipse(sx, baseY, R * 1.3, BODY * 0.03, 0, 0, 6.2832); g.fill();
     g.save(); g.translate(sx, baseY); g.rotate(ang); g.translate(0, -R * 0.9);
-    g.strokeStyle = '#b03048'; g.lineWidth = Math.max(1.5, H() * 0.0022); g.lineCap = 'round';
+    g.strokeStyle = '#9fb0c8'; g.lineWidth = Math.max(1.5, H() * 0.0022); g.lineCap = 'round';
     g.beginPath(); for (let k = 0; k < 8; k++) { const a = k / 8 * 6.2832, len = R * (a > Math.PI ? 0.8 : 1.4); g.moveTo(Math.cos(a) * R * 0.6, Math.sin(a) * R * 0.6); g.lineTo(Math.cos(a) * (R * 0.6 + len), Math.sin(a) * (R * 0.6 + len)); } g.stroke();
-    const bg = g.createRadialGradient(-R * 0.3, -R * 0.3, 1, 0, 0, R); bg.addColorStop(0, '#ff5470'); bg.addColorStop(1, '#7a1020'); g.fillStyle = bg; g.beginPath(); g.arc(0, 0, R, 0, 6.2832); g.fill();
-    const blink = 0.4 + 0.6 * Math.abs(Math.sin(now() / 150 + m.worldX)); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,84,112,${blink})`;
+    const bg = g.createRadialGradient(-R * 0.3, -R * 0.3, 1, 0, 0, R); bg.addColorStop(0, '#ff1f5a'); bg.addColorStop(1, '#7a1018'); g.fillStyle = bg; g.beginPath(); g.arc(0, 0, R, 0, 6.2832); g.fill();
+    const blink = Math.abs(Math.sin(now() / 150 + m.worldX)); g.globalCompositeOperation = 'lighter';
+    g.fillStyle = blink > 0.5 ? `rgba(255,31,90,${blink})` : `rgba(25,232,255,${0.4 + blink})`;
     if (blink > 0.7) { g.shadowColor = C.danger; g.shadowBlur = H() * 0.01; } g.beginPath(); g.arc(0, 0, R * 0.35, 0, 6.2832); g.fill(); g.shadowBlur = 0;
     g.globalCompositeOperation = 'source-over'; g.restore();
   }
@@ -806,6 +846,10 @@
     drawTrait(g, char.type, headP, headR, pelvis, char, lw);
     // bright inner core (front limbs + head) — the player and select icons
     if (bright) { g.strokeStyle = char.core; for (let i = 3; i < segs.length; i++) { g.lineWidth = lw * 0.36; strokeSeg(g, segs[i]); } g.fillStyle = char.core; g.beginPath(); g.arc(headP.x - headR * 0.28, headP.y - headR * 0.28, headR * 0.42, 0, 6.2832); g.fill(); }
+    // cybernetic visor glint on the head's forward edge
+    g.globalCompositeOperation = 'lighter'; g.fillStyle = '#19e8ff';
+    g.beginPath(); g.arc(headP.x + Math.sin(lean) * headR * 0.5, headP.y - Math.cos(lean) * headR * 0.12, headR * 0.2, 0, 6.2832); g.fill();
+    g.globalCompositeOperation = 'source-over';
   }
 
   function drawTrait(g, type, headP, headR, pelvis, char, lw) {
@@ -842,42 +886,49 @@
     g.restore();
   }
 
+  // The FIREWALL / deletion wall — corruption eating the expressway from the left.
   function drawRay() {
     const sx = run.rayX - run.camera; if (sx < -W() * 0.2) return;
     const w = view.w, h = view.h;
-    // devouring wall to the left of sx
-    const g = ctx.createLinearGradient(0, 0, sx, 0);
-    g.addColorStop(0, 'rgba(255,46,110,0.55)'); g.addColorStop(0.7, 'rgba(180,20,80,0.3)'); g.addColorStop(1, 'rgba(255,46,110,0)');
+    const g = ctx.createLinearGradient(0, 0, Math.max(1, sx), 0);
+    g.addColorStop(0, 'rgba(255,31,90,0.55)'); g.addColorStop(0.7, 'rgba(255,122,24,0.28)'); g.addColorStop(1, 'rgba(255,31,90,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, sx, h);
-    // crackling leading edge
-    ctx.strokeStyle = C.ray; ctx.lineWidth = Math.max(2, h * 0.005); ctx.shadowColor = C.ray; ctx.shadowBlur = h * 0.03;
-    ctx.beginPath();
-    for (let y = 0; y <= h; y += h * 0.05) { const jx = sx + Math.sin(y * 0.1 + now() / 50) * w * 0.012; if (y === 0) ctx.moveTo(jx, y); else ctx.lineTo(jx, y); }
-    ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.globalCompositeOperation = 'lighter';
+    const amp = w * 0.008 * (1 + rayDanger * 3);   // glitch/datamosh bands
+    for (let i = 0; i < 6; i++) { const by = h * (0.07 + i * 0.155), jx = sx + Math.sin(i + now() / 40) * amp; ctx.fillStyle = i % 2 ? 'rgba(255,45,212,0.5)' : 'rgba(255,31,90,0.55)'; ctx.fillRect(jx - w * 0.06, by, w * 0.06, h * 0.02); }
+    ctx.fillStyle = 'rgba(255,90,120,0.5)';        // deleted-pixel column
+    for (let i = 0; i < 8; i++) { const py = (now() / 6 + i * 91) % h, px = sx - ((i * 7) % 24) - 4; ctx.fillRect(px, py, 3, 3); }
+    const jit = w * 0.008 * (1 + rayDanger * 2);   // jagged edge — hero glow + chromatic aberration
+    ctx.shadowColor = C.ray; ctx.shadowBlur = h * 0.03;
+    ctx.strokeStyle = 'rgba(25,232,255,0.7)'; ctx.lineWidth = Math.max(1.5, h * 0.003); ctx.beginPath();
+    for (let y = 0; y <= h; y += h * 0.05) { const jx = sx + 2 + Math.sin(y * 0.1 + now() / 50) * jit; if (y === 0) ctx.moveTo(jx, y); else ctx.lineTo(jx, y); } ctx.stroke();
+    ctx.strokeStyle = C.ray; ctx.lineWidth = Math.max(2, h * 0.005); ctx.beginPath();
+    for (let y = 0; y <= h; y += h * 0.05) { const jx = sx + Math.sin(y * 0.1 + now() / 50) * jit; if (y === 0) ctx.moveTo(jx, y); else ctx.lineTo(jx, y); } ctx.stroke();
+    ctx.shadowBlur = 0; ctx.globalCompositeOperation = 'source-over';
   }
 
-  // HUD: standings strip + stage + lead bar + item state
+  // HUD — arcade data-readout
   function drawHUD() {
     const w = view.w, h = view.h, top = h * 0.03;
-    // meters big, center
-    ctx.fillStyle = C.text; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `800 ${h * 0.05}px "Helvetica Neue", Arial, sans-serif`; ctx.fillText(run.meters + '', w * 0.5, top);
-    ctx.font = `700 ${h * 0.016}px "Helvetica Neue", Arial, sans-serif`; ctx.fillStyle = C.muted; ctx.fillText('METRES · STAGE ' + run.stage, w * 0.5, top + h * 0.055);
-    // standings pips: order racers by worldX
-    const order = racers.slice().sort((a, b) => b.worldX - a.worldX);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const mf = h * 0.052; ctx.font = `italic 800 ${mf}px "Helvetica Neue", Arial, sans-serif`;
+    const tg = ctx.createLinearGradient(0, top, 0, top + mf); tg.addColorStop(0, '#ff8ae6'); tg.addColorStop(1, '#9af0ff');
+    ctx.fillStyle = tg; ctx.fillText(run.meters + '', w * 0.5, top);
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(25,232,255,0.5)'; ctx.strokeText(run.meters + '', w * 0.5, top);
+    ctx.font = `700 ${h * 0.016}px "Helvetica Neue", Arial, sans-serif`; ctx.fillStyle = C.amber; ctx.fillText('METRES · STAGE ' + run.stage, w * 0.5, top + h * 0.058);
+    // standings rail + pips
     const bx = w * 0.06, bw = w * 0.5, by = top + h * 0.005;
-    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(bx, by, 0, 0); // (no-op; pips below)
-    const lead = order[0].worldX, last = run.rayX;
-    const span = Math.max(W() * 0.4, lead - last);
-    for (const r of racers) { const t = (r.worldX - last) / span; const x = bx + Math.max(0, Math.min(1, t)) * bw; ctx.fillStyle = r.alive ? r.col.body : 'rgba(120,120,140,0.4)'; ctx.beginPath(); ctx.arc(x, by, r.isPlayer ? h * 0.011 : h * 0.008, 0, 6.2832); ctx.fill(); }
-    // ray marker at left of the strip
-    ctx.fillStyle = C.ray; ctx.fillRect(bx - h * 0.006, by - h * 0.012, h * 0.004, h * 0.024);
-    // item / shield state, top-right
-    ctx.textAlign = 'right'; ctx.font = `700 ${h * 0.018}px "Helvetica Neue", Arial, sans-serif`;
-    let tag = ''; if (player.turboT > 0) tag = 'TURBO'; else if (player.shieldT > 0) tag = 'SHIELD'; else if (player.mineT > 0) tag = 'MINES'; else if (player.boostT > 0) tag = 'BOOST';
-    if (tag) { ctx.fillStyle = C.item; ctx.fillText(tag, w - w * 0.04, by + h * 0.03); }
-    // danger vignette when the ray is close
-    if (rayDanger > 0.25) { ctx.fillStyle = `rgba(255,46,110,${(rayDanger - 0.25) * 0.5})`; ctx.fillRect(0, 0, w, h); }
+    ctx.strokeStyle = 'rgba(25,232,255,0.3)'; ctx.lineWidth = Math.max(1, h * 0.002); ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.stroke();
+    const order = racers.slice().sort((a, b) => b.worldX - a.worldX), lead = order[0].worldX, last = run.rayX, span = Math.max(W() * 0.4, lead - last);
+    for (const r of racers) { const t = (r.worldX - last) / span, x = bx + Math.max(0, Math.min(1, t)) * bw; ctx.fillStyle = r.alive ? r.col.body : 'rgba(120,120,140,0.4)'; ctx.beginPath(); ctx.arc(x, by, r.isPlayer ? h * 0.011 : h * 0.008, 0, 6.2832); ctx.fill(); }
+    ctx.strokeStyle = C.ray; ctx.lineWidth = Math.max(1.5, h * 0.0025); ctx.beginPath(); ctx.moveTo(bx - h * 0.008, by - h * 0.012); ctx.lineTo(bx - h * 0.013, by - h * 0.012); ctx.lineTo(bx - h * 0.013, by + h * 0.012); ctx.lineTo(bx - h * 0.008, by + h * 0.012); ctx.stroke();
+    // active-process item chip, top-right
+    let tag = '', tcol = C.amber;
+    if (player.turboT > 0) tag = 'TURBO'; else if (player.shieldT > 0) { tag = 'SHIELD'; tcol = C.cy; } else if (player.mineT > 0) { tag = 'MINES'; tcol = C.ray; } else if (player.boostT > 0) tag = 'BOOST';
+    if (tag) { ctx.textAlign = 'right'; const cf = h * 0.018; ctx.font = `700 ${cf}px "Helvetica Neue", Arial, sans-serif`; const tw = ctx.measureText(tag).width, cx = w - w * 0.04, cy = by + h * 0.018; ctx.strokeStyle = tcol; ctx.lineWidth = 1.2; ctx.strokeRect(cx - tw - h * 0.012, cy, tw + h * 0.014, cf + h * 0.008); ctx.fillStyle = tcol; ctx.fillText(tag, cx - h * 0.005, cy + h * 0.004); }
+    // firewall danger vignette + scanline near death
+    if (rayDanger > 0.25) { ctx.fillStyle = `rgba(255,31,90,${(rayDanger - 0.25) * 0.5})`; ctx.fillRect(0, 0, w, h); }
+    if (rayDanger > 0.7) { ctx.globalCompositeOperation = 'lighter'; const sy = (now() / 3) % h; ctx.fillStyle = 'rgba(255,45,212,0.15)'; ctx.fillRect(0, sy, w, h * 0.02); ctx.globalCompositeOperation = 'source-over'; }
   }
 
   // ---- particles / floaters ----
