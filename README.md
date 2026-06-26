@@ -54,7 +54,23 @@ saptaloka/            → the Saptaloka game (games.dhanjit.me/saptaloka)
 ├── game.js             engine: swipe gesture, deck, realm flow, meta-progression
 ├── cards.js            encounter content (data only)
 └── manifest.webmanifest  PWA install metadata
+runner/               → Runner 626, a stick-figure survival race (games.dhanjit.me/runner)
+├── index.html          canvas + menu/over/pause overlays + portrait rotate prompt
+├── style.css           landscape, web-first, responsive shell
+├── game.js             engine: fixed-timestep race sim, rivals/AI, weaving lanes,
+│                         the Omicron ray, boosts/hazards/items, procedural neon art
+└── manifest.webmanifest  PWA install metadata (landscape)
 ```
+
+**Runner 626** is a landscape side-scroller race. Pick a runner from a roster
+(each with different speed / jump / grit / accel stats) and duel one rival 1v1
+across 3 weaving lanes while Omicron's disintegration ray devours whoever falls
+to the back. The runners do a ninja/Naruto run (arms swept back). Tap = jump
+(hold higher) / punch a crystal; swipe ↕ = switch lane to grab boost pads and
+dodge energy rays. Hit boosts and items (turbo, shield, shockwave, mines) to grow
+your lead; stumbles let the ray gain. Inspired by MayhemStudio's 2007 J2ME game
+of the same name. Best played on desktop or a phone held sideways. (1v1 vs a bot
+for now; online multiplayer is the planned next step.)
 
 To add a game later, drop it in a new top-level folder and add a card to the
 hub's `index.html`.
@@ -75,17 +91,24 @@ install.
 
 ## Hosting
 
-Served from **Cloudflare Pages**, connected to this repo's `main` branch —
-every push auto-deploys. It's a pure static site, so the Pages build config is:
+Served from a Cloudflare **Worker** (static assets) named `games`, on the custom
+domain `games.dhanjit.me`. The repo root is served as-is — the hub at `/` and
+each game under its own path (e.g. `/saptaloka/`). Deploy config is in
+[`wrangler.jsonc`](wrangler.jsonc); dev/doc files are kept out of the served
+bundle by [`.assetsignore`](.assetsignore).
 
-- **Framework preset:** None
-- **Build command:** *(none)*
-- **Build output directory:** `/`
+Deploy manually with:
 
-The repo root is served as-is: the hub at `/` and each game under its own path
-(e.g. `/saptaloka/`). The custom domain `games.dhanjit.me` is attached via the
-Pages **Custom domains** tab (the `dhanjit.me` zone is on Cloudflare, so the
-CNAME and TLS are provisioned automatically).
+```
+wrangler deploy
+```
+
+**Auto-deploy on push to `main`:** connect this repo to the `games` Worker once,
+in the Cloudflare dashboard → *Workers & Pages → games → Settings → Build →
+Connect to Git* (branch `main`). Cloudflare's **Workers Builds** then runs
+`wrangler deploy` on every push — no API token or GitHub Action needed
+(Cloudflare's GitHub app handles auth). Note: this is a Worker, **not** Pages,
+and it does **not** auto-deploy until that one-time connection is made.
 
 ## Adding content
 

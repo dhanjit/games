@@ -52,10 +52,42 @@ the machine's LAN IP. iOS PWA install: Share → Add to Home Screen.
   (see `randomNagaEffect`). The Sage's Eye preview only renders for object
   effects — function fx silently shows no preview. If you want a preview for a
   randomized choice, decide the fx at draw time, not on commit.
-- `next: 'cardId'` is documented in the README as the chaining mechanism, but
-  the current engine doesn't read it — `commitChoice` always calls
-  `drawNextCard()`. If chaining is needed, route through `state.nextCardOverride`
-  (already present) or extend `commitChoice`.
+- `next: 'cardId'` (README's chaining field) is still **not** read by the engine.
+  The supported immediate-chain field is **`choice.then: 'cardId'`** —
+  `commitChoice` sets `state.nextCardOverride`, drawn on the next encounter (same
+  realm or across the boundary). `next:` remains a no-op; prefer `then`.
+
+## Karma — deeds that ripen (the callback system)
+
+The "law of karma" turns choices into delayed consequences. Two per-run stores on
+`state` (both reset in `startRun`, neither persisted to meta):
+
+- `state.flags` (a `Set`) — within-run memory. A choice records deeds via
+  **`choice.set: ['flagA', ...]`** (and `choice.clear` to remove). Cards gate on
+  flags via **`card.requires: [...]`** (all must be present) and
+  **`card.forbids: [...]`** (none may be present), checked in `eligibleCards`.
+  Setup cards typically `forbids` their own "met" flag so they fire once per run.
+- `state.karmaQueue` — scheduled payoffs. **`choice.ripens: { card, in }`**
+  schedules a guaranteed future card `in` realms ahead (default 1), via
+  `scheduleKarma`. `drawNextCard` calls `dueKarmaCard()` (a deed due for the
+  current realm jumps ahead of the random draw). `in` ≥ 1; a deed scheduled past
+  realm 7 simply never fires (fine).
+
+Invariants:
+- **Payoff cards carry `tag: 'karma'`** → excluded from the random pool in
+  `eligibleCards` (like `boss`). They appear *only* when a `ripens` scheduled
+  them. So they need **no** `realmMin/realmMax` — gating is the schedule. Don't
+  put a normal card behind `tag:'karma'` or it'll never draw at random.
+- Draw priority in `drawNextCard`: boss step → `nextCardOverride` (`then`) →
+  due karma → random.
+- Payoff `fx` should be **plain objects** (not function fx) so Sage's Eye
+  previews them.
+- `renderCard` adds a `.card.karma` class (karma-blue cast in `style.css`) so a
+  returning deed reads visually as "your past catching up."
+- After balance/arc edits, re-run a `/tmp`-style sim: load `cards.js` with a
+  `window` shim, then assert every `ripens.card` resolves to a `tag:'karma'`
+  card, no orphan karma cards, and (over many seeded runs) no payoff appears
+  unscheduled while every in-range scheduled deed appears.
 
 ## Stats — end conditions are asymmetric
 

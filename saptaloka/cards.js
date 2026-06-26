@@ -66,11 +66,13 @@ const CARDS = [
   // ---------- Bhūloka (1) - mortal realm, gentle introduction ----------
 
   c('beggar_1', {
-    realmMin: 1, realmMax: 2, weight: 2,
+    realmMin: 1, realmMax: 2, weight: 2, forbids: ['met_beggar'],
     art: '🪔', speaker: 'A blind beggar',
     text: 'A frail man kneels at your feet. "A coin, a kind word, anything for a soul about to ascend."',
-    left:  { label: 'Walk past',     fx: { tejas: +2, karma: -8, bhakti: -4 } },
-    right: { label: 'Empty your alms', fx: { tejas: -6, karma: +5, bhakti: +5 } },
+    left:  { label: 'Walk past',       fx: { tejas: +2, karma: -8, bhakti: -4 },
+             set: ['met_beggar', 'spurned_beggar'], ripens: { card: 'beggar_spurned', in: 1 } },
+    right: { label: 'Empty your alms', fx: { tejas: -6, karma: +5, bhakti: +5 },
+             set: ['met_beggar', 'gave_alms'], ripens: { card: 'beggar_blessing', in: 1 } },
   }),
 
   c('village_widow', {
@@ -93,8 +95,8 @@ const CARDS = [
     realmMin: 1, realmMax: 3, weight: 1,
     art: '🌊', speaker: 'The Ganga',
     text: 'The river-mother whispers from the foam. "Drink, and remember a former life. Or pass dry-mouthed."',
-    left:  { label: 'Drink deeply',   fx: { prana: -5, bhakti: +8, tejas: +2 } },
-    right: { label: 'Cross dry-shod', fx: { prana: +4, bhakti: -3 } },
+    left:  { label: 'Cross dry-shod', fx: { prana: +4, bhakti: -3 } },
+    right: { label: 'Drink deeply',   fx: { prana: -5, bhakti: +8, tejas: +2 } },
   }),
 
   c('forest_tiger', {
@@ -106,11 +108,13 @@ const CARDS = [
   }),
 
   c('child_pleading', {
-    realmMin: 1, realmMax: 2, weight: 1,
+    realmMin: 1, realmMax: 2, weight: 1, forbids: ['met_child'],
     art: '🧒', speaker: 'A village child',
     text: '"A demon took my mother into the well. Please. Climb down with me."',
-    left:  { label: 'Descend the well', fx: { prana: -9, karma: +6, bhakti: +3 } },
-    right: { label: 'Tell her to flee', fx: { prana: +4, karma: -8, tejas: +1 } },
+    left:  { label: 'Tell her to flee', fx: { prana: +4, karma: -8, tejas: +1 },
+             set: ['met_child'], ripens: { card: 'well_demon', in: 1 } },
+    right: { label: 'Descend the well', fx: { prana: -9, karma: +6, bhakti: +3 },
+             set: ['met_child'], ripens: { card: 'child_grown', in: 2 } },
   }),
 
   // ---------- Bhuvarloka (2) - storms, yakshas, in-between beings ----------
@@ -119,8 +123,8 @@ const CARDS = [
     realmMin: 2, realmMax: 4, weight: 2,
     art: '🌀', speaker: 'A yaksha by a pond',
     text: '"What is heavier than the earth, swifter than wind, more numerous than blades of grass?"',
-    left:  { label: '"A mother\'s love."', fx: { karma: +5, bhakti: +5, tejas: -2 } },
-    right: { label: '"I have no time for games."', fx: { prana: -10, tejas: +4 } },
+    left:  { label: '"I have no time for games."', fx: { prana: -10, tejas: +4 } },
+    right: { label: '"A mother\'s love."', fx: { karma: +5, bhakti: +5, tejas: -2 } },
   }),
 
   c('gandharva_song', {
@@ -151,16 +155,16 @@ const CARDS = [
     realmMin: 2, realmMax: 3, weight: 1,
     art: '⛈', speaker: 'A wandering ascetic in the rain',
     text: '"Vow to fast for seven days, and I will teach you the wind\'s name."',
-    left:  { label: 'Take the vow',  fx: { prana: -9, tejas: +7, bhakti: +3 } },
-    right: { label: 'Decline politely', fx: { prana: +2, tejas: -4 } },
+    left:  { label: 'Decline politely', fx: { prana: +2, tejas: -4 } },
+    right: { label: 'Take the vow',  fx: { prana: -9, tejas: +7, bhakti: +3 } },
   }),
 
   c('garuda_offer', {
     realmMin: 2, realmMax: 5, weight: 1, tag: 'god',
     art: '🦅', speaker: 'Garuḍa, mount of Viṣṇu',
     text: '"Climb my back. But every feather I lend you, you owe in dharma."',
-    left:  { label: 'Climb on',     fx: { karma: -6, tejas: +7, bhakti: +3 } },
-    right: { label: 'Walk on foot', fx: { karma: +2, prana: -3 } },
+    left:  { label: 'Walk on foot', fx: { karma: +2, prana: -3 } },
+    right: { label: 'Climb on',     fx: { karma: -6, tejas: +7, bhakti: +3 } },
   }),
 
   // ---------- Svarloka (3) - Indra's heaven, devas everywhere ----------
@@ -217,8 +221,8 @@ const CARDS = [
     realmMin: 1, realmMax: 6, weight: 1, tag: 'god',
     art: '🐒', speaker: 'Hanumān, son of the wind',
     text: '"Lift this boulder, even an inch. Whatever I see in you, I lend you."',
-    left:  { label: 'Strain with all you have', fx: { prana: -5, tejas: +4, bhakti: +8 } },
-    right: { label: 'Admit you cannot',         fx: { karma: +4, bhakti: +3 } },
+    left:  { label: 'Admit you cannot',         fx: { karma: +4, bhakti: +3 } },
+    right: { label: 'Strain with all you have', fx: { prana: -5, tejas: +4, bhakti: +8 } },
   }),
 
   c('ganesha_path', {
@@ -241,8 +245,8 @@ const CARDS = [
     realmMin: 2, realmMax: 6, weight: 1,
     art: '🪨', speaker: 'Sage Durvāsa',
     text: 'His glare is famous. "I am hungry. Cook for me, NOW. Burn the rice and I curse your line."',
-    left:  { label: 'Cook with care', fx: { prana: -5, tejas: -2, karma: +4, bhakti: +3 } },
-    right: { label: 'Refuse to serve', fx: { prana: -12, karma: +1, tejas: +4 } },
+    left:  { label: 'Refuse to serve', fx: { prana: -12, karma: +1, tejas: +4 } },
+    right: { label: 'Cook with care', fx: { prana: -5, tejas: -2, karma: +4, bhakti: +3 } },
   }),
 
   // ---------- Maharloka (4) - the great sages ----------
@@ -259,8 +263,8 @@ const CARDS = [
     realmMin: 4, realmMax: 6, weight: 1,
     art: '🧘', speaker: 'Sage Vasiṣṭha',
     text: '"Sit. Say nothing for a hundred breaths. The world will offer everything to break you."',
-    left:  { label: 'Sit silent',     fx: { tejas: -6, karma: +5, bhakti: +5, prana: -2 } },
-    right: { label: 'Stand and walk', fx: { tejas: +4, karma: -4 } },
+    left:  { label: 'Stand and walk', fx: { tejas: +4, karma: -4 } },
+    right: { label: 'Sit silent',     fx: { tejas: -6, karma: +5, bhakti: +5, prana: -2 } },
   }),
 
   c('agastya_ocean', {
@@ -275,8 +279,8 @@ const CARDS = [
     realmMin: 3, realmMax: 6, weight: 1,
     art: '🌑', speaker: 'A wronged ṛṣi',
     text: '"You stepped on my deer\'s shadow. Apologize at my feet, or be reborn as a worm."',
-    left:  { label: 'Kneel and apologize', fx: { tejas: -8, karma: +4, bhakti: +3 } },
-    right: { label: 'Stand your ground',   fx: { prana: -14, tejas: +5 } },
+    left:  { label: 'Stand your ground',   fx: { prana: -14, tejas: +5 } },
+    right: { label: 'Kneel and apologize', fx: { tejas: -8, karma: +4, bhakti: +3 } },
   }),
 
   // ---------- Tempters (asuras) - any realm ----------
@@ -319,8 +323,8 @@ const CARDS = [
     realmMin: 5, realmMax: 7, weight: 1, tag: 'god',
     art: '🌌', speaker: 'A spark from Brahmā\'s mouth',
     text: '"Speak the syllable that began the universe. Mispronounce it, and a galaxy ages."',
-    left:  { label: 'Whisper "OṂ"',   fx: { tejas: +6, bhakti: +6, prana: -3 } },
-    right: { label: 'Stay silent',    fx: { karma: +4, tejas: -4 } },
+    left:  { label: 'Stay silent',    fx: { karma: +4, tejas: -4 } },
+    right: { label: 'Whisper "OṂ"',   fx: { tejas: +6, bhakti: +6, prana: -3 } },
   }),
 
   c('shiva_dance', {
@@ -359,8 +363,8 @@ const CARDS = [
     realmMin: 5, realmMax: 7, weight: 1, tag: 'god',
     art: '🐍', speaker: 'Viṣṇu on the cosmic serpent',
     text: 'He half-opens an eye. "Wake me with a true name, or let me dream — and the universe with me."',
-    left:  { label: 'Speak a name', fx: { bhakti: +11, prana: -5, tejas: +2 } },
-    right: { label: 'Let him sleep', fx: { karma: +5, bhakti: -2 } },
+    left:  { label: 'Let him sleep', fx: { karma: +5, bhakti: -2 } },
+    right: { label: 'Speak a name', fx: { bhakti: +11, prana: -5, tejas: +2 } },
   }),
 
   c('yama_ledger', {
@@ -382,27 +386,33 @@ const CARDS = [
   // ---------- Travelers / mortals - filler with meaningful tradeoffs ----------
 
   c('dying_soldier', {
-    realmMin: 1, realmMax: 4, weight: 1,
+    realmMin: 1, realmMax: 4, weight: 1, forbids: ['met_soldier'],
     art: '🗡', speaker: 'A dying soldier',
     text: '"Take my sword. Promise to use it for the side I betrayed."',
-    left:  { label: 'Take it',           fx: { tejas: +5, karma: -6 } },
-    right: { label: 'Bury it with him',  fx: { karma: +4, bhakti: +3, tejas: -2 } },
+    left:  { label: 'Bury it with him',  fx: { karma: +4, bhakti: +3, tejas: -2 },
+             set: ['met_soldier'], ripens: { card: 'soldier_spirit', in: 1 } },
+    right: { label: 'Take it',           fx: { tejas: +5, karma: -6 },
+             set: ['met_soldier'], ripens: { card: 'sword_reckoning', in: 1 } },
   }),
 
   c('runaway_bride', {
-    realmMin: 1, realmMax: 3, weight: 1,
+    realmMin: 1, realmMax: 3, weight: 1, forbids: ['met_bride'],
     art: '👰', speaker: 'A bride hiding behind a banyan',
     text: '"They marry me to a man twice my age tomorrow. Hide me a single night."',
-    left:  { label: 'Hide her',     fx: { karma: +5, bhakti: +3, prana: -3 } },
-    right: { label: 'Send her back', fx: { tejas: +2, karma: -6 } },
+    left:  { label: 'Send her back', fx: { tejas: +2, karma: -6 },
+             set: ['met_bride'], ripens: { card: 'bride_pyre', in: 1 } },
+    right: { label: 'Hide her',      fx: { karma: +5, bhakti: +3, prana: -3 },
+             set: ['met_bride'], ripens: { card: 'bride_queen', in: 2 } },
   }),
 
   c('thief_at_temple', {
-    realmMin: 1, realmMax: 4, weight: 1,
+    realmMin: 1, realmMax: 4, weight: 1, forbids: ['met_thief'],
     art: '💎', speaker: 'A thief in temple shadow',
     text: '"Half the loot if you keep watch. The deity has plenty."',
-    left:  { label: 'Refuse and warn priest', fx: { karma: +5, tejas: -2, bhakti: +3 } },
-    right: { label: 'Keep watch',             fx: { tejas: +7, karma: -10 } },
+    left:  { label: 'Refuse and warn priest', fx: { karma: +5, tejas: -2, bhakti: +3 },
+             set: ['met_thief'], ripens: { card: 'priest_honor', in: 1 } },
+    right: { label: 'Keep watch',             fx: { tejas: +7, karma: -10 },
+             set: ['met_thief'], ripens: { card: 'temple_wrath', in: 1 } },
   }),
 
   c('mute_oracle', {
@@ -433,8 +443,8 @@ const CARDS = [
     realmMin: 2, realmMax: 6, weight: 1,
     art: '🪞', speaker: 'Your own reflection',
     text: '"You\'re not who you pretend to be. Admit it, and one truth becomes a power."',
-    left:  { label: 'Admit it',     fx: { karma: +4, tejas: +4, bhakti: +3, prana: -3 } },
-    right: { label: 'Walk on',      fx: { tejas: +1, bhakti: -2 } },
+    left:  { label: 'Walk on',      fx: { tejas: +1, bhakti: -2 } },
+    right: { label: 'Admit it',     fx: { karma: +4, tejas: +4, bhakti: +3, prana: -3 } },
   }),
 
   c('snake_charmer', {
@@ -483,8 +493,8 @@ const CARDS = [
     realmMin: 6, realmMax: 7, weight: 1,
     art: '⚜', speaker: 'A formless voice',
     text: '"Name what you cling to most. Whatever you name, I take. Refuse, and the climb resets a step."',
-    left:  { label: 'Name a virtue', fx: { tejas: -10, karma: +5, bhakti: +6 } },
-    right: { label: 'Refuse',        fx: { prana: -5, tejas: -2 } },
+    left:  { label: 'Refuse',        fx: { prana: -5, tejas: -2 } },
+    right: { label: 'Name a virtue', fx: { tejas: -10, karma: +5, bhakti: +6 } },
   }),
 
   c('boatman_styx', {
@@ -493,6 +503,93 @@ const CARDS = [
     text: '"Most cross weeping. Pay in tears, or in years of life."',
     left:  { label: 'Pay in tears',  fx: { bhakti: +6, karma: +2, tejas: -4 } },
     right: { label: 'Pay in years',  fx: { prana: -10, tejas: +4 } },
+  }),
+
+  // ---------- KARMA: ripened deeds ----------
+  // tag:'karma' keeps these OUT of the random pool — each is drawn only when the
+  // matching setup choice scheduled it (see `ripens`). The speaker echoes the
+  // original encounter, so an old choice literally returns to face you. Each pays
+  // off as a reward that tempts overreach, or a reckoning that offers atonement —
+  // either way it forces a fresh stat swing, so the balancing stays alive.
+
+  c('beggar_blessing', {
+    tag: 'karma',
+    art: '✨', speaker: 'The beggar, now luminous',
+    text: '"I begged with a god\'s tongue, to weigh the souls who climb. You gave when you yourself had little." His rags fall away as light.',
+    left:  { label: 'Bow, ask nothing', fx: { bhakti: +8, karma: +5, tejas: -2 } },
+    right: { label: 'Ask for power',    fx: { tejas: +10, bhakti: -6, karma: -4 } },
+  }),
+
+  c('beggar_spurned', {
+    tag: 'karma',
+    art: '🪔', speaker: 'The beggar, eyes like coals',
+    text: '"I was a god in rags, and you stepped over me. The merit you might have earned now leans the other way." His hand lifts, unhurried.',
+    left:  { label: 'Kneel and atone', fx: { prana: -7, karma: +6, bhakti: +4 } },
+    right: { label: 'Step over him again', fx: { tejas: +4, karma: -9, bhakti: -4 } },
+  }),
+
+  c('bride_queen', {
+    tag: 'karma',
+    art: '👸', speaker: 'A rāni on a palanquin',
+    text: 'The bride you sheltered now rules a kingdom. "I never forgot the stranger who gave me one night\'s mercy. Name your reward."',
+    left:  { label: 'Bless her, take nothing', fx: { karma: +6, bhakti: +6, tejas: -2 } },
+    right: { label: 'Accept her treasury',     fx: { tejas: +8, karma: -5, prana: +4 } },
+  }),
+
+  c('bride_pyre', {
+    tag: 'karma',
+    art: '🔥', speaker: "A bride's shade in the smoke",
+    text: 'They wed her to the old man; within the month her pyre burned. Her shade drifts to you. "One night was all I asked of you."',
+    left:  { label: 'Grieve, chant her name', fx: { prana: -6, bhakti: +6, karma: +4 } },
+    right: { label: '"It was not my burden."', fx: { tejas: +5, karma: -8, bhakti: -4 } },
+  }),
+
+  c('child_grown', {
+    tag: 'karma',
+    art: '🧑', speaker: 'A young pilgrim',
+    text: '"You climbed into the dark for my mother when I was small. I have walked your road ever since." He falls into step beside you.',
+    left:  { label: 'Walk together a while', fx: { prana: +8, bhakti: +5, tejas: -2 } },
+    right: { label: 'Send him to his own path', fx: { karma: +5, tejas: +2, prana: -2 } },
+  }),
+
+  c('well_demon', {
+    tag: 'karma',
+    art: '👹', speaker: 'The well-demon, grown vast',
+    text: 'The thing you left below has fed on years of a child\'s grief. "You let me keep the mother. I have come for the rest."',
+    left:  { label: 'Face it now',            fx: { prana: -14, tejas: +8, karma: +5 } },
+    right: { label: 'Flee, as you taught her', fx: { prana: -4, karma: -8, tejas: +2 } },
+  }),
+
+  c('soldier_spirit', {
+    tag: 'karma',
+    art: '🌾', speaker: "The soldier's spirit, at peace",
+    text: '"You laid my blade in the earth instead of spilling more blood with it. My war is finally over." Calm settles over your chest.',
+    left:  { label: 'Receive his peace',      fx: { prana: +7, bhakti: +5, karma: +3 } },
+    right: { label: 'Ask him to fight once more', fx: { tejas: +7, karma: -6, prana: -3 } },
+  }),
+
+  c('sword_reckoning', {
+    tag: 'karma',
+    art: '⚔', speaker: 'Soldiers of the side you wronged',
+    text: 'They know the blade on your hip — the one you swore to wield for those it betrayed. "Honor the oath, or answer for breaking it."',
+    left:  { label: 'Keep the broken oath',   fx: { prana: -12, tejas: +6, karma: -6 } },
+    right: { label: 'Lay it down, atone',     fx: { prana: -4, karma: +7, bhakti: +4, tejas: -3 } },
+  }),
+
+  c('priest_honor', {
+    tag: 'karma',
+    art: '🛕', speaker: 'The temple priest',
+    text: '"You turned a thief from our god\'s feet and asked nothing for it. The deity has set your name in the temple\'s heart."',
+    left:  { label: 'Accept it humbly',   fx: { bhakti: +8, karma: +4, tejas: -2 } },
+    right: { label: 'Demand a boon in return', fx: { tejas: +6, bhakti: -6, karma: -3 } },
+  }),
+
+  c('temple_wrath', {
+    tag: 'karma',
+    art: '⚡', speaker: 'The temple deity, wrathful',
+    text: 'The idol\'s painted eyes open. "You kept watch while my shrine was stripped bare. The stolen merit is called due."',
+    left:  { label: 'Confess, restore it', fx: { prana: -8, karma: +7, bhakti: +3 } },
+    right: { label: 'Deny everything',     fx: { tejas: +5, karma: -9, bhakti: -4 } },
   }),
 
   // ---------- BOSSES (one per realm) ----------

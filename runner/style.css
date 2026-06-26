@@ -1,0 +1,316 @@
+/* Runner 626 — a stick-figure survival race.
+   Landscape side-scroller, web-first + responsive, drawn entirely on <canvas>.
+   The CSS here is only the shell: full-bleed canvas, the menu/over/pause
+   overlays that sit on top, and a phone "rotate to landscape" prompt. */
+
+:root {
+  --bg:      #0b0613;   /* matches the games-hub background */
+  --bg-2:    #150d24;
+  --ink:     #ece6f5;
+  --muted:   #9b8fb5;
+  --accent:  #54e6c8;   /* electric teal — boosts / UI */
+  --player:  #ffd23f;   /* the Runner 626 hero is yellow */
+  --accent-2:#ff5470;   /* hot pink — danger / the ray */
+  --line:    rgba(84, 230, 200, 0.22);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Kill iOS rubber-band scroll, callouts, tap-highlight and text selection. */
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  /* iOS ignores user-scalable=no; `manipulation` still kills the 300ms double-tap
+     zoom on taps. The canvas overrides this with touch-action:none below. */
+  touch-action: manipulation;
+}
+
+/* Menus/buttons sit above the canvas, so they need the guard explicitly. */
+.overlay, .icon-btn, .primary, .ghost { touch-action: manipulation; }
+
+#app {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The canvas is the input surface; never let the browser pan/zoom on it. */
+  touch-action: none;
+}
+
+/* ---- Top bar (pause / mute) ---------------------------------------------- */
+
+#topbar {
+  position: absolute;
+  top: 0; right: 0;
+  display: flex;
+  gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 0;
+  z-index: 5;
+}
+
+.icon-btn {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  font-size: 16px;
+  color: var(--ink);
+  background: rgba(21, 13, 36, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+.icon-btn[hidden] { display: none; }
+.icon-btn:active { transform: scale(0.94); }
+
+/* ---- Overlays (title / game-over / pause) -------------------------------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: max(32px, env(safe-area-inset-top)) 24px max(40px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(900px 500px at 50% 22%, rgba(29, 18, 51, 0.85) 0%, transparent 62%),
+    rgba(11, 6, 19, 0.78);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: fade-in 0.28s ease both;
+}
+.overlay.hidden { display: none; }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Title logo */
+.logo {
+  font-weight: 800;
+  font-size: clamp(46px, 16vw, 92px);
+  letter-spacing: 0.04em;
+  line-height: 0.9;
+}
+.logo-run { color: var(--ink); }
+.logo-ner { color: var(--player); margin-left: 0.12em; }
+
+.tagline {
+  margin: -6px 0 2px;
+  color: var(--muted);
+  font-size: clamp(14px, 4.5vw, 18px);
+  letter-spacing: 0.06em;
+}
+
+.best-line {
+  color: var(--muted);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.best-line strong { color: var(--accent); font-size: 18px; }
+
+/* Buttons */
+.primary, .ghost {
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.primary {
+  padding: 15px 40px;
+  font-size: 18px;
+  color: #07241f;
+  background: var(--accent);
+  border: none;
+  box-shadow: 0 10px 30px rgba(84, 230, 200, 0.28);
+}
+.primary:active { transform: translateY(1px) scale(0.98); }
+.ghost {
+  padding: 11px 28px;
+  font-size: 15px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+.ghost:active { transform: translateY(1px) scale(0.98); }
+
+/* How-to-play rows on the title screen */
+.how {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+  width: min(360px, 86vw);
+}
+.how-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.how-row .key {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.footnote {
+  margin-top: 6px;
+  max-width: 30ch;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+/* Game-over readout */
+#overTitle { margin: 0; font-size: clamp(22px, 7vw, 32px); letter-spacing: 0.02em; }
+.score-big {
+  font-weight: 800;
+  font-size: clamp(58px, 20vw, 120px);
+  line-height: 1;
+  color: var(--accent);
+}
+.score-big .unit { font-size: 0.4em; color: var(--muted); margin-left: 6px; }
+.score-sub { color: var(--muted); font-size: 15px; letter-spacing: 0.04em; }
+.newbest {
+  color: var(--accent-2);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 14px;
+  animation: pop 0.4s ease both;
+}
+.newbest.hidden { display: none; }
+@keyframes pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+
+/* Screen-reader only live region */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay, .newbest { animation: none; }
+}
+
+/* ---- Rotate-to-landscape prompt (phones only) ---------------------------- */
+/* Hidden by default; shown only on a touch device held in portrait. Desktop
+   (fine pointer) never sees it, even in a tall/narrow window. */
+#rotate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.rotate-icon {
+  font-size: 64px;
+  color: var(--player);
+  animation: rotate-hint 2.4s ease-in-out infinite;
+}
+.rotate-title { margin: 0; font-size: 22px; font-weight: 700; }
+.rotate-sub { margin: 0; color: var(--muted); font-size: 14px; }
+@keyframes rotate-hint {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(-90deg); }
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-icon { animation: none; }
+}
+
+/* ---- Responsive shell (web-first; scales down to phones) ------------------ */
+/* Keep menu content from sprawling on very wide desktop monitors. */
+.overlay { gap: clamp(12px, 2.2vh, 20px); }
+.logo { font-size: clamp(44px, 12vmin, 110px); }
+@media (min-width: 900px) {
+  .how { width: 420px; }
+  .footnote { max-width: 46ch; }
+}
+/* ---- Character select ---------------------------------------------------- */
+.pick-label {
+  margin: 2px 0 -4px; color: var(--muted);
+  font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+}
+.char-select {
+  display: flex; gap: 8px; flex-wrap: nowrap; justify-content: flex-start;
+  max-width: min(700px, 94vw); overflow-x: auto; padding: 6px 4px 8px;
+  scrollbar-width: thin; scroll-snap-type: x proximity;
+}
+.char-select::-webkit-scrollbar { height: 6px; }
+.char-select::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.char-chip {
+  flex: 0 0 auto; width: 100px; scroll-snap-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 6px 10px; border-radius: 14px; cursor: pointer; font: inherit; color: var(--ink);
+  background: rgba(21, 13, 36, 0.5); border: 1.5px solid var(--line);
+  transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.char-chip:hover { transform: translateY(-2px); }
+.char-chip.selected {
+  border-color: var(--c); background: rgba(21, 13, 36, 0.9);
+  box-shadow: 0 0 0 1px var(--c), 0 0 24px -5px var(--c);
+}
+.char-fig { width: 66px; height: 72px; }
+.char-name { font-weight: 800; font-size: 13px; letter-spacing: 0.04em; color: var(--c); }
+.char-stats { display: grid; gap: 2px; width: 100%; }
+.srow { display: flex; align-items: center; gap: 3px; font-size: 9px; color: var(--muted); }
+.srow b { width: 22px; flex: none; font-weight: 700; letter-spacing: 0.05em; text-align: left; }
+.srow .dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); }
+.srow .dot.on { background: var(--c); }
+
+/* Short landscape (phone turned sideways): tighten vertical rhythm. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .overlay { gap: 7px; padding: 10px 20px; }
+  .logo { font-size: clamp(30px, 10vh, 54px); }
+  .tagline { font-size: 12px; }
+  .how, .footnote { display: none; }   /* save vertical space */
+  .pick-label { display: none; }
+  .char-chip { width: 78px; padding: 5px 5px 7px; }
+  .char-fig { width: 42px; height: 46px; }
+  .srow { font-size: 8px; }
+  .primary { padding: 9px 28px; font-size: 15px; }
+}

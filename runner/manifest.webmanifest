@@ -1,0 +1,24 @@
+{
+  "name": "Runner 626 — Survival Race",
+  "short_name": "Runner 626",
+  "description": "A stick-figure survival race. Outrun rival creatures and Omicron's disintegration ray across weaving lanes.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0b0613",
+  "theme_color": "#0b0613",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%230b0613'/><g stroke='%23ffd23f' stroke-width='11' stroke-linecap='round' fill='none'><circle cx='104' cy='58' r='17' fill='%23ffd23f' stroke='none'/><path d='M104 76 L88 120'/><path d='M90 94 L128 82'/><path d='M90 94 L60 88'/><path d='M88 120 L120 150'/><path d='M88 120 L58 150'/></g></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='%230b0613'/><g stroke='%23ffd23f' stroke-width='28' stroke-linecap='round' fill='none'><circle cx='278' cy='156' r='44' fill='%23ffd23f' stroke='none'/><path d='M278 200 L236 320'/><path d='M242 252 L342 220'/><path d='M242 252 L160 236'/><path d='M236 320 L322 400'/><path d='M236 320 L154 400'/></g></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
