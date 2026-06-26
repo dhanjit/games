@@ -1,0 +1,151 @@
+/* Saptaloka Ascent — shell CSS.
+   The game is drawn entirely on <canvas>; this styles only the full-bleed
+   canvas + the title/over/pause overlays + the Mirror (upgrade) shop.
+   Portrait, mobile-first, safe-area aware. Palette shared with Saptaloka. */
+
+:root {
+  --bg:       #0b0613;
+  --bg-2:     #150d24;
+  --ink:      #ece6f5;
+  --muted:    #9b8fb5;
+  --gold:     #f5c97a;
+  --line:     rgba(245, 201, 122, 0.18);
+  /* per-stat colours, shared with the Saptaloka universe */
+  --stat-prana:  #8fd6a0;
+  --stat-tejas:  #ff9d6b;
+  --stat-karma:  #7fc2ff;
+  --stat-bhakti: #c79bff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: "Hoefler Text", Georgia, "Times New Roman", serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.overlay, .icon-btn, .primary, .ghost, .upg { touch-action: manipulation; }
+
+#app { position: fixed; inset: 0; }
+#game { display: block; width: 100%; height: 100%; touch-action: none; }
+
+/* ---- Top bar ------------------------------------------------------------- */
+#topbar {
+  position: absolute; top: 0; right: 0; display: flex; gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 0;
+  z-index: 5;
+}
+.icon-btn {
+  width: 40px; height: 40px; display: grid; place-items: center; font-size: 16px;
+  color: var(--ink); background: rgba(21, 13, 36, 0.55); border: 1px solid var(--line);
+  border-radius: 12px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); cursor: pointer;
+}
+.icon-btn[hidden] { display: none; }
+.icon-btn:active { transform: scale(0.94); }
+
+/* ---- Overlays ------------------------------------------------------------ */
+.overlay {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: clamp(10px, 2vh, 18px); text-align: center;
+  padding: max(28px, env(safe-area-inset-top)) 22px max(28px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background:
+    radial-gradient(1000px 560px at 50% 8%, rgba(40, 25, 70, 0.9) 0%, transparent 60%),
+    rgba(11, 6, 19, 0.86);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: fade-in 0.28s ease both;
+}
+.overlay.hidden { display: none; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Title logo */
+.logo { display: flex; flex-direction: column; line-height: 0.92; }
+.logo-main { font-size: clamp(38px, 12vw, 64px); color: var(--gold); letter-spacing: 0.02em; }
+.logo-sub {
+  font-size: clamp(15px, 5vw, 22px); color: var(--ink); letter-spacing: 0.5em;
+  text-transform: uppercase; margin-top: 4px; opacity: 0.85;
+}
+.tagline { margin: 0; color: var(--muted); font-style: italic; font-size: clamp(13px, 4vw, 16px); max-width: 30ch; }
+.best-line { color: var(--muted); font-size: 14px; letter-spacing: 0.03em; }
+.best-line strong { color: var(--gold); }
+
+/* The Mirror — upgrade shop */
+.shop {
+  width: min(420px, 92vw); border: 1px solid var(--line); border-radius: 16px;
+  background: linear-gradient(180deg, var(--bg-2), rgba(21, 13, 36, 0.3)); padding: 12px 12px 14px;
+}
+.shop-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+.shop-head .punya { color: var(--gold); letter-spacing: 0.04em; text-transform: none; }
+.upgrades { display: grid; gap: 6px; }
+.upg {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; font: inherit; color: var(--ink);
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02); cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+.upg.afford { border-color: rgba(245, 201, 122, 0.5); }
+.upg.afford:active { transform: scale(0.98); }
+.upg.locked { opacity: 0.55; cursor: default; }
+.upg.maxed { opacity: 0.7; cursor: default; border-color: rgba(143, 214, 160, 0.4); }
+.upg-main { display: flex; flex-direction: column; min-width: 0; }
+.upg-name { font-size: 15px; }
+.upg-desc { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.upg-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.upg-cost { font-size: 13px; color: var(--gold); white-space: nowrap; }
+.upg.locked .upg-cost { color: var(--muted); }
+.pips { display: flex; gap: 3px; }
+.pips i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); }
+.pips i.on { background: var(--gold); }
+
+/* Buttons */
+.primary, .ghost {
+  font: inherit; font-weight: 700; letter-spacing: 0.03em; border-radius: 999px; cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.primary {
+  padding: 14px 36px; font-size: 18px; color: #1c1208; background: var(--gold); border: none;
+  box-shadow: 0 10px 30px rgba(245, 201, 122, 0.25);
+}
+.primary:active { transform: translateY(1px) scale(0.98); }
+.ghost { padding: 10px 26px; font-size: 15px; color: var(--ink); background: transparent; border: 1px solid var(--line); }
+.ghost:active { transform: translateY(1px) scale(0.98); }
+
+/* How-to */
+.how { display: grid; gap: 7px; width: min(340px, 86vw); }
+.how-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); }
+.how-row .key {
+  flex: none; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--ink); font-size: 12px; white-space: nowrap;
+}
+.footnote { margin: 2px 0 0; max-width: 40ch; color: var(--muted); font-size: 11.5px; font-style: italic; line-height: 1.5; opacity: 0.85; }
+
+/* Over / win readout */
+.over-title { margin: 0; font-size: clamp(30px, 9vw, 48px); letter-spacing: 0.02em; color: var(--ink); }
+.over-title.win { color: var(--gold); }
+.over-title.false { color: var(--stat-karma); }
+.over-title.death { color: #ff7a7a; }
+.over-sub { margin: 0; color: var(--muted); font-style: italic; font-size: 15px; max-width: 32ch; }
+.over-stat { color: var(--ink); font-size: 16px; }
+.over-stat strong { color: var(--gold); }
+.over-reward { color: var(--gold); font-size: 15px; }
+
+@media (prefers-reduced-motion: reduce) { .overlay { animation: none; } }
+
+/* Tall phones: a touch more breathing room is fine; very short landscape: tighten. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .overlay { gap: 7px; }
+  .logo-main { font-size: 34px; }
+  .footnote, .how { display: none; }
+  .shop { padding: 8px; }
+  .upg-desc { display: none; }
+}

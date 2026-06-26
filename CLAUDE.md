@@ -52,6 +52,14 @@ Hub at `http://localhost:8080`, a game at `http://localhost:8080/<game>/`.
 
 ## Conventions for all games here
 
+- **Games are independent — including thematically.** This is a *catalogue* of
+  unrelated games (e.g. `runner/` is a neon-cyberpunk race; `saptaloka/` is a
+  Vedic-mythology rogue-like). They share no lore, palette, characters, or
+  mechanics. When building a new game you may reuse another game's **code
+  patterns** (the `<canvas>` + fixed-timestep loop, the PWA/service-worker
+  scaffold, the localStorage-meta shape) but **never** its theme — don't carry a
+  motif, name, or art style across games. A "Saptaloka X" belongs to the
+  Saptaloka universe; an unrelated game gets its own identity.
 - **No build step, no bundler, no `package.json`** — pure static, "open and play".
   Modern-browser ES is fine. Don't introduce a build step unless asked.
 - Each game ships its own PWA manifest + icons (PNG, not data-URI SVG, if it
