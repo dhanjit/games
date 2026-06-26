@@ -337,6 +337,19 @@ body {
   border-color: rgba(245,201,122,0.55);
 }
 
+/* A deed come back around — washed in karma-blue, your past catching up with you. */
+.card.karma {
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(111,181,255,0.28), transparent 60%),
+    linear-gradient(180deg, #18203e 0%, #0d1226 100%);
+  border-color: rgba(111,181,255,0.5);
+  box-shadow:
+    0 30px 60px -20px rgba(0,0,0,0.75),
+    0 0 26px rgba(111,181,255,0.18),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+.card.karma .card-speaker { color: var(--stat-karma); }
+
 .card-art {
   font-size: 96px;
   line-height: 1;

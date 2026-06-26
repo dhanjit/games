@@ -124,6 +124,8 @@
     preview: false,
     graceBonus: 0,
     nextCardOverride: null,
+    flags: new Set(),      // within-run karmic memory: deeds done, NPCs met
+    karmaQueue: [],         // scheduled payoffs: { card, atRealm } — deeds that ripen later
     cutscenePaused: false,
     temperanceFactor: 1,   // <1 softens approach to the tejas/karma/bhakti caps (Equanimity upgrade)
     pranaDrainFactor: 1,   // <1 reduces prāṇa drains (Pilgrim's Stamina upgrade)
@@ -149,8 +151,12 @@
     const realmNum = state.realmIdx + 1;
     return CARDS.filter(card => {
       if (card.tag === 'boss') return false;
+      if (card.tag === 'karma') return false; // payoff-only: drawn from the karma queue, never at random
       if (card.realmMin && realmNum < card.realmMin) return false;
       if (card.realmMax && realmNum > card.realmMax) return false;
+      // Karmic gating: a card may require past deeds, or be barred once a deed is done.
+      if (card.requires && !card.requires.every(f => state.flags.has(f))) return false;
+      if (card.forbids && card.forbids.some(f => state.flags.has(f))) return false;
       if (state.recentIds.includes(card.id)) return false;
       return true;
     });
@@ -167,7 +173,7 @@
     if (pool.length === 0) {
       // Fallback: forget recent
       state.recentIds = [];
-      return CARDS.find(c => c.tag !== 'boss') || CARDS[0];
+      return CARDS.find(c => c.tag !== 'boss' && c.tag !== 'karma') || CARDS[0];
     }
     const totalWeight = pool.reduce((s, c) => s + (c.weight || 1), 0);
     let r = Math.random() * totalWeight;
@@ -185,6 +191,25 @@
   function rememberCard(id) {
     state.recentIds.push(id);
     while (state.recentIds.length > 7) state.recentIds.shift();
+  }
+
+  // ---------- Karma: deeds that ripen later ----------
+  // A choice with `ripens: { card, in }` schedules a guaranteed payoff card to be
+  // drawn `in` realms ahead (default the next realm). This is the law of karma made
+  // playable — what you do in one world catches up with you in another.
+
+  function scheduleKarma(r) {
+    if (!r || !r.card) return;
+    const delay = (r.in == null) ? 1 : r.in;
+    state.karmaQueue.push({ card: r.card, atRealm: state.realmIdx + delay });
+  }
+
+  // Pop the first scheduled deed that has come due for the current realm, if any.
+  function dueKarmaCard() {
+    const i = state.karmaQueue.findIndex(k => state.realmIdx >= k.atRealm);
+    if (i === -1) return null;
+    const [entry] = state.karmaQueue.splice(i, 1);
+    return CARDS.find(c => c.id === entry.card) || null;
   }
 
   // ---------- UI rendering ----------
@@ -218,9 +243,10 @@
     cardText.textContent    = c.text || '';
     choiceLeft.textContent  = c.left?.label || '←';
     choiceRight.textContent = c.right?.label || '→';
-    card.classList.remove('boss', 'god', 'show-left', 'show-right');
-    if (c.tag === 'boss') card.classList.add('boss');
-    if (c.tag === 'god')  card.classList.add('god');
+    card.classList.remove('boss', 'god', 'karma', 'show-left', 'show-right');
+    if (c.tag === 'boss')  card.classList.add('boss');
+    if (c.tag === 'god')   card.classList.add('god');
+    if (c.tag === 'karma') card.classList.add('karma');
     card.style.transition = 'none';
     card.style.transform = 'translate(0, 80px) scale(0.96) rotate(0deg)';
     card.style.opacity = '0';
@@ -475,6 +501,8 @@
     state.runEncounters = 0;
     state.runPunya = 0;
     state.nextCardOverride = null;
+    state.flags = new Set();
+    state.karmaQueue = [];
     applyStartingUpgrades();
     state.inRun = true;
     titleScreen.classList.add('hidden');
@@ -489,7 +517,14 @@
   function drawNextCard() {
     const realm = REALMS[state.realmIdx];
     const isBoss = state.realmStep >= realm.length - 1;
-    const next = isBoss ? pickBossForRealm(state.realmIdx + 1) : pickRandomCard();
+    let next;
+    if (isBoss) {
+      next = pickBossForRealm(state.realmIdx + 1);
+    } else if (state.nextCardOverride) {
+      next = pickRandomCard();            // immediate `then` chain consumes the override
+    } else {
+      next = dueKarmaCard() || pickRandomCard();  // a ripened deed jumps the queue
+    }
     if (!next) {
       // Fallback safety
       console.warn('No card found, using first');
@@ -547,6 +582,14 @@
     const before = { prana: state.prana, tejas: state.tejas, karma: state.karma, bhakti: state.bhakti };
     applyFx(fx);
     state.runEncounters++;
+
+    // Karma: record the deed, schedule its ripening, and queue any immediate chain.
+    if (choice) {
+      if (choice.set)    for (const f of choice.set)   state.flags.add(f);
+      if (choice.clear)  for (const f of choice.clear) state.flags.delete(f);
+      if (choice.ripens) scheduleKarma(choice.ripens);
+      if (choice.then)   state.nextCardOverride = choice.then;
+    }
 
     // Punya gain
     state.runPunya += 1 + state.graceBonus;
