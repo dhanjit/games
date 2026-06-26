@@ -109,6 +109,18 @@
     const k = (Math.PI * 2) / (view.w * T.weaveLenW);
     return base + Math.sin(worldX * k + lane * 2.1) * LGAP * T.weaveAmp;
   }
+  // lane surface y at a SCREEN x — lets assets follow the weaving track
+  function laneScreenY(lane, sx) { return laneY(lane, run.camera + sx); }
+  // local slope (dy/dx) of a lane at a screen x, for aligning assets to the track tilt
+  function laneSlope(lane, sx) { return (laneScreenY(lane, sx + 3) - laneScreenY(lane, sx - 3)) / 6; }
+  // walk a lane across a screen-x span → a strip of {x,y} points hugging the weave
+  function laneStrip(lane, sx0, sx1, step) {
+    const pts = []; step = step || 14;
+    for (let sx = sx0; sx <= sx1; sx += step) pts.push({ x: sx, y: laneScreenY(lane, sx) });
+    pts.push({ x: sx1, y: laneScreenY(lane, sx1) });
+    return pts;
+  }
+  function withAlpha(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
 
   // ──────────────────────────────── State ───────────────────────────────────
   const STATE = { TITLE: 'title', PLAY: 'play', PAUSE: 'pause', DEAD: 'dead' };
@@ -277,7 +289,8 @@
       else type = F.ORB;
     }
     const f = { worldX: x, lane, type, w: W() * 0.05, hit: false, broken: false, scored: false };
-    if (type === F.GAP) f.w = W() * (0.05 + Math.random() * 0.05 + stageF * 0.03);
+    if (type === F.BOOST) f.w = W() * 0.16;          // a substantial energized lane segment
+    else if (type === F.GAP) f.w = W() * (0.05 + Math.random() * 0.05 + stageF * 0.03);
     else if (type === F.CRYSTAL) f.w = W() * 0.04;
     else if (type === F.BEAM) { f.w = W() * 0.02; f.beamH = BODY * (1.0 + Math.random() * 0.3); }
     else if (type === F.ORB) { f.w = W() * 0.04; f.orbY = BODY * (0.9 + Math.random() * 0.4); }
@@ -424,7 +437,7 @@
     return null;
   }
   function punchCrystal(r, f) {
-    f.broken = true; r.punchT = 0.5;
+    f.broken = true; f.brokeAt = now(); r.punchT = 0.5;
     if (r.isPlayer) { sfx.punch(); shake = reduceMotion ? 0 : H() * 0.008; spawnSpark(f.worldX - run.camera, laneY(f.lane, f.worldX) - BODY * 0.5, C.crystal, 14); addFloater(PX + BODY, feetScreenY(r) - BODY, 'PUNCH', C.crystal, 0.6, 0.7); }
   }
 
@@ -532,60 +545,225 @@
     ctx.lineTo(w, view.h); ctx.closePath(); ctx.fill();
   }
 
+  // Each weaving rail becomes a ribbon: a translucent track-bed shelf + scrolling
+  // seam ticks + the lit rail edge on top. This gives every feature a surface.
   function drawTrack() {
     const w = view.w, playerLane = Math.round(player.laneF), hotCol = player.col ? player.col.body : C.laneHot;
-    for (let lane = 0; lane < T.nLanes; lane++) {
+    const TB = LGAP * 0.42, tick = BODY * 0.9, off = ((run.camera % tick) + tick) % tick;
+    for (let lane = T.nLanes - 1; lane >= 0; lane--) {   // back-to-front so nearer lanes overlap
       const hot = lane === playerLane && player.alive;
+      const strip = laneStrip(lane, -20, w + 20, 14), midY = strip[(strip.length / 2) | 0].y;
+      // 1) bed shelf
+      const bed = ctx.createLinearGradient(0, midY, 0, midY + TB);
+      if (hot) { bed.addColorStop(0, withAlpha(hotCol, 0.16)); bed.addColorStop(0.45, withAlpha(hotCol, 0.06)); bed.addColorStop(1, withAlpha(hotCol, 0)); }
+      else { bed.addColorStop(0, 'rgba(120,200,255,0.07)'); bed.addColorStop(0.45, 'rgba(110,160,230,0.03)'); bed.addColorStop(1, 'rgba(90,150,220,0)'); }
+      ctx.fillStyle = bed;
+      ctx.beginPath(); ctx.moveTo(strip[0].x, strip[0].y);
+      for (let i = 1; i < strip.length; i++) ctx.lineTo(strip[i].x, strip[i].y);
+      for (let i = strip.length - 1; i >= 0; i--) ctx.lineTo(strip[i].x, strip[i].y + TB);
+      ctx.closePath(); ctx.fill();
+      // 2) scrolling seam ticks (batched)
+      ctx.strokeStyle = hot ? 'rgba(190,225,255,0.14)' : 'rgba(150,190,240,0.07)';
+      ctx.lineWidth = Math.max(1, H() * 0.0016);
+      ctx.beginPath();
+      for (let sx = -off; sx < w; sx += tick) { const yy = laneScreenY(lane, sx); ctx.moveTo(sx, yy); ctx.lineTo(sx - TB * 0.12, yy + TB * 0.55); }
+      ctx.stroke();
+      // 3) lit rail edge
       ctx.strokeStyle = hot ? hotCol : C.lane;
       ctx.lineWidth = hot ? Math.max(2.5, H() * 0.004) : Math.max(1.5, H() * 0.0025);
       ctx.shadowColor = hot ? hotCol : 'transparent'; ctx.shadowBlur = hot ? H() * 0.012 : 0;
-      ctx.beginPath();
-      for (let sx = -20; sx <= w + 20; sx += 14) { const wx = run.camera + sx; const y = laneY(lane, wx); if (sx === -20) ctx.moveTo(sx, y); else ctx.lineTo(sx, y); }
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(strip[0].x, strip[0].y);
+      for (let i = 1; i < strip.length; i++) ctx.lineTo(strip[i].x, strip[i].y);
+      ctx.stroke(); ctx.shadowBlur = 0;
     }
     ctx.shadowBlur = 0;
   }
 
+  const ITEM_TINT = { turbo: '#ffd76b', shield: '#7ad9ff', shockwave: '#ff3da6', mines: '#ff5470' };
+  const ITEM_HALO = { turbo: 'rgba(255,215,107,0.4)', shield: 'rgba(122,217,255,0.4)', shockwave: 'rgba(255,61,166,0.4)', mines: 'rgba(255,84,112,0.4)' };
+  const ITEM_GLYPH = { turbo: '»', shield: '◈', shockwave: '✺', mines: '✸' };
+
   function drawFeatures() {
     for (const f of features) {
-      const sx = f.worldX - run.camera; if (sx > view.w + W() * 0.1 || sx + f.w < -W() * 0.1) continue;
-      const y = laneY(f.lane, f.worldX);
+      const sx = f.worldX - run.camera; if (sx > view.w + W() * 0.18 || sx + f.w < -W() * 0.18) continue;
       ctx.save();
-      if (f.type === F.GAP) {
-        ctx.strokeStyle = C.danger; ctx.lineWidth = Math.max(2, H() * 0.003); ctx.setLineDash([H() * 0.01, H() * 0.01]);
-        ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(sx + f.w, y); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = C.danger; ctx.globalAlpha = 0.5; ctx.fillRect(sx, y - 1, 2, H() * 0.03); ctx.fillRect(sx + f.w - 2, y - 1, 2, H() * 0.03);
-      } else if (f.type === F.CRYSTAL) {
-        if (!f.broken) { ctx.fillStyle = C.crystal; ctx.shadowColor = C.crystal; ctx.shadowBlur = H() * 0.012;
-          const hh = BODY * 0.8, hw = f.w * 0.6;
-          ctx.beginPath(); ctx.moveTo(sx + f.w / 2, y - hh); ctx.lineTo(sx + f.w / 2 + hw, y - hh * 0.5); ctx.lineTo(sx + f.w / 2, y); ctx.lineTo(sx + f.w / 2 - hw, y - hh * 0.5); ctx.closePath(); ctx.fill();
-          ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.5; ctx.fillRect(sx + f.w / 2 - 1, y - hh, 2, hh); }
-      } else if (f.type === F.BEAM) {
-        ctx.strokeStyle = C.beam; ctx.lineWidth = Math.max(2, H() * 0.004); ctx.shadowColor = C.beam; ctx.shadowBlur = H() * 0.02;
-        const flick = 0.7 + 0.3 * Math.sin(now() / 40 + f.worldX);
-        ctx.globalAlpha = flick; ctx.beginPath(); ctx.moveTo(sx + f.w / 2, y); ctx.lineTo(sx + f.w / 2, y - f.beamH); ctx.stroke();
-      } else if (f.type === F.ORB) {
-        const oy = y - f.orbY; const g = ctx.createRadialGradient(sx + f.w / 2, oy, 1, sx + f.w / 2, oy, f.w);
-        g.addColorStop(0, '#fff'); g.addColorStop(0.4, C.orb); g.addColorStop(1, 'rgba(255,122,217,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx + f.w / 2, oy, f.w, 0, 6.2832); ctx.fill();
-      } else if (f.type === F.BOOST) {
-        ctx.fillStyle = C.boost; ctx.shadowColor = C.boost; ctx.shadowBlur = H() * 0.01; ctx.globalAlpha = 0.9;
-        for (let i = 0; i < 3; i++) { const cx = sx + f.w * (0.2 + i * 0.3); ctx.beginPath(); ctx.moveTo(cx, y - BODY * 0.18); ctx.lineTo(cx + f.w * 0.18, y - BODY * 0.09); ctx.lineTo(cx, y); ctx.stroke ? null : null; ctx.lineWidth = Math.max(2, H() * 0.004); ctx.strokeStyle = C.boost; ctx.stroke(); }
-      } else if (f.type === F.JUMPPAD) {
-        ctx.fillStyle = C.boost; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(sx + f.w / 2, y - BODY * 0.3); ctx.lineTo(sx + f.w, y); ctx.closePath(); ctx.fill();
-      } else if (f.type === F.ITEM) {
-        const oy = y - BODY * 0.9, R = BODY * 0.22, pulse = 0.8 + 0.2 * Math.sin(now() / 180 + f.worldX);
-        const g = ctx.createRadialGradient(sx + f.w / 2, oy, 1, sx + f.w / 2, oy, R * 2.4 * pulse);
-        g.addColorStop(0, 'rgba(255,226,150,0.85)'); g.addColorStop(0.5, 'rgba(255,196,86,0.2)'); g.addColorStop(1, 'rgba(255,196,86,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx + f.w / 2, oy, R * 2.4, 0, 6.2832); ctx.fill();
-        ctx.fillStyle = C.item; ctx.beginPath(); ctx.arc(sx + f.w / 2, oy, R, 0, 6.2832); ctx.fill();
-        ctx.fillStyle = '#5a3a00'; ctx.font = `700 ${R}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(({ turbo: '»', shield: '◈', shockwave: '✺', mines: '✸' })[f.item] || '?', sx + f.w / 2, oy + 1);
-      }
+      if (f.type === F.BOOST) featBoost(f, sx);
+      else if (f.type === F.JUMPPAD) featJumppad(f, sx);
+      else if (f.type === F.CRYSTAL) featCrystal(f, sx);
+      else if (f.type === F.BEAM) featBeam(f, sx);
+      else if (f.type === F.ORB) featOrb(f, sx);
+      else if (f.type === F.GAP) featGap(f, sx);
+      else if (f.type === F.ITEM) featItem(f, sx);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.shadowBlur = 0;
       ctx.restore();
     }
-    // mines
-    for (const m of mines) { const sx = m.worldX - run.camera; if (sx < -20 || sx > view.w + 20) continue; const y = laneY(m.lane, m.worldX); ctx.fillStyle = C.danger; ctx.beginPath(); ctx.arc(sx, y - BODY * 0.06, BODY * 0.08, 0, 6.2832); ctx.fill(); }
+    for (const m of mines) {
+      const sx = m.worldX - run.camera; if (sx < -40 || sx > view.w + 40) continue;
+      ctx.save(); featMine(m, sx);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
+    }
+  }
+
+  // ---- boost: an electrified slice of the lane with marching chevrons ----
+  function featBoost(f, sx) {
+    const g = ctx, fw = f.w, TB = BODY * 0.34, strip = laneStrip(f.lane, sx, sx + fw, 10), topY = strip[0].y;
+    g.globalCompositeOperation = 'lighter';
+    g.beginPath(); g.moveTo(strip[0].x, strip[0].y);
+    for (let i = 1; i < strip.length; i++) g.lineTo(strip[i].x, strip[i].y);
+    for (let i = strip.length - 1; i >= 0; i--) g.lineTo(strip[i].x, strip[i].y + TB);
+    g.closePath();
+    const band = g.createLinearGradient(0, topY, 0, topY + TB);
+    band.addColorStop(0, 'rgba(84,230,200,0)'); band.addColorStop(0.25, 'rgba(84,230,200,0.45)'); band.addColorStop(0.55, '#54e6c8'); band.addColorStop(1, 'rgba(84,230,200,0.05)');
+    g.fillStyle = band; g.fill();
+    g.save(); g.clip();   // chevrons clipped to the ribbon
+    const count = Math.max(3, Math.floor(fw / (BODY * 0.5))), march = (now() / 240) % 1, s = BODY * 0.18;
+    g.strokeStyle = '#caffee'; g.lineWidth = Math.max(2.5, H() * 0.005); g.lineJoin = 'round'; g.lineCap = 'round';
+    for (let i = 0; i < count; i++) {
+      const t = ((i / count) + march) % 1, scx = sx + t * fw, cy = laneScreenY(f.lane, scx) + TB * 0.5, ang = Math.atan2(laneSlope(f.lane, scx), 1), fade = Math.sin(t * Math.PI);
+      g.globalAlpha = 0.35 + 0.65 * fade; g.save(); g.translate(scx, cy); g.rotate(ang);
+      g.beginPath(); g.moveTo(-s * 0.7, -s * 0.6); g.lineTo(s * 0.7, 0); g.lineTo(-s * 0.7, s * 0.6); g.stroke(); g.restore();
+    }
+    const pt = (now() / 650) % 1, pscx = sx + pt * fw, py = laneScreenY(f.lane, pscx) + TB * 0.5;
+    const pulse = g.createRadialGradient(pscx, py, 1, pscx, py, BODY * 0.6);
+    pulse.addColorStop(0, 'rgba(255,255,255,0.9)'); pulse.addColorStop(0.4, 'rgba(84,230,200,0.5)'); pulse.addColorStop(1, 'rgba(84,230,200,0)');
+    g.globalAlpha = 1; g.fillStyle = pulse; g.fillRect(pscx - BODY * 0.6, py - BODY * 0.6, BODY * 1.2, BODY * 1.2);
+    g.restore();   // undo clip
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+    g.strokeStyle = '#aef7e6'; g.lineWidth = Math.max(2.5, H() * 0.004); g.shadowColor = C.boost; g.shadowBlur = H() * 0.014;
+    g.beginPath(); g.moveTo(strip[0].x, strip[0].y); for (let i = 1; i < strip.length; i++) g.lineTo(strip[i].x, strip[i].y); g.stroke(); g.shadowBlur = 0;
+    g.strokeStyle = C.boost; g.lineWidth = Math.max(2, H() * 0.003);
+    g.beginPath(); g.moveTo(strip[0].x, strip[0].y); g.lineTo(strip[0].x, strip[0].y + TB);
+    const last = strip[strip.length - 1]; g.moveTo(last.x, last.y); g.lineTo(last.x, last.y + TB); g.stroke();
+  }
+
+  // ---- jump pad: an upturned ramp wedge rooted on the lane ----
+  function featJumppad(f, sx) {
+    const g = ctx, fw = f.w, mx = sx + fw / 2, baseY = laneScreenY(f.lane, mx), ang = Math.atan2(laneSlope(f.lane, mx), 1);
+    const recoil = f.scored ? 0 : Math.sin(now() / 220) * BODY * 0.04, lipH = BODY * 0.42 + recoil;
+    g.save(); g.translate(mx, baseY); g.rotate(ang);
+    const bp = g.createLinearGradient(0, -BODY * 0.08, 0, BODY * 0.03); bp.addColorStop(0, '#1a2a2c'); bp.addColorStop(1, '#0c1414');
+    g.fillStyle = bp; g.fillRect(-fw / 2, -BODY * 0.05, fw, BODY * 0.09);
+    g.fillStyle = '#0c1414'; g.fillRect(-fw / 2, BODY * 0.02, BODY * 0.04, BODY * 0.05); g.fillRect(fw / 2 - BODY * 0.04, BODY * 0.02, BODY * 0.04, BODY * 0.05);
+    g.beginPath(); g.moveTo(-fw / 2, 0); g.lineTo(fw / 2, -lipH); g.lineTo(fw / 2, 0); g.closePath();
+    const rf = g.createLinearGradient(0, 0, 0, -lipH); rf.addColorStop(0, 'rgba(40,120,110,0.25)'); rf.addColorStop(1, 'rgba(84,230,200,0.85)');
+    g.fillStyle = rf; g.fill();
+    g.strokeStyle = C.boost; g.lineWidth = Math.max(2, H() * 0.0035); g.shadowColor = C.boost; g.shadowBlur = H() * 0.012; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-fw / 2, 0); g.lineTo(fw / 2, -lipH); g.stroke(); g.shadowBlur = 0;
+    g.globalCompositeOperation = 'lighter'; g.strokeStyle = 'rgba(174,247,230,0.7)'; g.lineWidth = Math.max(1.5, H() * 0.0025);
+    for (let k = 0; k < 3; k++) { const fx = -fw / 2 + (k + 1) / 4 * fw, fy = -(k + 1) / 4 * lipH; g.beginPath(); g.moveTo(fx - fw * 0.08, fy + BODY * 0.05); g.lineTo(fx, fy); g.lineTo(fx + fw * 0.08, fy + BODY * 0.05); g.stroke(); }
+    g.globalCompositeOperation = 'source-over';
+    if (!f.scored) {
+      g.strokeStyle = '#eafff9'; g.lineWidth = Math.max(2, H() * 0.004);
+      for (let k = 0; k < 2; k++) { const t = ((now() / 300) + k * 0.5) % 1, ay = -lipH - t * BODY * 0.5; g.globalAlpha = (1 - t) * 0.9; g.beginPath(); g.moveTo(fw * 0.5 - BODY * 0.1, ay + BODY * 0.1); g.lineTo(fw * 0.5, ay); g.lineTo(fw * 0.5 + BODY * 0.1, ay + BODY * 0.1); g.stroke(); }
+      g.globalAlpha = 1;
+    }
+    g.restore();
+  }
+
+  // ---- crystal: a faceted lavender gem rooted to the rail ----
+  function featCrystal(f, sx) {
+    const g = ctx, fw = f.w, mx = sx + fw / 2, baseY = laneScreenY(f.lane, mx), ang = Math.atan2(laneSlope(f.lane, mx), 1);
+    if (f.broken) {
+      if (f.brokeAt && now() - f.brokeAt < 300) {
+        const p = (now() - f.brokeAt) / 300; g.save(); g.translate(mx, baseY); g.rotate(ang); g.fillStyle = C.crystal; g.globalAlpha = 0.5 * (1 - p);
+        for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + (k - 2) * 0.5, d = p * BODY * 0.7, ox = Math.cos(a) * d, oy = Math.sin(a) * d - p * BODY * 0.4; g.beginPath(); g.moveTo(ox, oy - BODY * 0.1); g.lineTo(ox + BODY * 0.06, oy + BODY * 0.04); g.lineTo(ox - BODY * 0.06, oy + BODY * 0.04); g.closePath(); g.fill(); }
+        g.restore();
+      }
+      return;
+    }
+    const hh = BODY * 0.92, hw = fw * 0.6;
+    g.save(); g.translate(mx, baseY); g.rotate(ang);
+    const sk = g.createRadialGradient(0, 0, 1, 0, 0, hw * 1.8); sk.addColorStop(0, 'rgba(199,155,255,0.45)'); sk.addColorStop(1, 'rgba(199,155,255,0)');
+    g.fillStyle = sk; g.beginPath(); g.ellipse(0, 0, hw * 1.8, BODY * 0.1, 0, 0, 6.2832); g.fill();
+    g.beginPath(); g.moveTo(0, -hh); g.lineTo(hw, -hh * 0.45); g.lineTo(0, -hh * 0.04); g.lineTo(-hw, -hh * 0.45); g.closePath();
+    const bg = g.createLinearGradient(0, -hh, 0, 0); bg.addColorStop(0, '#e6d2ff'); bg.addColorStop(0.5, '#c79bff'); bg.addColorStop(1, '#7d52c8');
+    g.fillStyle = bg; g.shadowColor = C.crystal; g.shadowBlur = H() * 0.012; g.fill(); g.shadowBlur = 0;
+    g.strokeStyle = 'rgba(60,30,110,0.6)'; g.lineWidth = Math.max(1, H() * 0.0015);
+    g.beginPath(); g.moveTo(0, -hh * 0.62); g.lineTo(-hw, -hh * 0.45); g.moveTo(0, -hh * 0.62); g.lineTo(hw, -hh * 0.45); g.moveTo(0, -hh * 0.62); g.lineTo(0, -hh * 0.04); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.moveTo(0, -hh); g.lineTo(0, -hh * 0.04); g.stroke();
+    const gp = (now() / 700) % 1; g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.7 * Math.sin(gp * Math.PI); g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, H() * 0.002);
+    const gy = -hh + gp * hh * 0.7; g.beginPath(); g.moveTo(hw * 0.2, gy); g.lineTo(hw * 0.5, gy + hh * 0.1); g.stroke();
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.restore();
+  }
+
+  // ---- beam: an emitter gate with a crackling energy curtain ----
+  function featBeam(f, sx) {
+    const g = ctx, fw = f.w, mx = sx + fw / 2, baseY = laneScreenY(f.lane, mx), topY = baseY - f.beamH, ang = Math.atan2(laneSlope(f.lane, mx), 1);
+    g.save(); g.translate(mx, baseY); g.rotate(ang);
+    const bn = g.createLinearGradient(0, -BODY * 0.1, 0, 0); bn.addColorStop(0, '#ff3da6'); bn.addColorStop(1, '#7a0f3a');
+    g.fillStyle = bn; g.beginPath(); g.moveTo(-fw * 1.2, 0); g.lineTo(fw * 1.2, 0); g.lineTo(fw * 0.8, -BODY * 0.1); g.lineTo(-fw * 0.8, -BODY * 0.1); g.closePath(); g.fill();
+    g.strokeStyle = C.beam; g.lineWidth = Math.max(1.5, H() * 0.002); g.beginPath(); g.moveTo(-fw * 0.8, -BODY * 0.1); g.lineTo(fw * 0.8, -BODY * 0.1); g.stroke();
+    g.restore();
+    const cur = g.createLinearGradient(0, topY, 0, baseY); cur.addColorStop(0, 'rgba(255,61,166,0.05)'); cur.addColorStop(0.5, 'rgba(255,61,166,0.22)'); cur.addColorStop(1, 'rgba(255,61,166,0.05)');
+    g.fillStyle = cur; g.fillRect(mx - fw * 0.6, topY, fw * 1.2, f.beamH);
+    g.strokeStyle = C.beam; g.lineWidth = Math.max(3, H() * 0.005); g.lineCap = 'round'; g.shadowColor = C.beam; g.shadowBlur = H() * 0.012;
+    g.beginPath(); g.moveTo(mx - fw * 0.6, baseY); g.lineTo(mx - fw * 0.6, topY); g.moveTo(mx + fw * 0.6, baseY); g.lineTo(mx + fw * 0.6, topY); g.stroke();
+    g.fillStyle = C.beam; g.beginPath(); g.arc(mx - fw * 0.6, topY, Math.max(2, H() * 0.004), 0, 6.2832); g.fill(); g.beginPath(); g.arc(mx + fw * 0.6, topY, Math.max(2, H() * 0.004), 0, 6.2832); g.fill(); g.shadowBlur = 0;
+    g.globalCompositeOperation = 'lighter'; g.strokeStyle = '#ff7ad9'; g.lineWidth = Math.max(1.5, H() * 0.0025);
+    g.beginPath(); g.moveTo(mx, topY); const seg = 5, seed = Math.floor(now() / 60);
+    for (let i = 1; i <= seg; i++) { const yy = topY + f.beamH * (i / seg), jx = mx + Math.sin(seed * 1.7 + i * 3.1) * 0.5 * fw; g.lineTo(i === seg ? mx : jx, yy); } g.stroke();
+    g.strokeStyle = C.beam; g.lineWidth = Math.max(2, H() * 0.003); g.beginPath(); g.moveTo(mx - fw * 0.8, topY); g.lineTo(mx + fw * 0.8, topY); g.stroke();
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  // ---- orb: a layered plasma sphere hovering above the lane ----
+  function featOrb(f, sx) {
+    const g = ctx, fw = f.w, mx = sx + fw / 2, gy = laneScreenY(f.lane, mx), bob = Math.sin(now() / 300 + f.worldX) * BODY * 0.05, oy = gy - f.orbY + bob, R = fw;
+    g.strokeStyle = 'rgba(255,122,217,0.22)'; g.lineWidth = Math.max(1, H() * 0.0015); g.setLineDash([H() * 0.006, H() * 0.006]);
+    g.beginPath(); g.moveTo(mx, oy + R); g.lineTo(mx, gy); g.stroke(); g.setLineDash([]);
+    g.fillStyle = 'rgba(255,122,217,0.18)'; g.beginPath(); g.ellipse(mx, gy, R * 0.8, BODY * 0.05, 0, 0, 6.2832); g.fill();
+    g.globalCompositeOperation = 'lighter';
+    const halo = g.createRadialGradient(mx, oy, 1, mx, oy, R * 1.8); halo.addColorStop(0, 'rgba(255,122,217,0.5)'); halo.addColorStop(1, 'rgba(255,122,217,0)');
+    g.fillStyle = halo; g.fillRect(mx - R * 1.8, oy - R * 1.8, R * 3.6, R * 3.6);
+    const core = g.createRadialGradient(mx - R * 0.3, oy - R * 0.3, 1, mx, oy, R); core.addColorStop(0, '#fff'); core.addColorStop(0.4, '#ff7ad9'); core.addColorStop(1, '#c01a6a');
+    g.fillStyle = core; g.beginPath(); g.arc(mx, oy, R, 0, 6.2832); g.fill();
+    g.strokeStyle = 'rgba(255,200,240,0.8)'; g.lineWidth = Math.max(1.5, H() * 0.002);
+    g.save(); g.translate(mx, oy); g.rotate(now() / 400); g.beginPath(); g.ellipse(0, 0, R * 1.25, R * 0.5, 0, 0, 6.2832); g.stroke(); g.restore();
+    g.save(); g.translate(mx, oy); g.rotate(-now() / 300); g.beginPath(); g.ellipse(0, 0, R * 1.25, R * 0.5, 0, 0, 6.2832); g.stroke(); g.restore();
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  // ---- gap: a torn break in the lane with lit lips and a dark void ----
+  function featGap(f, sx) {
+    const g = ctx, fw = f.w, yL = laneScreenY(f.lane, sx), yR = laneScreenY(f.lane, sx + fw), VD = LGAP * 0.7;
+    g.beginPath(); g.moveTo(sx, yL); g.lineTo(sx + fw, yR); g.lineTo(sx + fw, yR + VD); g.lineTo(sx, yL + VD); g.closePath();
+    const vg = g.createLinearGradient(0, yL, 0, yL + VD); vg.addColorStop(0, 'rgba(10,4,16,0.92)'); vg.addColorStop(0.3, 'rgba(20,4,14,0.55)'); vg.addColorStop(1, 'rgba(10,4,16,0)');
+    g.fillStyle = vg; g.fill();
+    g.globalCompositeOperation = 'lighter';
+    const lipL = laneStrip(f.lane, sx - W() * 0.01, sx, 3), lipR = laneStrip(f.lane, sx + fw, sx + fw + W() * 0.01, 3);
+    g.strokeStyle = C.danger; g.lineWidth = Math.max(2.5, H() * 0.004); g.shadowColor = C.danger; g.shadowBlur = H() * 0.012; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(lipL[0].x, lipL[0].y); for (let i = 1; i < lipL.length; i++) g.lineTo(lipL[i].x, lipL[i].y); g.stroke();
+    g.beginPath(); g.moveTo(lipR[0].x, lipR[0].y); for (let i = 1; i < lipR.length; i++) g.lineTo(lipR[i].x, lipR[i].y); g.stroke(); g.shadowBlur = 0;
+    for (const [x, y] of [[sx, yL], [sx + fw, yR]]) { const bar = g.createLinearGradient(0, y, 0, y + BODY * 0.18); bar.addColorStop(0, 'rgba(255,84,112,0.5)'); bar.addColorStop(1, 'rgba(255,84,112,0)'); g.fillStyle = bar; g.fillRect(x - 1, y, 2, BODY * 0.18); }
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  // ---- item: a hovering gold badge with a spinning power ring ----
+  function featItem(f, sx) {
+    const g = ctx, fw = f.w, mx = sx + fw / 2, gy = laneScreenY(f.lane, mx), bob = Math.sin(now() / 240 + f.worldX) * BODY * 0.06, oy = gy - BODY * 0.95 + bob, R = BODY * 0.26, tint = ITEM_TINT[f.item] || '#ffd76b';
+    g.strokeStyle = 'rgba(255,215,107,0.25)'; g.lineWidth = Math.max(1, H() * 0.0015); g.setLineDash([H() * 0.006, H() * 0.006]);
+    g.beginPath(); g.moveTo(mx, oy + R); g.lineTo(mx, gy); g.stroke(); g.setLineDash([]);
+    g.fillStyle = 'rgba(255,215,107,0.16)'; g.beginPath(); g.ellipse(mx, gy, R * 0.8, BODY * 0.05, 0, 0, 6.2832); g.fill();
+    g.globalCompositeOperation = 'lighter';
+    const au = g.createRadialGradient(mx, oy, 1, mx, oy, R * 2.2); au.addColorStop(0, ITEM_HALO[f.item] || 'rgba(255,215,107,0.4)'); au.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = au; g.fillRect(mx - R * 2.2, oy - R * 2.2, R * 4.4, R * 4.4); g.globalCompositeOperation = 'source-over';
+    g.strokeStyle = tint; g.lineWidth = Math.max(2, H() * 0.0035); g.shadowColor = tint; g.shadowBlur = H() * 0.012;
+    g.setLineDash([R * 0.7, R * 0.5]); g.lineDashOffset = -now() / 120; g.beginPath(); g.arc(mx, oy, R * 1.15, 0, 6.2832); g.stroke(); g.setLineDash([]); g.lineDashOffset = 0; g.shadowBlur = 0;
+    g.fillStyle = 'rgba(20,12,30,0.85)'; g.beginPath(); g.arc(mx, oy, R, 0, 6.2832); g.fill(); g.strokeStyle = tint; g.lineWidth = Math.max(1.5, H() * 0.0025); g.stroke();
+    g.fillStyle = tint; g.font = `700 ${R * 1.05}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ITEM_GLYPH[f.item] || '?', mx, oy + 1);
+  }
+
+  // ---- mine: a spiky proximity mine sitting on the lane ----
+  function featMine(m, sx) {
+    const g = ctx, baseY = laneScreenY(m.lane, sx), ang = Math.atan2(laneSlope(m.lane, sx), 1), R = BODY * 0.1;
+    g.fillStyle = 'rgba(255,84,112,0.2)'; g.beginPath(); g.ellipse(sx, baseY, R * 1.3, BODY * 0.03, 0, 0, 6.2832); g.fill();
+    g.save(); g.translate(sx, baseY); g.rotate(ang); g.translate(0, -R * 0.9);
+    g.strokeStyle = '#b03048'; g.lineWidth = Math.max(1.5, H() * 0.0022); g.lineCap = 'round';
+    g.beginPath(); for (let k = 0; k < 8; k++) { const a = k / 8 * 6.2832, len = R * (a > Math.PI ? 0.8 : 1.4); g.moveTo(Math.cos(a) * R * 0.6, Math.sin(a) * R * 0.6); g.lineTo(Math.cos(a) * (R * 0.6 + len), Math.sin(a) * (R * 0.6 + len)); } g.stroke();
+    const bg = g.createRadialGradient(-R * 0.3, -R * 0.3, 1, 0, 0, R); bg.addColorStop(0, '#ff5470'); bg.addColorStop(1, '#7a1020'); g.fillStyle = bg; g.beginPath(); g.arc(0, 0, R, 0, 6.2832); g.fill();
+    const blink = 0.4 + 0.6 * Math.abs(Math.sin(now() / 150 + m.worldX)); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,84,112,${blink})`;
+    if (blink > 0.7) { g.shadowColor = C.danger; g.shadowBlur = H() * 0.01; } g.beginPath(); g.arc(0, 0, R * 0.35, 0, 6.2832); g.fill(); g.shadowBlur = 0;
+    g.globalCompositeOperation = 'source-over'; g.restore();
   }
 
   // Ninja-run stick figure — reusable for both the live racers and the

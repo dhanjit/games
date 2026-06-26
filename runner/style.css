@@ -282,7 +282,7 @@ html, body {
 .char-select::-webkit-scrollbar { height: 6px; }
 .char-select::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 .char-chip {
-  flex: 0 0 auto; width: 92px; scroll-snap-align: center;
+  flex: 0 0 auto; width: 100px; scroll-snap-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 8px 6px 10px; border-radius: 14px; cursor: pointer; font: inherit; color: var(--ink);
   background: rgba(21, 13, 36, 0.5); border: 1.5px solid var(--line);
@@ -292,9 +292,9 @@ html, body {
 .char-chip:hover { transform: translateY(-2px); }
 .char-chip.selected {
   border-color: var(--c); background: rgba(21, 13, 36, 0.9);
-  box-shadow: 0 0 0 1px var(--c), 0 0 22px -6px var(--c);
+  box-shadow: 0 0 0 1px var(--c), 0 0 24px -5px var(--c);
 }
-.char-fig { width: 54px; height: 59px; }
+.char-fig { width: 66px; height: 72px; }
 .char-name { font-weight: 800; font-size: 13px; letter-spacing: 0.04em; color: var(--c); }
 .char-stats { display: grid; gap: 2px; width: 100%; }
 .srow { display: flex; align-items: center; gap: 3px; font-size: 9px; color: var(--muted); }
