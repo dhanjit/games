@@ -68,6 +68,14 @@
         <div class="choice right" id="choiceRight">→</div>
       </div>
       <div id="hint" class="hint">swipe</div>
+      <!-- Consequence beat: animated "what happened" after a swipe. Decorative (aria-hidden);
+           #statAnnounce remains the single screen-reader source. Auto-advances; tap to skip. -->
+      <div id="beat" class="beat hidden" aria-hidden="true">
+        <div class="beat-inner">
+          <p class="beat-text" id="beatText"></p>
+          <div class="beat-deltas" id="beatDeltas"></div>
+        </div>
+      </div>
     </main>
 
     <!-- Title / start screen -->
@@ -125,11 +133,23 @@
       </div>
     </section>
 
+    <!-- First-run coachmark tutorial. Spotlights the real board; its own dialog/live captions. -->
+    <section id="tutorial" class="tutorial hidden" role="dialog" aria-modal="true"
+             aria-labelledby="tutCaption" tabindex="-1">
+      <div class="tut-scrim" id="tutScrim"></div>
+      <div class="tut-hole" id="tutHole" aria-hidden="true"></div>
+      <div class="tut-caption" id="tutCaption" tabindex="-1"></div>
+      <button class="tut-skip" id="tutSkip">Skip</button>
+      <div class="tut-hint" id="tutHint" aria-hidden="true"></div>
+    </section>
+
     <!-- Toast -->
     <div id="toast" class="toast hidden"></div>
   </div>
 
   <script src="cards.js"></script>
+  <script src="beat.js"></script>
+  <script src="audio.js"></script>
   <script src="game.js"></script>
   <!-- Register the offline service worker. Kept after the game scripts so it never
        blocks first paint; scope './' covers the whole /saptaloka/ app. -->

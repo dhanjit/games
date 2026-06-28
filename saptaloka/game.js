@@ -14,13 +14,21 @@
     bestRealm: 0,
     runs: 0,
     moksha: 0,
+    tutorialSeen: false,      // first-run coachmark tutorial shown?
+    audio: { enabled: true, volume: 0.6 },  // global sound pref (NOT per-run)
   });
 
   function loadMeta() {
     try {
       const raw = localStorage.getItem(META_KEY);
       if (!raw) return defaultMeta();
-      return Object.assign(defaultMeta(), JSON.parse(raw));
+      const m = Object.assign(defaultMeta(), JSON.parse(raw));
+      // Existing players (have run history) are treated as already onboarded.
+      // Only applies to saves predating tutorialSeen (where JSON had no such key).
+      if (!('tutorialSeen' in JSON.parse(raw))) m.tutorialSeen = (m.runs || 0) > 0;
+      // `audio` may be a partial/old object; ensure both keys exist.
+      m.audio = Object.assign({ enabled: true, volume: 0.6 }, m.audio || {});
+      return m;
     } catch (e) { return defaultMeta(); }
   }
   function saveMeta() {
@@ -107,6 +115,15 @@
   const csRoman      = $('csRoman');
   const csMeaning    = $('csMeaning');
   const csNarration  = $('csNarration');
+  const beatEl       = $('beat');
+  const beatText     = $('beatText');
+  const beatDeltas   = $('beatDeltas');
+  const tutorial     = $('tutorial');
+  const tutScrim     = $('tutScrim');
+  const tutHole      = $('tutHole');
+  const tutCaption   = $('tutCaption');
+  const tutSkip      = $('tutSkip');
+  const tutHint      = $('tutHint');
 
   // ---------- Game state ----------
 
@@ -127,6 +144,9 @@
     flags: new Set(),      // within-run karmic memory: deeds done, NPCs met
     karmaQueue: [],         // scheduled payoffs: { card, atRealm } — deeds that ripen later
     cutscenePaused: false,
+    beatPaused: false,      // consequence beat is showing (gates new swipes; distinct from cutscenePaused)
+    beatTimer: null,        // auto-advance setTimeout id for the beat
+    forceTutorial: false,   // transient: replay the tutorial for one run without clearing meta.tutorialSeen
     temperanceFactor: 1,   // <1 softens approach to the tejas/karma/bhakti caps (Equanimity upgrade)
     pranaDrainFactor: 1,   // <1 reduces prāṇa drains (Pilgrim's Stamina upgrade)
   };
@@ -976,7 +996,8 @@
   let lastTap = 0;
   document.addEventListener('touchend', (e) => {
     const now = Date.now();
-    if (e.target.closest('.stat') || e.target.closest('#statInfo') || e.target.closest('#cutscene')) { lastTap = now; return; }
+    if (e.target.closest('.stat') || e.target.closest('#statInfo') || e.target.closest('#cutscene')
+        || e.target.closest('#beat') || e.target.closest('#tutorial')) { lastTap = now; return; }
     if (now - lastTap < 350) e.preventDefault();
     lastTap = now;
   }, { passive: false });
