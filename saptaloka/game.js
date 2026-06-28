@@ -525,6 +525,7 @@
     state.karmaQueue = [];
     applyStartingUpgrades();
     state.inRun = true;
+    hideBeat();
     titleScreen.classList.add('hidden');
     endScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
@@ -593,6 +594,78 @@
     cutscene.addEventListener('keydown', onKey);
   }
 
+  // ---------- Consequence beat ----------
+  // A short animated "what happened" shown after a normal (non-end, non-realm-complete)
+  // swipe. Auto-advances; an early tap/click/key skips it. Decorative (aria-hidden) —
+  // the #statAnnounce live region remains the single screen-reader source, written once
+  // in onDone. Under reduced motion the visual is skipped and onDone fires immediately.
+  function beatDuration() { return (meta.runs > 0) ? 650 : 1100; }
+
+  function hideBeat() {
+    if (state.beatTimer) { clearTimeout(state.beatTimer); state.beatTimer = null; }
+    state.beatPaused = false;
+    beatEl.classList.add('hidden');
+    beatEl.classList.remove('play');
+  }
+
+  function washColor(d, dom) {
+    if (!dom) return 'var(--bg-2)';
+    if (dom === 'prana' && d.prana < 0) return 'var(--crimson)';
+    return `var(--stat-${dom})`;
+  }
+
+  function showConsequenceBeat(choice, before, onDone) {
+    const d = deltasFrom(before);
+    let dom = null, domAbs = 0;
+    for (const s of ['karma', 'bhakti', 'tejas', 'prana']) {
+      const a = Math.abs(d[s]); if (a > domAbs) { domAbs = a; dom = s; }
+    }
+    const text = (window.SaptalokaBeat && window.SaptalokaBeat.outcomeText)
+      ? window.SaptalokaBeat.outcomeText(choice, d, state.currentCard)
+      : '';
+
+    // Skip the visual beat under reduced motion OR while the tutorial overlay is up
+    // (the tutorial's own spotlights explain the first swipe; a beat would sit behind it).
+    if (REDUCED_MOTION || (tutorial && !tutorial.classList.contains('hidden'))) {
+      Promise.resolve().then(onDone); return;
+    }
+
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
+      beatEl.removeEventListener('pointerdown', finish);
+      beatEl.removeEventListener('click', finish);
+      beatEl.removeEventListener('keydown', onKey);
+      hideBeat();
+      onDone();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); finish(); }
+    };
+
+    state.beatPaused = true;
+    closeStatInfo();
+    beatText.textContent = text;
+    beatDeltas.innerHTML = '';
+    for (const s of STATS) {
+      if (!d[s]) continue;
+      const chip = document.createElement('span');
+      chip.className = 'beat-delta ' + (d[s] > 0 ? 'up' : 'dn');
+      chip.textContent = `${STAT_INFO[s].glyph} ${d[s] > 0 ? '+' : ''}${d[s]}`;
+      beatDeltas.appendChild(chip);
+    }
+    beatEl.style.setProperty('--wash', washColor(d, dom));
+    beatEl.classList.remove('hidden', 'play');
+    void beatEl.offsetWidth;
+    beatEl.classList.add('play');
+    window.SaptalokaAudio?.play?.('beat');
+
+    beatEl.addEventListener('pointerdown', finish);
+    beatEl.addEventListener('click', finish);
+    beatEl.addEventListener('keydown', onKey);
+    state.beatTimer = setTimeout(finish, beatDuration());
+  }
+
   function commitChoice(side) {
     // Drop a stale fly-off commit queued during another commit's 260ms defer:
     // once the cutscene veil is up (or the run has ended) the card is gone.
@@ -645,8 +718,7 @@
     }
     renderHud();
     floatDeltas(before);
-    announceDeltas(before);
-    drawNextCard();
+    showConsequenceBeat(choice, before, () => { announceDeltas(before); drawNextCard(); });
   }
 
   // Pop the glyph (not the chip) on big hits — scaling the chip would also scale
@@ -687,14 +759,19 @@
   // Non-visual delta cue for screen-reader and reduced-motion players (the float
   // is motion-only). deltaText builds the string so the cutscene can fold it into
   // its own live-region message instead of clobbering it.
+  // Effective post-applyFx deltas as an object (used by the beat and by deltaText).
+  function deltasFrom(before) {
+    const d = {};
+    for (const s of STATS) d[s] = state[s] - (before ? before[s] : state[s]);
+    return d;
+  }
+
   function deltaText(before) {
     if (!before) return '';
     const names = { prana: 'Prāṇa', tejas: 'Tejas', karma: 'Karma', bhakti: 'Bhakti' };
+    const d = deltasFrom(before);
     const parts = [];
-    for (const s of STATS) {
-      const d = state[s] - before[s];
-      if (d) parts.push(`${names[s]} ${d > 0 ? '+' : ''}${d}`);
-    }
+    for (const s of STATS) { if (d[s]) parts.push(`${names[s]} ${d[s] > 0 ? '+' : ''}${d[s]}`); }
     return parts.join(', ');
   }
 
@@ -825,7 +902,7 @@
   let pointer = null;
 
   function onPointerDown(ev) {
-    if (!state.inRun || state.cutscenePaused) return;
+    if (!state.inRun || state.cutscenePaused || state.beatPaused) return;
     const p = pointFrom(ev);
     pointer = { x0: p.x, y0: p.y, x: p.x, y: p.y, t0: performance.now() };
     card.style.transition = '';
@@ -921,6 +998,7 @@
       if (confirm('Abandon this ascent? Your earned Puṇya is kept.')) {
         meta.punya = (meta.punya || 0) + state.runPunya;
         saveMeta();
+        hideBeat();
         state.inRun = false;
         showTitle();
       }
