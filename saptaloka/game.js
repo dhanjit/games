@@ -14,17 +14,32 @@
     bestRealm: 0,
     runs: 0,
     moksha: 0,
+    tutorialSeen: false,      // first-run coachmark tutorial shown?
+    audio: { enabled: true, volume: 0.6 },  // global sound pref (NOT per-run)
   });
 
   function loadMeta() {
     try {
       const raw = localStorage.getItem(META_KEY);
       if (!raw) return defaultMeta();
-      return Object.assign(defaultMeta(), JSON.parse(raw));
+      const m = Object.assign(defaultMeta(), JSON.parse(raw));
+      // Existing players (have run history) are treated as already onboarded.
+      // Only applies to saves predating tutorialSeen (where JSON had no such key).
+      if (!('tutorialSeen' in JSON.parse(raw))) m.tutorialSeen = (m.runs || 0) > 0;
+      // `audio` may be a partial/old object; ensure both keys exist.
+      m.audio = Object.assign({ enabled: true, volume: 0.6 }, m.audio || {});
+      return m;
     } catch (e) { return defaultMeta(); }
   }
   function saveMeta() {
-    try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
+    try {
+      // audio.js owns meta.audio — it read-modify-writes the live sound pref on toggle.
+      // game.js's save is a FULL overwrite, so re-read the stored audio first; otherwise a
+      // saveMeta (end of run, upgrade, etc.) would clobber a mute the player just set.
+      const stored = JSON.parse(localStorage.getItem(META_KEY) || '{}');
+      if (stored && stored.audio) meta.audio = stored.audio;
+      localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (e) {}
   }
 
   const UPGRADES = [
@@ -107,6 +122,17 @@
   const csRoman      = $('csRoman');
   const csMeaning    = $('csMeaning');
   const csNarration  = $('csNarration');
+  const beatEl       = $('beat');
+  const beatText     = $('beatText');
+  const beatDeltas   = $('beatDeltas');
+  const tutorial     = $('tutorial');
+  const tutScrim     = $('tutScrim');
+  const tutHole      = $('tutHole');
+  const tutCaption   = $('tutCaption');
+  const tutSkip      = $('tutSkip');
+  const tutHint      = $('tutHint');
+  const soundBtn      = $('soundBtn');
+  const soundBtnTitle = $('soundBtnTitle');
 
   // ---------- Game state ----------
 
@@ -127,6 +153,9 @@
     flags: new Set(),      // within-run karmic memory: deeds done, NPCs met
     karmaQueue: [],         // scheduled payoffs: { card, atRealm } — deeds that ripen later
     cutscenePaused: false,
+    beatPaused: false,      // consequence beat is showing (gates new swipes; distinct from cutscenePaused)
+    beatTimer: null,        // auto-advance setTimeout id for the beat
+    forceTutorial: false,   // transient: replay the tutorial for one run without clearing meta.tutorialSeen
     temperanceFactor: 1,   // <1 softens approach to the tejas/karma/bhakti caps (Equanimity upgrade)
     pranaDrainFactor: 1,   // <1 reduces prāṇa drains (Pilgrim's Stamina upgrade)
   };
@@ -214,6 +243,10 @@
 
   // ---------- UI rendering ----------
 
+  // Tracks each stat's prior danger state so the 'danger' cue fires once on the
+  // TRANSITION into ≤15/≥85, not on every subsequent render while still in range.
+  const prevDanger = { prana: false, tejas: false, karma: false, bhakti: false };
+
   function renderHud() {
     closeStatInfo();
     const r = REALMS[state.realmIdx];
@@ -232,7 +265,10 @@
       statVals[s].textContent = state[s];
       statEls[s].classList.remove('preview-up', 'preview-dn');
       statEls[s].removeAttribute('data-delta');
-      statEls[s].classList.toggle('danger', state[s] <= 15 || state[s] >= 85);
+      const isDanger = state[s] <= 15 || state[s] >= 85;
+      statEls[s].classList.toggle('danger', isDanger);
+      if (isDanger && !prevDanger[s]) window.SaptalokaAudio?.play?.('danger');
+      prevDanger[s] = isDanger;
     }
   }
 
@@ -244,7 +280,7 @@
     choiceLeft.textContent  = c.left?.label || '←';
     choiceRight.textContent = c.right?.label || '→';
     card.classList.remove('boss', 'god', 'karma', 'show-left', 'show-right');
-    if (c.tag === 'boss')  card.classList.add('boss');
+    if (c.tag === 'boss')  { card.classList.add('boss'); window.SaptalokaAudio?.play?.('boss'); }
     if (c.tag === 'god')   card.classList.add('god');
     if (c.tag === 'karma') card.classList.add('karma');
     card.style.transition = 'none';
@@ -403,7 +439,15 @@
         `<h3>Between Lives</h3>` +
         `<p>Death keeps the <b>Puṇya</b> you earned. Spend it in the <b>Mirror of Maya</b> on upgrades that carry into every future ascent.</p>` +
       `</section>` +
-      `<p class="rule-hint">Tip: ${STAT_HOVER ? 'hover' : 'tap'} any virtue in the top bar to recall what it does.</p>`;
+      `<p class="rule-hint">Tip: ${STAT_HOVER ? 'hover' : 'tap'} any virtue in the top bar to recall what it does.</p>` +
+      `<p class="rule-replay"><button type="button" id="replayTut" class="linklike">Replay the tutorial</button></p>`;
+    const rt = document.getElementById('replayTut');
+    if (rt) rt.addEventListener('click', () => {
+      state.forceTutorial = true;
+      hideRules();
+      if (!state.inRun) startRun();
+      else showToast('Tutorial will replay on your next ascent.');
+    });
   }
 
   // ---------- Stat preview & application ----------
@@ -495,7 +539,9 @@
   // ---------- Run flow ----------
 
   function startRun() {
+    window.SaptalokaAudio?.unlock?.();
     state.prana = 50; state.tejas = 50; state.karma = 50; state.bhakti = 50;
+    for (const s of STATS) prevDanger[s] = false;  // explicit: no stale danger-cue state across runs
     state.realmIdx = 0; state.realmStep = 0;
     state.recentIds = [];
     state.runEncounters = 0;
@@ -505,13 +551,21 @@
     state.karmaQueue = [];
     applyStartingUpgrades();
     state.inRun = true;
+    hideBeat();
     titleScreen.classList.add('hidden');
     endScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
     rulesScreen.classList.add('hidden');
     renderHud();
     // Opening cutscene; the first card is drawn when the player taps through.
-    playCutscene(0, () => { drawNextCard(); });
+    // First-run (or forced replay): draw the live first card, THEN overlay the tutorial
+    // so its gesture step has a real, swipeable card. forceTutorial is one-shot.
+    const runTutorial = !meta.tutorialSeen || state.forceTutorial;
+    state.forceTutorial = false;
+    playCutscene(0, () => {
+      drawNextCard();
+      if (runTutorial) startTutorial(() => {});   // tutorial overlays the live first card
+    });
   }
 
   function drawNextCard() {
@@ -556,6 +610,7 @@
         `${lead}Entering ${realm.name}, ${realm.subtitle}. ${cs.narration || ''} Tap to continue.`;
     }
     cutscene.classList.remove('hidden', 'play');
+    window.SaptalokaAudio?.play?.('ascend', { realm: realmIdx });
     if (!REDUCED_MOTION) { void cutscene.offsetWidth; cutscene.classList.add('play'); }
     cutscene.focus();
     const dismiss = () => {
@@ -573,6 +628,197 @@
     cutscene.addEventListener('keydown', onKey);
   }
 
+  // ---------- Consequence beat ----------
+  // A short animated "what happened" shown after a normal (non-end, non-realm-complete)
+  // swipe. Auto-advances; an early tap/click/key skips it. Decorative (aria-hidden) —
+  // the #statAnnounce live region remains the single screen-reader source, written once
+  // in onDone. Under reduced motion the visual is skipped and onDone fires immediately.
+  // Auto-advance is a *fallback* for when the player doesn't tap — so it must be long
+  // enough to actually READ the line (the point of the beat), scaled to its length.
+  // Tapping always skips immediately, so fast/veteran players never wait this out.
+  function beatDuration(text) {
+    const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
+    let ms = 700 + words * 200;                 // register the panel + read the words
+    ms = Math.max(1500, Math.min(5500, ms));    // readable floor / sane cap
+    if (meta.runs > 0) ms = Math.max(1100, Math.round(ms * 0.7)); // veterans: a touch quicker
+    return ms;
+  }
+
+  function hideBeat() {
+    if (state.beatTimer) { clearTimeout(state.beatTimer); state.beatTimer = null; }
+    state.beatPaused = false;
+    beatEl.classList.add('hidden');
+    beatEl.classList.remove('play');
+  }
+
+  function washColor(d, dom) {
+    if (!dom) return 'var(--bg-2)';
+    if (dom === 'prana' && d.prana < 0) return 'var(--crimson)';
+    return `var(--stat-${dom})`;
+  }
+
+  function showConsequenceBeat(choice, before, onDone) {
+    const d = deltasFrom(before);
+    let dom = null, domAbs = 0;
+    for (const s of ['karma', 'bhakti', 'tejas', 'prana']) {
+      const a = Math.abs(d[s]); if (a > domAbs) { domAbs = a; dom = s; }
+    }
+    const text = (window.SaptalokaBeat && window.SaptalokaBeat.outcomeText)
+      ? window.SaptalokaBeat.outcomeText(choice, d, state.currentCard)
+      : '';
+
+    // Skip the visual beat under reduced motion OR while the tutorial overlay is up
+    // (the tutorial's own spotlights explain the first swipe; a beat would sit behind it).
+    if (REDUCED_MOTION || (tutorial && !tutorial.classList.contains('hidden'))) {
+      Promise.resolve().then(onDone); return;
+    }
+
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
+      beatEl.removeEventListener('pointerdown', finish);
+      beatEl.removeEventListener('click', finish);
+      window.removeEventListener('keydown', onKey);
+      hideBeat();
+      onDone();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); finish(); }
+    };
+
+    state.beatPaused = true;
+    closeStatInfo();
+    beatText.textContent = text;
+    beatDeltas.innerHTML = '';
+    for (const s of STATS) {
+      if (!d[s]) continue;
+      const chip = document.createElement('span');
+      chip.className = 'beat-delta ' + (d[s] > 0 ? 'up' : 'dn');
+      chip.textContent = `${STAT_INFO[s].glyph} ${d[s] > 0 ? '+' : ''}${d[s]}`;
+      beatDeltas.appendChild(chip);
+    }
+    beatEl.style.setProperty('--wash', washColor(d, dom));
+    beatEl.classList.remove('hidden', 'play');
+    void beatEl.offsetWidth;
+    beatEl.classList.add('play');
+    window.SaptalokaAudio?.play?.('beat');
+
+    beatEl.addEventListener('pointerdown', finish);
+    beatEl.addEventListener('click', finish);
+    // #beat is aria-hidden (decorative), so it can't take focus — listen on window
+    // so a keyboard user can still early-skip without focusing a hidden element.
+    window.addEventListener('keydown', onKey);
+    state.beatTimer = setTimeout(finish, beatDuration(text));
+  }
+
+  // ---------- First-run coachmark tutorial ----------
+  // Teaches the swipe + the 4 virtues against the REAL board. Step 2 is gesture-gated:
+  // the player's real swipe is also their first choice. Copy for the stat steps is pulled
+  // verbatim from STAT_INFO (one source of truth). Its own dialog captions voice for SR;
+  // #statAnnounce is left for deltas.
+  let tutOnComplete = null, tutIdx = 0, tutSteps = [], tutGestureTimer = null;
+
+  function buildTutSteps() {
+    const statStep = (s) => ({
+      anchor: () => statEls[s],
+      text: `${STAT_INFO[s].glyph} ${STAT_INFO[s].title} — ${STAT_INFO[s].oneLiner}`,
+      cue: () => window.SaptalokaAudio?.play?.('tutorialStat', { stat: s }),
+    });
+    return [
+      { anchor: null, text: 'You are a soul at the foot of the worlds. Climb the seven realms — Bhūloka to Satyaloka — and break the wheel of saṃsāra to win mokṣa.' },
+      { anchor: () => card, text: 'Each encounter is a choice. Swipe or drag the card left or right — the labels show what each side does. Try it now.', gesture: true },
+      { anchor: () => statsEl, text: 'These four virtues are your life. Every choice shifts them — let any one reach its fatal edge and the run ends. Here is what each means.' },
+      statStep('prana'), statStep('tejas'), statStep('karma'), statStep('bhakti'),
+      { anchor: () => realmProg, text: 'Each realm ends in a boss. Climb all seven to reach Satyaloka. Tip: tap any virtue any time to recall what it does.' },
+    ];
+  }
+
+  function spotlight(el) {
+    if (!el) { tutHole.style.display = 'none'; return; }
+    const r = el.getBoundingClientRect();
+    const pad = 8;
+    tutHole.style.display = 'block';
+    tutHole.style.left = (r.left - pad) + 'px';
+    tutHole.style.top = (r.top - pad) + 'px';
+    tutHole.style.width = (r.width + pad * 2) + 'px';
+    tutHole.style.height = (r.height + pad * 2) + 'px';
+  }
+
+  function renderTutStep() {
+    clearTimeout(tutGestureTimer);
+    const step = tutSteps[tutIdx];
+    spotlight(step.anchor ? step.anchor() : null);
+    tutCaption.textContent = step.text;
+    tutorial.classList.toggle('gesture', !!step.gesture);
+    if (step.gesture) {
+      // Gesture step: advance by swiping the real card (Skip hidden so it doesn't read as
+      // "skip the swipe"). But never strand a confused first-time touch player — if they
+      // don't discover the drag within a few seconds, reveal Skip as an escape.
+      tutHint.textContent = 'swipe the card';
+      tutSkip.style.display = 'none';
+      tutGestureTimer = setTimeout(() => {
+        tutSkip.style.display = 'block';
+        tutHint.textContent = 'swipe the card — or tap Skip';
+      }, 6000);
+    } else {
+      tutHint.textContent = 'tap to continue';
+      tutSkip.style.display = 'block';
+    }
+    if (step.cue) step.cue(); else window.SaptalokaAudio?.play?.('tutorialStep');
+    tutCaption.focus();
+  }
+
+  function tutAdvance() {
+    if (tutIdx >= tutSteps.length - 1) return endTutorial();
+    tutIdx++;
+    renderTutStep();
+  }
+
+  function startTutorial(onComplete) {
+    tutOnComplete = onComplete;
+    tutSteps = buildTutSteps();
+    tutIdx = 0;
+    closeStatInfo();
+    tutorial.classList.remove('hidden');
+    renderTutStep();
+  }
+
+  // The gesture step's real swipe calls this (from commitChoice) instead of tap-advance.
+  function tutNotifySwipe() {
+    if (tutorial.classList.contains('hidden')) return false;
+    if (!tutSteps[tutIdx] || !tutSteps[tutIdx].gesture) return false;
+    tutAdvance();
+    return true;
+  }
+
+  // Visual teardown only (no persistence) — safe to call from any exit path, incl. abandon.
+  function hideTutorial() {
+    clearTimeout(tutGestureTimer);
+    tutorial.classList.add('hidden');
+    tutorial.classList.remove('gesture');
+  }
+
+  function endTutorial() {
+    hideTutorial();
+    meta.tutorialSeen = true; saveMeta();   // completing OR skipping marks it seen
+    const cb = tutOnComplete; tutOnComplete = null;
+    if (cb) cb();
+  }
+
+  // Tap / keyboard advance — but NOT on the gesture step (there the card swipe advances).
+  tutorial.addEventListener('click', (e) => {
+    if (e.target === tutSkip) return;             // handled below
+    const step = tutSteps[tutIdx];
+    if (step && step.gesture) return;             // let the swipe through to #card
+    tutAdvance();
+  });
+  tutorial.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); endTutorial(); return; }
+    const step = tutSteps[tutIdx];
+    if ((e.key === 'Enter' || e.key === ' ') && !(step && step.gesture)) { e.preventDefault(); tutAdvance(); }
+  });
+  tutSkip.addEventListener('click', (e) => { e.stopPropagation(); endTutorial(); });
+
   function commitChoice(side) {
     // Drop a stale fly-off commit queued during another commit's 260ms defer:
     // once the cutscene veil is up (or the run has ended) the card is gone.
@@ -581,6 +827,9 @@
     const fx = fxFor(choice);
     const before = { prana: state.prana, tejas: state.tejas, karma: state.karma, bhakti: state.bhakti };
     applyFx(fx);
+    // First real swipe is also the tutorial's gesture step: commit AND advance off it.
+    // No-op on non-gesture steps (the scrim blocks input, so a swipe can't reach here).
+    if (!tutorial.classList.contains('hidden')) tutNotifySwipe();
     state.runEncounters++;
 
     // Karma: record the deed, schedule its ripening, and queue any immediate chain.
@@ -594,9 +843,12 @@
     // Punya gain
     state.runPunya += 1 + state.graceBonus;
 
-    // Cheap visual feedback for big effects
+    // Cheap visual + audio feedback for effective (post-applyFx) changes.
+    const dlt = deltasFrom(before);
     for (const s of STATS) {
-      if (Math.abs(fx[s] || 0) >= 10) flashStat(s, (fx[s] > 0 ? 'up' : 'dn'));
+      if (!dlt[s]) continue;
+      if (Math.abs(dlt[s]) >= 10) { flashStat(s, dlt[s] > 0 ? 'up' : 'dn'); window.SaptalokaAudio?.play?.('bigHit'); }
+      window.SaptalokaAudio?.play?.(dlt[s] > 0 ? 'statGain' : 'statLoss', { stat: s });
     }
 
     const realm = REALMS[state.realmIdx];
@@ -625,8 +877,7 @@
     }
     renderHud();
     floatDeltas(before);
-    announceDeltas(before);
-    drawNextCard();
+    showConsequenceBeat(choice, before, () => { announceDeltas(before); drawNextCard(); });
   }
 
   // Pop the glyph (not the chip) on big hits — scaling the chip would also scale
@@ -667,14 +918,19 @@
   // Non-visual delta cue for screen-reader and reduced-motion players (the float
   // is motion-only). deltaText builds the string so the cutscene can fold it into
   // its own live-region message instead of clobbering it.
+  // Effective post-applyFx deltas as an object (used by the beat and by deltaText).
+  function deltasFrom(before) {
+    const d = {};
+    for (const s of STATS) d[s] = state[s] - (before ? before[s] : state[s]);
+    return d;
+  }
+
   function deltaText(before) {
     if (!before) return '';
     const names = { prana: 'Prāṇa', tejas: 'Tejas', karma: 'Karma', bhakti: 'Bhakti' };
+    const d = deltasFrom(before);
     const parts = [];
-    for (const s of STATS) {
-      const d = state[s] - before[s];
-      if (d) parts.push(`${names[s]} ${d > 0 ? '+' : ''}${d}`);
-    }
+    for (const s of STATS) { if (d[s]) parts.push(`${names[s]} ${d[s] > 0 ? '+' : ''}${d[s]}`); }
     return parts.join(', ');
   }
 
@@ -687,6 +943,9 @@
 
   function endRun(endKey) {
     const e = ENDINGS[endKey] || ENDINGS.death_prana;
+    // Distinct cue per ending kind: the OM resolve for a true win, a hollow unresolved
+    // chord for a false summit (Svarga/Deva — a false heaven, not a death), else the death drone.
+    window.SaptalokaAudio?.play?.(e.kind === 'win' ? 'win' : (e.kind === 'falsesummit' ? 'falsesummit' : 'death'));
     lastEndKind = e.kind;
     closeStatInfo();
     state.inRun = false;
@@ -762,6 +1021,7 @@
     meta.punya -= cost;
     meta.levels[u.id] = upgradeLevel(u.id) + 1;
     saveMeta();
+    window.SaptalokaAudio?.play?.('upgrade');
     renderMirror();
     showToast(`${u.name} → Lv ${meta.levels[u.id]}`);
   }
@@ -803,11 +1063,13 @@
   // ---------- Swipe gesture ----------
 
   let pointer = null;
+  let draggedCue = false;   // debounce: one 'drag' pluck per drag, not per pointermove
 
   function onPointerDown(ev) {
-    if (!state.inRun || state.cutscenePaused) return;
+    if (!state.inRun || state.cutscenePaused || state.beatPaused) return;
     const p = pointFrom(ev);
     pointer = { x0: p.x, y0: p.y, x: p.x, y: p.y, t0: performance.now() };
+    draggedCue = false;
     card.style.transition = '';
     ev.preventDefault?.();
   }
@@ -822,6 +1084,7 @@
     card.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
     const cw = card.offsetWidth;
     const t = Math.max(-1, Math.min(1, dx / (cw * 0.4)));
+    if (Math.abs(t) > 0.15 && !draggedCue) { draggedCue = true; window.SaptalokaAudio?.play?.('drag'); }
     card.classList.toggle('show-left',  t < -0.15);
     card.classList.toggle('show-right', t > 0.15);
     if (t < -0.15) showPreview('left');
@@ -856,6 +1119,7 @@
   }
 
   function flyOff(side) {
+    window.SaptalokaAudio?.play?.('commit');
     const dir = side === 'left' ? -1 : 1;
     const vw = window.innerWidth;
     card.style.transition = 'transform 0.32s ease-out, opacity 0.32s ease-out';
@@ -901,6 +1165,7 @@
       if (confirm('Abandon this ascent? Your earned Puṇya is kept.')) {
         meta.punya = (meta.punya || 0) + state.runPunya;
         saveMeta();
+        hideBeat();
         state.inRun = false;
         showTitle();
       }
@@ -976,21 +1241,41 @@
   let lastTap = 0;
   document.addEventListener('touchend', (e) => {
     const now = Date.now();
-    if (e.target.closest('.stat') || e.target.closest('#statInfo') || e.target.closest('#cutscene')) { lastTap = now; return; }
+    if (e.target.closest('.stat') || e.target.closest('#statInfo') || e.target.closest('#cutscene')
+        || e.target.closest('#beat') || e.target.closest('#tutorial')) { lastTap = now; return; }
     if (now - lastTap < 350) e.preventDefault();
     lastTap = now;
   }, { passive: false });
+
+  // ---------- Sound toggle ----------
+  // A HUD glyph and a title-screen label, both driving the same SaptalokaAudio
+  // mute pref; renderSound keeps both in sync. All calls are optional-chained so a
+  // missing/failed audio.js can't break the game.
+  function renderSound() {
+    const on = window.SaptalokaAudio?.isEnabled?.() ?? false;
+    if (soundBtn) { soundBtn.textContent = on ? '♪' : '♪̸'; soundBtn.setAttribute('aria-pressed', String(on)); }
+    if (soundBtnTitle) soundBtnTitle.textContent = on ? 'Sound: On' : 'Sound: Off';
+  }
+  function toggleSound() {
+    const on = window.SaptalokaAudio?.toggle?.() ?? false;
+    if (on) window.SaptalokaAudio?.play?.('button');
+    renderSound();
+  }
+  soundBtn?.addEventListener('click', toggleSound);
+  soundBtnTitle?.addEventListener('click', toggleSound);
 
   // ---------- Boot ----------
 
   function showTitle() {
     closeStatInfo();
+    hideTutorial();   // abandoning mid-tutorial returns here — tear the overlay down (no persist)
     endScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
     rulesScreen.classList.add('hidden');
     titleScreen.classList.remove('hidden');
     renderMetaSummary();
     renderGoal();
+    renderSound();
   }
 
   showTitle();

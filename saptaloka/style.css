@@ -852,3 +852,82 @@ button.ghost:active { background: rgba(255,255,255,0.08); }
   transition: opacity 0.25s, transform 0.25s;
 }
 .toast.hidden { opacity: 0; transform: translate(-50%, 12px); }
+
+/* ---------- Consequence beat ---------- */
+.beat {
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  z-index: 8;                 /* above .card (~7), below #statInfo (10) and #cutscene */
+  pointer-events: auto;
+}
+.beat.hidden { display: none; }
+.beat-inner {
+  /* --wash is set inline by JS on #beat (the parent) per dominant stat; inherited here.
+     Do NOT redeclare --wash on this element — that would shadow the inherited value.
+     The fallback keeps a sane tint if JS hasn't set it. */
+  max-width: 84%;
+  background: color-mix(in srgb, var(--wash, var(--bg-2)) 24%, rgba(8, 4, 14, 0.92));
+  border: 1px solid color-mix(in srgb, var(--wash, var(--bg-2)) 55%, var(--bg-2));
+  border-radius: 14px;
+  padding: 16px 18px;
+  text-align: center;
+}
+.beat-text {
+  margin: 0;
+  color: var(--ink);
+  font-style: italic;
+  line-height: 1.5;
+  font-size: 16px;
+}
+.beat-deltas { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
+.beat-delta {
+  font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+  border: 1px solid currentColor;
+}
+.beat-delta.up { color: var(--emerald); }
+.beat-delta.dn { color: var(--crimson); }
+
+/* Staged entrance, gated behind .play (matching the .cutscene pattern). */
+.beat .beat-inner { opacity: 0; }
+.beat.play .beat-inner   { animation: beatIn 0.42s cubic-bezier(.2,.8,.3,1) forwards; }
+.beat.play .beat-text    { animation: beatRise 0.5s ease-out 0.06s forwards; opacity: 0; }
+.beat.play .beat-deltas  { animation: beatRise 0.5s ease-out 0.22s forwards; opacity: 0; }
+@keyframes beatIn   { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes beatRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .beat.play .beat-inner, .beat.play .beat-text, .beat.play .beat-deltas { animation: none; opacity: 1; }
+}
+
+/* ---------- First-run tutorial ---------- */
+.tutorial { position: absolute; inset: 0; z-index: 9; }
+.tutorial.hidden { display: none; }
+.tut-scrim { position: absolute; inset: 0; background: rgba(8, 4, 14, 0.72); }
+.tutorial.gesture { pointer-events: none; }            /* let the real swipe reach #card */
+.tutorial.gesture .tut-scrim { background: rgba(8, 4, 14, 0.45); }
+/* The gesture-step fallback Skip (revealed after a few seconds) must stay tappable even
+   though the overlay is pointer-events:none — it sits top-right, clear of the card. */
+.tutorial.gesture .tut-skip { pointer-events: auto; }
+.tut-hole {
+  position: absolute; border-radius: 12px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(8, 4, 14, 0.72), 0 0 18px 4px var(--gold);
+  border: 2px solid var(--gold); transition: all 0.25s ease;
+}
+.tutorial.gesture .tut-hole { box-shadow: 0 0 22px 6px var(--gold); }
+.tut-caption {
+  position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%);
+  max-width: 80%; background: var(--bg-1); border: 1px solid var(--gold-deep);
+  border-radius: 12px; padding: 14px 16px; color: var(--ink); font-size: 16px;
+  line-height: 1.5; text-align: center; outline: none;
+}
+.tut-hint { position: absolute; left: 50%; bottom: 11%; transform: translateX(-50%);
+  color: var(--gold); font-size: 13px; opacity: 0.8; letter-spacing: 0.08em; }
+.tut-skip { position: absolute; top: calc(env(safe-area-inset-top, 0) + 12px); right: 14px;
+  background: transparent; border: 1px solid var(--ink-dim); color: var(--ink-dim);
+  border-radius: 16px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  .tut-hole { transition: none; box-shadow: 0 0 0 9999px rgba(8,4,14,0.72), 0 0 0 2px var(--gold); }
+}
+.linklike { background: none; border: none; color: var(--gold); text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }

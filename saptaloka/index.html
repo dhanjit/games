@@ -55,6 +55,7 @@
       <div id="statInfo" class="stat-info" role="tooltip" aria-hidden="true"></div>
       <!-- Polite live region: voices each commit's stat deltas for screen-reader / reduced-motion players. -->
       <div id="statAnnounce" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+      <button id="soundBtn" class="icon-btn" aria-label="Sound on/off" aria-pressed="true">♪</button>
       <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
     </header>
 
@@ -68,6 +69,14 @@
         <div class="choice right" id="choiceRight">→</div>
       </div>
       <div id="hint" class="hint">swipe</div>
+      <!-- Consequence beat: animated "what happened" after a swipe. Decorative (aria-hidden);
+           #statAnnounce remains the single screen-reader source. Auto-advances; tap to skip. -->
+      <div id="beat" class="beat hidden" aria-hidden="true">
+        <div class="beat-inner">
+          <p class="beat-text" id="beatText"></p>
+          <div class="beat-deltas" id="beatDeltas"></div>
+        </div>
+      </div>
     </main>
 
     <!-- Title / start screen -->
@@ -80,6 +89,7 @@
       <button class="primary" id="startBtn">Begin Ascent</button>
       <button class="ghost" id="mirrorBtn">Mirror of Maya</button>
       <button class="ghost" id="rulesBtn">How to Play</button>
+      <button class="ghost" id="soundBtnTitle">Sound: On</button>
       <p class="footnote">Swipe left or right on each encounter. Keep all four virtues between 0 and 100.</p>
       <p class="footnote"><a href="privacy.html">Privacy Policy</a></p>
     </section>
@@ -125,11 +135,23 @@
       </div>
     </section>
 
+    <!-- First-run coachmark tutorial. Spotlights the real board; its own dialog/live captions. -->
+    <section id="tutorial" class="tutorial hidden" role="dialog" aria-modal="true"
+             aria-labelledby="tutCaption" tabindex="-1">
+      <div class="tut-scrim" id="tutScrim"></div>
+      <div class="tut-hole" id="tutHole" aria-hidden="true"></div>
+      <div class="tut-caption" id="tutCaption" tabindex="-1"></div>
+      <button class="tut-skip" id="tutSkip">Skip</button>
+      <div class="tut-hint" id="tutHint" aria-hidden="true"></div>
+    </section>
+
     <!-- Toast -->
     <div id="toast" class="toast hidden"></div>
   </div>
 
   <script src="cards.js"></script>
+  <script src="beat.js"></script>
+  <script src="audio.js"></script>
   <script src="game.js"></script>
   <!-- Register the offline service worker. Kept after the game scripts so it never
        blocks first paint; scope './' covers the whole /saptaloka/ app. -->
