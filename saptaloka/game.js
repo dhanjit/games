@@ -709,7 +709,7 @@
   // the player's real swipe is also their first choice. Copy for the stat steps is pulled
   // verbatim from STAT_INFO (one source of truth). Its own dialog captions voice for SR;
   // #statAnnounce is left for deltas.
-  let tutOnComplete = null, tutIdx = 0, tutSteps = [];
+  let tutOnComplete = null, tutIdx = 0, tutSteps = [], tutGestureTimer = null;
 
   function buildTutSteps() {
     const statStep = (s) => ({
@@ -738,18 +738,31 @@
   }
 
   function renderTutStep() {
+    clearTimeout(tutGestureTimer);
     const step = tutSteps[tutIdx];
     spotlight(step.anchor ? step.anchor() : null);
     tutCaption.textContent = step.text;
-    tutHint.textContent = step.gesture ? 'swipe the card' : 'tap to continue';
-    tutSkip.style.display = (tutIdx === 1) ? 'none' : 'block';  // don't cover the gesture step
     tutorial.classList.toggle('gesture', !!step.gesture);
+    if (step.gesture) {
+      // Gesture step: advance by swiping the real card (Skip hidden so it doesn't read as
+      // "skip the swipe"). But never strand a confused first-time touch player — if they
+      // don't discover the drag within a few seconds, reveal Skip as an escape.
+      tutHint.textContent = 'swipe the card';
+      tutSkip.style.display = 'none';
+      tutGestureTimer = setTimeout(() => {
+        tutSkip.style.display = 'block';
+        tutHint.textContent = 'swipe the card — or tap Skip';
+      }, 6000);
+    } else {
+      tutHint.textContent = 'tap to continue';
+      tutSkip.style.display = 'block';
+    }
     if (step.cue) step.cue(); else window.SaptalokaAudio?.play?.('tutorialStep');
     tutCaption.focus();
   }
 
   function tutAdvance() {
-    if (tutIdx >= tutSteps.length - 1) return endTutorial(false);
+    if (tutIdx >= tutSteps.length - 1) return endTutorial();
     tutIdx++;
     renderTutStep();
   }
@@ -771,10 +784,16 @@
     return true;
   }
 
-  function endTutorial(skipped) {
+  // Visual teardown only (no persistence) — safe to call from any exit path, incl. abandon.
+  function hideTutorial() {
+    clearTimeout(tutGestureTimer);
     tutorial.classList.add('hidden');
     tutorial.classList.remove('gesture');
-    meta.tutorialSeen = true; saveMeta();
+  }
+
+  function endTutorial() {
+    hideTutorial();
+    meta.tutorialSeen = true; saveMeta();   // completing OR skipping marks it seen
     const cb = tutOnComplete; tutOnComplete = null;
     if (cb) cb();
   }
@@ -787,11 +806,11 @@
     tutAdvance();
   });
   tutorial.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); endTutorial(true); return; }
+    if (e.key === 'Escape') { e.preventDefault(); endTutorial(); return; }
     const step = tutSteps[tutIdx];
     if ((e.key === 'Enter' || e.key === ' ') && !(step && step.gesture)) { e.preventDefault(); tutAdvance(); }
   });
-  tutSkip.addEventListener('click', (e) => { e.stopPropagation(); endTutorial(true); });
+  tutSkip.addEventListener('click', (e) => { e.stopPropagation(); endTutorial(); });
 
   function commitChoice(side) {
     // Drop a stale fly-off commit queued during another commit's 260ms defer:
@@ -1242,6 +1261,7 @@
 
   function showTitle() {
     closeStatInfo();
+    hideTutorial();   // abandoning mid-tutorial returns here — tear the overlay down (no persist)
     endScreen.classList.add('hidden');
     mirrorScreen.classList.add('hidden');
     rulesScreen.classList.add('hidden');

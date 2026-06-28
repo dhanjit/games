@@ -907,6 +907,9 @@ button.ghost:active { background: rgba(255,255,255,0.08); }
 .tut-scrim { position: absolute; inset: 0; background: rgba(8, 4, 14, 0.72); }
 .tutorial.gesture { pointer-events: none; }            /* let the real swipe reach #card */
 .tutorial.gesture .tut-scrim { background: rgba(8, 4, 14, 0.45); }
+/* The gesture-step fallback Skip (revealed after a few seconds) must stay tappable even
+   though the overlay is pointer-events:none — it sits top-right, clear of the card. */
+.tutorial.gesture .tut-skip { pointer-events: auto; }
 .tut-hole {
   position: absolute; border-radius: 12px; pointer-events: none;
   box-shadow: 0 0 0 9999px rgba(8, 4, 14, 0.72), 0 0 18px 4px var(--gold);
