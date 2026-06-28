@@ -864,10 +864,12 @@ button.ghost:active { background: rgba(255,255,255,0.08); }
 }
 .beat.hidden { display: none; }
 .beat-inner {
-  --wash: var(--bg-2);
+  /* --wash is set inline by JS on #beat (the parent) per dominant stat; inherited here.
+     Do NOT redeclare --wash on this element — that would shadow the inherited value.
+     The fallback keeps a sane tint if JS hasn't set it. */
   max-width: 84%;
-  background: color-mix(in srgb, var(--wash) 24%, rgba(8, 4, 14, 0.92));
-  border: 1px solid color-mix(in srgb, var(--wash) 55%, var(--bg-2));
+  background: color-mix(in srgb, var(--wash, var(--bg-2)) 24%, rgba(8, 4, 14, 0.92));
+  border: 1px solid color-mix(in srgb, var(--wash, var(--bg-2)) 55%, var(--bg-2));
   border-radius: 14px;
   padding: 16px 18px;
   text-align: center;

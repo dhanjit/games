@@ -635,7 +635,7 @@
       if (done) return; done = true;
       beatEl.removeEventListener('pointerdown', finish);
       beatEl.removeEventListener('click', finish);
-      beatEl.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey);
       hideBeat();
       onDone();
     };
@@ -662,7 +662,9 @@
 
     beatEl.addEventListener('pointerdown', finish);
     beatEl.addEventListener('click', finish);
-    beatEl.addEventListener('keydown', onKey);
+    // #beat is aria-hidden (decorative), so it can't take focus — listen on window
+    // so a keyboard user can still early-skip without focusing a hidden element.
+    window.addEventListener('keydown', onKey);
     state.beatTimer = setTimeout(finish, beatDuration());
   }
 
