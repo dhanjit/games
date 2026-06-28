@@ -599,7 +599,16 @@
   // swipe. Auto-advances; an early tap/click/key skips it. Decorative (aria-hidden) —
   // the #statAnnounce live region remains the single screen-reader source, written once
   // in onDone. Under reduced motion the visual is skipped and onDone fires immediately.
-  function beatDuration() { return (meta.runs > 0) ? 650 : 1100; }
+  // Auto-advance is a *fallback* for when the player doesn't tap — so it must be long
+  // enough to actually READ the line (the point of the beat), scaled to its length.
+  // Tapping always skips immediately, so fast/veteran players never wait this out.
+  function beatDuration(text) {
+    const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
+    let ms = 700 + words * 200;                 // register the panel + read the words
+    ms = Math.max(1500, Math.min(5500, ms));    // readable floor / sane cap
+    if (meta.runs > 0) ms = Math.max(1100, Math.round(ms * 0.7)); // veterans: a touch quicker
+    return ms;
+  }
 
   function hideBeat() {
     if (state.beatTimer) { clearTimeout(state.beatTimer); state.beatTimer = null; }
@@ -665,7 +674,7 @@
     // #beat is aria-hidden (decorative), so it can't take focus — listen on window
     // so a keyboard user can still early-skip without focusing a hidden element.
     window.addEventListener('keydown', onKey);
-    state.beatTimer = setTimeout(finish, beatDuration());
+    state.beatTimer = setTimeout(finish, beatDuration(text));
   }
 
   function commitChoice(side) {

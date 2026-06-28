@@ -117,8 +117,10 @@ once, at the instant the run proceeds.
   (Enter/Space/Escape) on `#beat` skips immediately.
 - **One-shot guard:** a local `done` boolean + `clearTimeout` so the timer and an
   early tap can never both call `onDone` (the #1 risk — double draw).
-- `BEAT_MS`: ~1100ms for run 1; **auto-quickens to ~650ms once `meta.runs > 0`**
-  (decision 2). Tunable constants.
+- Auto-advance duration **scales with the line length** (the player must be able to
+  read it — that's the point): `700 + words*200`ms, clamped `[1500, 5500]`, ×0.7 for
+  veterans (`meta.runs > 0`, floor 1100ms). Tapping always skips immediately, so the
+  auto-advance is only a fallback for a player who doesn't tap. Tunable.
 
 ### Animation (the "mini-cutscene" feel)
 
