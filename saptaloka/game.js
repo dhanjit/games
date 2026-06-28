@@ -32,7 +32,14 @@
     } catch (e) { return defaultMeta(); }
   }
   function saveMeta() {
-    try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
+    try {
+      // audio.js owns meta.audio — it read-modify-writes the live sound pref on toggle.
+      // game.js's save is a FULL overwrite, so re-read the stored audio first; otherwise a
+      // saveMeta (end of run, upgrade, etc.) would clobber a mute the player just set.
+      const stored = JSON.parse(localStorage.getItem(META_KEY) || '{}');
+      if (stored && stored.audio) meta.audio = stored.audio;
+      localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (e) {}
   }
 
   const UPGRADES = [
