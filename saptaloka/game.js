@@ -124,6 +124,8 @@
   const tutCaption   = $('tutCaption');
   const tutSkip      = $('tutSkip');
   const tutHint      = $('tutHint');
+  const soundBtn      = $('soundBtn');
+  const soundBtnTitle = $('soundBtnTitle');
 
   // ---------- Game state ----------
 
@@ -234,6 +236,10 @@
 
   // ---------- UI rendering ----------
 
+  // Tracks each stat's prior danger state so the 'danger' cue fires once on the
+  // TRANSITION into ≤15/≥85, not on every subsequent render while still in range.
+  const prevDanger = { prana: false, tejas: false, karma: false, bhakti: false };
+
   function renderHud() {
     closeStatInfo();
     const r = REALMS[state.realmIdx];
@@ -252,7 +258,10 @@
       statVals[s].textContent = state[s];
       statEls[s].classList.remove('preview-up', 'preview-dn');
       statEls[s].removeAttribute('data-delta');
-      statEls[s].classList.toggle('danger', state[s] <= 15 || state[s] >= 85);
+      const isDanger = state[s] <= 15 || state[s] >= 85;
+      statEls[s].classList.toggle('danger', isDanger);
+      if (isDanger && !prevDanger[s]) window.SaptalokaAudio?.play?.('danger');
+      prevDanger[s] = isDanger;
     }
   }
 
@@ -264,7 +273,7 @@
     choiceLeft.textContent  = c.left?.label || '←';
     choiceRight.textContent = c.right?.label || '→';
     card.classList.remove('boss', 'god', 'karma', 'show-left', 'show-right');
-    if (c.tag === 'boss')  card.classList.add('boss');
+    if (c.tag === 'boss')  { card.classList.add('boss'); window.SaptalokaAudio?.play?.('boss'); }
     if (c.tag === 'god')   card.classList.add('god');
     if (c.tag === 'karma') card.classList.add('karma');
     card.style.transition = 'none';
@@ -515,6 +524,7 @@
   // ---------- Run flow ----------
 
   function startRun() {
+    window.SaptalokaAudio?.unlock?.();
     state.prana = 50; state.tejas = 50; state.karma = 50; state.bhakti = 50;
     state.realmIdx = 0; state.realmStep = 0;
     state.recentIds = [];
@@ -577,6 +587,7 @@
         `${lead}Entering ${realm.name}, ${realm.subtitle}. ${cs.narration || ''} Tap to continue.`;
     }
     cutscene.classList.remove('hidden', 'play');
+    window.SaptalokaAudio?.play?.('ascend', { realm: realmIdx });
     if (!REDUCED_MOTION) { void cutscene.offsetWidth; cutscene.classList.add('play'); }
     cutscene.focus();
     const dismiss = () => {
@@ -698,9 +709,12 @@
     // Punya gain
     state.runPunya += 1 + state.graceBonus;
 
-    // Cheap visual feedback for big effects
+    // Cheap visual + audio feedback for effective (post-applyFx) changes.
+    const dlt = deltasFrom(before);
     for (const s of STATS) {
-      if (Math.abs(fx[s] || 0) >= 10) flashStat(s, (fx[s] > 0 ? 'up' : 'dn'));
+      if (!dlt[s]) continue;
+      if (Math.abs(dlt[s]) >= 10) { flashStat(s, dlt[s] > 0 ? 'up' : 'dn'); window.SaptalokaAudio?.play?.('bigHit'); }
+      window.SaptalokaAudio?.play?.(dlt[s] > 0 ? 'statGain' : 'statLoss', { stat: s });
     }
 
     const realm = REALMS[state.realmIdx];
@@ -795,6 +809,7 @@
 
   function endRun(endKey) {
     const e = ENDINGS[endKey] || ENDINGS.death_prana;
+    window.SaptalokaAudio?.play?.(e.kind === 'win' ? 'win' : 'death');
     lastEndKind = e.kind;
     closeStatInfo();
     state.inRun = false;
@@ -870,6 +885,7 @@
     meta.punya -= cost;
     meta.levels[u.id] = upgradeLevel(u.id) + 1;
     saveMeta();
+    window.SaptalokaAudio?.play?.('upgrade');
     renderMirror();
     showToast(`${u.name} → Lv ${meta.levels[u.id]}`);
   }
@@ -911,11 +927,13 @@
   // ---------- Swipe gesture ----------
 
   let pointer = null;
+  let draggedCue = false;   // debounce: one 'drag' pluck per drag, not per pointermove
 
   function onPointerDown(ev) {
     if (!state.inRun || state.cutscenePaused || state.beatPaused) return;
     const p = pointFrom(ev);
     pointer = { x0: p.x, y0: p.y, x: p.x, y: p.y, t0: performance.now() };
+    draggedCue = false;
     card.style.transition = '';
     ev.preventDefault?.();
   }
@@ -930,6 +948,7 @@
     card.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
     const cw = card.offsetWidth;
     const t = Math.max(-1, Math.min(1, dx / (cw * 0.4)));
+    if (Math.abs(t) > 0.15 && !draggedCue) { draggedCue = true; window.SaptalokaAudio?.play?.('drag'); }
     card.classList.toggle('show-left',  t < -0.15);
     card.classList.toggle('show-right', t > 0.15);
     if (t < -0.15) showPreview('left');
@@ -964,6 +983,7 @@
   }
 
   function flyOff(side) {
+    window.SaptalokaAudio?.play?.('commit');
     const dir = side === 'left' ? -1 : 1;
     const vw = window.innerWidth;
     card.style.transition = 'transform 0.32s ease-out, opacity 0.32s ease-out';
@@ -1091,6 +1111,23 @@
     lastTap = now;
   }, { passive: false });
 
+  // ---------- Sound toggle ----------
+  // A HUD glyph and a title-screen label, both driving the same SaptalokaAudio
+  // mute pref; renderSound keeps both in sync. All calls are optional-chained so a
+  // missing/failed audio.js can't break the game.
+  function renderSound() {
+    const on = window.SaptalokaAudio?.isEnabled?.() ?? false;
+    if (soundBtn) { soundBtn.textContent = on ? '♪' : '♪̸'; soundBtn.setAttribute('aria-pressed', String(on)); }
+    if (soundBtnTitle) soundBtnTitle.textContent = on ? 'Sound: On' : 'Sound: Off';
+  }
+  function toggleSound() {
+    const on = window.SaptalokaAudio?.toggle?.() ?? false;
+    if (on) window.SaptalokaAudio?.play?.('button');
+    renderSound();
+  }
+  soundBtn?.addEventListener('click', toggleSound);
+  soundBtnTitle?.addEventListener('click', toggleSound);
+
   // ---------- Boot ----------
 
   function showTitle() {
@@ -1101,6 +1138,7 @@
     titleScreen.classList.remove('hidden');
     renderMetaSummary();
     renderGoal();
+    renderSound();
   }
 
   showTitle();
