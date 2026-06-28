@@ -134,10 +134,13 @@ once, at the instant the run proceeds.
 
 ### Content — hybrid authoring + template
 
-**Authored** (`choice.outcome`, optional past/second-person one-liner): the
-**7 bosses × 2 + 10 karma-payoff cards × 2 = ~34** highest-drama choices. These
-are the emotional peaks (boss kills gate realms; karma payoffs are literal
-callbacks). Written in the established `card.text` / `CUTSCENES` voice.
+**Authored** (`choice.outcome`, optional second-person one-liner): the **10
+karma-payoff cards × 2 = 20** choices. These are literal callbacks to an earlier
+deed — exactly where a bespoke line beats the template. Written in the established
+`card.text` / `CUTSCENES` voice. **Bosses are intentionally NOT authored:** a boss
+is a realm's last step, so its commit takes the realm-complete → cutscene branch
+and never shows the beat — the realm `CUTSCENES` narration already serves as the
+boss's consequence. Everything else (normal pool) rides the template.
 
 **Templated fallback** (covers the long tail, ships working immediately):
 

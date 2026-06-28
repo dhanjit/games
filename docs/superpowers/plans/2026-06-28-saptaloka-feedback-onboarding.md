@@ -614,56 +614,55 @@ git add saptaloka/style.css
 git commit -m "style(saptaloka): consequence beat panel, dominant-stat wash, staged animation"
 ```
 
-### Task 1.4: Author `choice.outcome` lines (bosses + karma payoffs)
+### Task 1.4: Author `choice.outcome` lines (karma payoffs)
 
 **Files:**
-- Modify: `saptaloka/cards.js` (add `outcome:` to the relevant choices)
+- Modify: `saptaloka/cards.js` (add `outcome:` to the karma-payoff choices)
 
-Authored lines are second-person, past/present, ~12–22 words, in the established `card.text` / `CUTSCENES` voice. Add `outcome: '...'` as a sibling of `fx`/`label` on each listed choice. The field is optional and ignored by everything except `beat.js`.
+**CORRECTION to the spec's "bosses + karma" framing (verified against `commitChoice`):** a boss is always a realm's **last step**, so committing a boss takes the **realm-complete → `playCutscene`** branch and **never reaches the beat**. The realm cutscene already narrates the boss outcome (`CUTSCENES[]`, e.g. "The buffalo-demon falls behind you…"). So **do NOT author boss `outcome` lines — they would be dead content.** Author only the **10 karma-payoff cards** (`tag: 'karma'`, 20 choices): these are drawn mid-realm via the karma queue, fire through the normal tail, show the beat, and are literal callbacks to an earlier deed — exactly where a bespoke line beats the template. Everything else rides the template.
 
-- [ ] **Step 1: Identify the target choices.** Run, to list boss + karma cards:
+Authored lines are second-person, ~12–22 words, in the established `card.text` / `CUTSCENES` voice, naming the returning deed. Add `outcome: '...'` as a sibling of `fx`/`label`. The field is optional and ignored by everything except `beat.js`.
+
+- [ ] **Step 1: Identify the target choices.** List the karma-payoff cards and read each one's `text`/`speaker`/`left`/`right` so the line fits what the choice actually does:
 
 ```bash
-cd saptaloka && node -e "global.window={};require('./cards.js');const{CARDS}=window.SAPTALOKA;const t=CARDS.filter(c=>c.tag==='boss'||c.tag==='karma');console.log(t.map(c=>c.id+'  ['+c.tag+']').join('\n'));console.log('count:',t.length)"
+cd saptaloka && node -e "global.window={};require('./cards.js');const{CARDS}=window.SAPTALOKA;const t=CARDS.filter(c=>c.tag==='karma');console.log(t.map(c=>c.id).join('\n'));console.log('count:',t.length)"
 ```
 
-Expected: 7 boss + 10 karma = 17 cards (34 choices). Author `outcome` on **both** `left` and `right` of each.
+Expected: 10 karma cards (20 choices). Author `outcome` on **both** `left` and `right` of each — each side reflects that choice's direction. Cross-reference each card with the deed that schedules it (search `ripens: { card: '<id>'` in `cards.js`) so the callback is specific.
 
-- [ ] **Step 2: Write the lines.** Add `outcome:` to each boss and karma-payoff choice. Worked exemplars (use these verbatim where the ids match; write the rest in the same voice):
+- [ ] **Step 2: Write the lines.** Worked exemplars (use verbatim where ids match; write the rest in the same voice):
 
 ```js
-// boss_mahishasura.left ('Strike low'):
-outcome: 'You duck the horn-shadow and drive low. The buffalo-demon buckles — it costs you blood, but the Devi answers in your arm.',
-// boss_ravana.right ('Burn it all'):
-outcome: 'You loose the fire and let the realm burn. Rāvaṇa\'s ten heads scream into ash — and so does a piece of your soul.',
-// beggar_blessing (karma payoff, the kind choice):
-outcome: 'The beggar you fed is no beggar — a deva in rags. His blessing settles on you like warm rain, long after you\'d forgotten the coin.',
-// well_demon.left ('Face it now'):
-outcome: 'The thing you abandoned in the well has grown monstrous on a child\'s grief — but you stand and face it, and a long-owed debt is paid.',
+// beggar_blessing (karma payoff of giving alms — the grateful return):
+outcome: 'The beggar you once fed is no beggar — a deva in rags. His blessing settles on you like warm rain, long after you had forgotten the coin.',
+// well_demon.left ('Face it now' — the abandoned child's grief, returned):
+outcome: 'The thing you abandoned in the well has grown monstrous on a child\'s grief — but you stand and face it now, and a long-owed debt is paid.',
 ```
 
-  For each remaining choice, write one line that names the encounter and frames the dominant effect as story (not numbers). Keep the boss lines weightier than filler. Do **not** reference exact stat numbers.
+  For each remaining karma choice, write one line that names the returning deed and frames the dominant effect as story (not numbers). Do **not** reference exact stat numbers.
 
-- [ ] **Step 3: Verify the data still loads and lines are wired.** Run:
+- [ ] **Step 3: Verify the data still loads and authored text wins over the template.** Run (pick any karma card you authored):
 
 ```bash
-cd saptaloka && node -e "
+cd saptaloka && node --check cards.js && node -e "
 global.window={}; require('./cards.js'); const beat=require('./beat.js');
 const {CARDS}=window.SAPTALOKA;
-const c=CARDS.find(x=>x.id==='boss_ravana');
-console.log(beat.outcomeText(c.right, {prana:-22,tejas:12,karma:-14}, c));
+const c=CARDS.find(x=>x.id==='beggar_blessing');
+console.log('left :', beat.outcomeText(c.left,  {karma:1}, c));
+console.log('right:', beat.outcomeText(c.right, {karma:1}, c));
 "
 ```
 
-Expected: prints the authored `boss_ravana.right` line verbatim (proving authored text wins over the template).
+Expected: prints the authored lines verbatim (proving authored text beats the template). Also confirm `node -e "...filter(c=>c.tag==='karma')...every choice has outcome..."` (every karma choice now has a string `outcome`).
 
-- [ ] **Step 4: Manual verify in game.** Reach a boss (or temporarily lower a realm length in `cards.js` `REALMS` to test faster, then revert) and confirm the boss swipe's beat shows the authored line. Karma payoff cards show their authored line when they fire.
+- [ ] **Step 4: Manual verify in game (deferred to Unit 9 human playtest).** Karma payoff cards fire mid-realm, so their beat shows the authored line. Cannot be browser-verified by a headless agent — note it for the human playtest.
 
 - [ ] **Step 5: Commit.**
 
 ```bash
 git add saptaloka/cards.js
-git commit -m "content(saptaloka): authored consequence lines for bosses and karma payoffs"
+git commit -m "content(saptaloka): authored consequence lines for karma-payoff cards"
 ```
 
 ---
