@@ -30,8 +30,6 @@
   }
   function pick(arr, seed) { return arr[seed % arr.length]; }
   function clause(stat, dir, seed) { return pick(LEX[stat][dir], seed); }
-  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-  function lower(s) { return s.charAt(0).toLowerCase() + s.slice(1); }
 
   function dominantAxis(d) {
     let best = null, bestAbs = 0;
@@ -52,7 +50,10 @@
   function speakerLead(card, seed) {
     const sp = (card && card.speaker) ? card.speaker : '';
     if (!sp) return '';
-    return pick([sp + ' watches as ', 'Before ' + sp + ', ', 'With ' + sp + ' looking on, '], seed);
+    // Lowercase a leading article so the speaker reads naturally mid-sentence
+    // ("with a village widow…"); proper nouns ("Indra", "Garuḍa") have no article.
+    const mid = sp.replace(/^(A|An|The)\b/, (m) => m.toLowerCase());
+    return pick([mid + ' watches as ', 'Before ' + mid + ', ', 'With ' + mid + ' looking on, '], seed);
   }
 
   function outcomeText(choice, deltas, card) {
@@ -66,14 +67,15 @@
     const sec = secondaryOpposite(d, dom);
     const counter = sec ? (', but ' + clause(sec, d[sec] > 0 ? 'up' : 'dn', seed >>> 3)) : '';
     const lead = speakerLead(card, seed);
-
-    let core = lead + main + counter + '.';
-    if (!lead) core = cap(core);
-
     const mag = Math.abs(d[dom]);
-    if (mag >= 12) return 'Sharply — ' + (lead ? core : lower(core));
-    if (mag <= 2)  return 'Faintly, ' + (lead ? core : lower(core));
-    return core;
+    let prefix = '';
+    if (mag >= 12) prefix = 'Sharply — ';
+    else if (mag <= 2) prefix = 'Faintly, ';
+
+    let body = prefix + lead + main + counter + '.';
+    // Capitalize only the first character; the rest (incl. mid-sentence speakers) keeps its case.
+    // A prefix ("Sharply — "/"Faintly, ") already starts capital, so this is a no-op there.
+    return body.charAt(0).toUpperCase() + body.slice(1);
   }
 
   return { outcomeText };

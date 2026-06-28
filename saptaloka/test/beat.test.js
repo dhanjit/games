@@ -61,3 +61,14 @@ test('uses passed deltas, not choice.fx (function fx is never invoked)', () => {
   assert.strictEqual(called, false);
   assert.match(s, /heart bends closer to the divine|devotion swells/);
 });
+
+test('article-prefixed speaker is lowercased mid-sentence under an intensifier', () => {
+  const s = beat.outcomeText({ label: 'x' }, { prana: -19 }, { id: 'vw', speaker: 'A village widow' });
+  assert.match(s, /^Sharply — (a village widow watches as|Before a village widow|With a village widow)/);
+  assert.doesNotMatch(s, / A village widow/);  // no capital-A article mid-sentence
+});
+
+test('sentence always starts with a capital letter', () => {
+  const s = beat.outcomeText({ label: 'x' }, { karma: 5 }, { id: 'c', speaker: 'A village widow' });
+  assert.match(s, /^[A-Z]/);
+});
