@@ -8,7 +8,7 @@
  * or returning players keep the old build until revalidation catches up. For a
  * guaranteed-fresh push, a version bump force-drops every old cache on activate.
  */
-const CACHE = 'saptaloka-v3';
+const CACHE = 'saptaloka-v4';
 const ASSETS = [
   './',
   './index.html',

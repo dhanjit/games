@@ -432,7 +432,15 @@
         `<h3>Between Lives</h3>` +
         `<p>Death keeps the <b>Puṇya</b> you earned. Spend it in the <b>Mirror of Maya</b> on upgrades that carry into every future ascent.</p>` +
       `</section>` +
-      `<p class="rule-hint">Tip: ${STAT_HOVER ? 'hover' : 'tap'} any virtue in the top bar to recall what it does.</p>`;
+      `<p class="rule-hint">Tip: ${STAT_HOVER ? 'hover' : 'tap'} any virtue in the top bar to recall what it does.</p>` +
+      `<p class="rule-replay"><button type="button" id="replayTut" class="linklike">Replay the tutorial</button></p>`;
+    const rt = document.getElementById('replayTut');
+    if (rt) rt.addEventListener('click', () => {
+      state.forceTutorial = true;
+      hideRules();
+      if (!state.inRun) startRun();
+      else showToast('Tutorial will replay on your next ascent.');
+    });
   }
 
   // ---------- Stat preview & application ----------
@@ -543,7 +551,14 @@
     rulesScreen.classList.add('hidden');
     renderHud();
     // Opening cutscene; the first card is drawn when the player taps through.
-    playCutscene(0, () => { drawNextCard(); });
+    // First-run (or forced replay): draw the live first card, THEN overlay the tutorial
+    // so its gesture step has a real, swipeable card. forceTutorial is one-shot.
+    const runTutorial = !meta.tutorialSeen || state.forceTutorial;
+    state.forceTutorial = false;
+    playCutscene(0, () => {
+      drawNextCard();
+      if (runTutorial) startTutorial(() => {});   // tutorial overlays the live first card
+    });
   }
 
   function drawNextCard() {
@@ -689,6 +704,95 @@
     state.beatTimer = setTimeout(finish, beatDuration(text));
   }
 
+  // ---------- First-run coachmark tutorial ----------
+  // Teaches the swipe + the 4 virtues against the REAL board. Step 2 is gesture-gated:
+  // the player's real swipe is also their first choice. Copy for the stat steps is pulled
+  // verbatim from STAT_INFO (one source of truth). Its own dialog captions voice for SR;
+  // #statAnnounce is left for deltas.
+  let tutOnComplete = null, tutIdx = 0, tutSteps = [];
+
+  function buildTutSteps() {
+    const statStep = (s) => ({
+      anchor: () => statEls[s],
+      text: `${STAT_INFO[s].glyph} ${STAT_INFO[s].title} — ${STAT_INFO[s].oneLiner}`,
+      cue: () => window.SaptalokaAudio?.play?.('tutorialStat', { stat: s }),
+    });
+    return [
+      { anchor: null, text: 'You are a soul at the foot of the worlds. Climb the seven realms — Bhūloka to Satyaloka — and break the wheel of saṃsāra to win mokṣa.' },
+      { anchor: () => card, text: 'Each encounter is a choice. Swipe or drag the card left or right — the labels show what each side does. Try it now.', gesture: true },
+      { anchor: () => statsEl, text: 'These four virtues are your life. Every choice shifts them — let any one reach its fatal edge and the run ends. Here is what each means.' },
+      statStep('prana'), statStep('tejas'), statStep('karma'), statStep('bhakti'),
+      { anchor: () => realmProg, text: 'Each realm ends in a boss. Climb all seven to reach Satyaloka. Tip: tap any virtue any time to recall what it does.' },
+    ];
+  }
+
+  function spotlight(el) {
+    if (!el) { tutHole.style.display = 'none'; return; }
+    const r = el.getBoundingClientRect();
+    const pad = 8;
+    tutHole.style.display = 'block';
+    tutHole.style.left = (r.left - pad) + 'px';
+    tutHole.style.top = (r.top - pad) + 'px';
+    tutHole.style.width = (r.width + pad * 2) + 'px';
+    tutHole.style.height = (r.height + pad * 2) + 'px';
+  }
+
+  function renderTutStep() {
+    const step = tutSteps[tutIdx];
+    spotlight(step.anchor ? step.anchor() : null);
+    tutCaption.textContent = step.text;
+    tutHint.textContent = step.gesture ? 'swipe the card' : 'tap to continue';
+    tutSkip.style.display = (tutIdx === 1) ? 'none' : 'block';  // don't cover the gesture step
+    tutorial.classList.toggle('gesture', !!step.gesture);
+    if (step.cue) step.cue(); else window.SaptalokaAudio?.play?.('tutorialStep');
+    tutCaption.focus();
+  }
+
+  function tutAdvance() {
+    if (tutIdx >= tutSteps.length - 1) return endTutorial(false);
+    tutIdx++;
+    renderTutStep();
+  }
+
+  function startTutorial(onComplete) {
+    tutOnComplete = onComplete;
+    tutSteps = buildTutSteps();
+    tutIdx = 0;
+    closeStatInfo();
+    tutorial.classList.remove('hidden');
+    renderTutStep();
+  }
+
+  // The gesture step's real swipe calls this (from commitChoice) instead of tap-advance.
+  function tutNotifySwipe() {
+    if (tutorial.classList.contains('hidden')) return false;
+    if (!tutSteps[tutIdx] || !tutSteps[tutIdx].gesture) return false;
+    tutAdvance();
+    return true;
+  }
+
+  function endTutorial(skipped) {
+    tutorial.classList.add('hidden');
+    tutorial.classList.remove('gesture');
+    meta.tutorialSeen = true; saveMeta();
+    const cb = tutOnComplete; tutOnComplete = null;
+    if (cb) cb();
+  }
+
+  // Tap / keyboard advance — but NOT on the gesture step (there the card swipe advances).
+  tutorial.addEventListener('click', (e) => {
+    if (e.target === tutSkip) return;             // handled below
+    const step = tutSteps[tutIdx];
+    if (step && step.gesture) return;             // let the swipe through to #card
+    tutAdvance();
+  });
+  tutorial.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); endTutorial(true); return; }
+    const step = tutSteps[tutIdx];
+    if ((e.key === 'Enter' || e.key === ' ') && !(step && step.gesture)) { e.preventDefault(); tutAdvance(); }
+  });
+  tutSkip.addEventListener('click', (e) => { e.stopPropagation(); endTutorial(true); });
+
   function commitChoice(side) {
     // Drop a stale fly-off commit queued during another commit's 260ms defer:
     // once the cutscene veil is up (or the run has ended) the card is gone.
@@ -697,6 +801,9 @@
     const fx = fxFor(choice);
     const before = { prana: state.prana, tejas: state.tejas, karma: state.karma, bhakti: state.bhakti };
     applyFx(fx);
+    // First real swipe is also the tutorial's gesture step: commit AND advance off it.
+    // No-op on non-gesture steps (the scrim blocks input, so a swipe can't reach here).
+    if (!tutorial.classList.contains('hidden')) tutNotifySwipe();
     state.runEncounters++;
 
     // Karma: record the deed, schedule its ripening, and queue any immediate chain.

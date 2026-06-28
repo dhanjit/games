@@ -900,3 +900,31 @@ button.ghost:active { background: rgba(255,255,255,0.08); }
 @media (prefers-reduced-motion: reduce) {
   .beat.play .beat-inner, .beat.play .beat-text, .beat.play .beat-deltas { animation: none; opacity: 1; }
 }
+
+/* ---------- First-run tutorial ---------- */
+.tutorial { position: absolute; inset: 0; z-index: 9; }
+.tutorial.hidden { display: none; }
+.tut-scrim { position: absolute; inset: 0; background: rgba(8, 4, 14, 0.72); }
+.tutorial.gesture { pointer-events: none; }            /* let the real swipe reach #card */
+.tutorial.gesture .tut-scrim { background: rgba(8, 4, 14, 0.45); }
+.tut-hole {
+  position: absolute; border-radius: 12px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(8, 4, 14, 0.72), 0 0 18px 4px var(--gold);
+  border: 2px solid var(--gold); transition: all 0.25s ease;
+}
+.tutorial.gesture .tut-hole { box-shadow: 0 0 22px 6px var(--gold); }
+.tut-caption {
+  position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%);
+  max-width: 80%; background: var(--bg-1); border: 1px solid var(--gold-deep);
+  border-radius: 12px; padding: 14px 16px; color: var(--ink); font-size: 16px;
+  line-height: 1.5; text-align: center; outline: none;
+}
+.tut-hint { position: absolute; left: 50%; bottom: 11%; transform: translateX(-50%);
+  color: var(--gold); font-size: 13px; opacity: 0.8; letter-spacing: 0.08em; }
+.tut-skip { position: absolute; top: calc(env(safe-area-inset-top, 0) + 12px); right: 14px;
+  background: transparent; border: 1px solid var(--ink-dim); color: var(--ink-dim);
+  border-radius: 16px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  .tut-hole { transition: none; box-shadow: 0 0 0 9999px rgba(8,4,14,0.72), 0 0 0 2px var(--gold); }
+}
+.linklike { background: none; border: none; color: var(--gold); text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
