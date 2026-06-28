@@ -852,3 +852,49 @@ button.ghost:active { background: rgba(255,255,255,0.08); }
   transition: opacity 0.25s, transform 0.25s;
 }
 .toast.hidden { opacity: 0; transform: translate(-50%, 12px); }
+
+/* ---------- Consequence beat ---------- */
+.beat {
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  z-index: 8;                 /* above .card (~7), below #statInfo (10) and #cutscene */
+  pointer-events: auto;
+}
+.beat.hidden { display: none; }
+.beat-inner {
+  --wash: var(--bg-2);
+  max-width: 84%;
+  background: color-mix(in srgb, var(--wash) 24%, rgba(8, 4, 14, 0.92));
+  border: 1px solid color-mix(in srgb, var(--wash) 55%, var(--bg-2));
+  border-radius: 14px;
+  padding: 16px 18px;
+  text-align: center;
+}
+.beat-text {
+  margin: 0;
+  color: var(--ink);
+  font-style: italic;
+  line-height: 1.5;
+  font-size: 16px;
+}
+.beat-deltas { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
+.beat-delta {
+  font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+  border: 1px solid currentColor;
+}
+.beat-delta.up { color: var(--emerald); }
+.beat-delta.dn { color: var(--crimson); }
+
+/* Staged entrance, gated behind .play (matching the .cutscene pattern). */
+.beat .beat-inner { opacity: 0; }
+.beat.play .beat-inner   { animation: beatIn 0.42s cubic-bezier(.2,.8,.3,1) forwards; }
+.beat.play .beat-text    { animation: beatRise 0.5s ease-out 0.06s forwards; opacity: 0; }
+.beat.play .beat-deltas  { animation: beatRise 0.5s ease-out 0.22s forwards; opacity: 0; }
+@keyframes beatIn   { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes beatRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .beat.play .beat-inner, .beat.play .beat-text, .beat.play .beat-deltas { animation: none; opacity: 1; }
+}
