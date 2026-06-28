@@ -72,3 +72,33 @@ test('sentence always starts with a capital letter', () => {
   const s = beat.outcomeText({ label: 'x' }, { karma: 5 }, { id: 'c', speaker: 'A village widow' });
   assert.match(s, /^[A-Z]/);
 });
+
+test('low-magnitude (|dom| <= 2) gets the Faintly prefix', () => {
+  const s = beat.outcomeText({ label: 'x' }, { bhakti: 2 }, card);
+  assert.match(s, /^Faintly, /);
+  assert.doesNotMatch(s, / A village widow/);
+});
+
+test('no-speaker card: clause is capitalized at sentence start', () => {
+  const s = beat.outcomeText({ label: 'x' }, { prana: 5 }, { id: 'nospeaker' });
+  assert.match(s, /^[A-Z]/);
+  assert.match(s, /life floods back into your limbs|your breath steadies and deepens/i);
+  assert.notStrictEqual(s, 'You let the moment pass — nothing in you shifts.');
+});
+
+test('proper-noun speaker is left untouched', () => {
+  const s = beat.outcomeText({ label: 'x' }, { tejas: 5 }, { id: 'i', speaker: 'Indra' });
+  assert.match(s, /Indra/);
+});
+
+test('tie-break: bhakti beats tejas at equal magnitude', () => {
+  const s = beat.outcomeText({ label: 'x' }, { tejas: 5, bhakti: 5 }, card);
+  assert.match(s, /heart bends closer to the divine|devotion swells warm/i);
+  assert.doesNotMatch(s, /inner fire flares brighter|radiance sharpens/);
+});
+
+test('counter-clause uses the largest opposite-sign secondary, and only one', () => {
+  const s = beat.outcomeText({ label: 'x' }, { karma: 6, tejas: -3, prana: -5 }, card);
+  assert.strictEqual((s.match(/, but /g) || []).length, 1);
+  assert.match(s, /the climb takes its toll on your body|your breath thins and your limbs grow heavy/);
+});
