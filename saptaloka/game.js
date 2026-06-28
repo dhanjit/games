@@ -526,6 +526,7 @@
   function startRun() {
     window.SaptalokaAudio?.unlock?.();
     state.prana = 50; state.tejas = 50; state.karma = 50; state.bhakti = 50;
+    for (const s of STATS) prevDanger[s] = false;  // explicit: no stale danger-cue state across runs
     state.realmIdx = 0; state.realmStep = 0;
     state.recentIds = [];
     state.runEncounters = 0;
@@ -809,7 +810,9 @@
 
   function endRun(endKey) {
     const e = ENDINGS[endKey] || ENDINGS.death_prana;
-    window.SaptalokaAudio?.play?.(e.kind === 'win' ? 'win' : 'death');
+    // Distinct cue per ending kind: the OM resolve for a true win, a hollow unresolved
+    // chord for a false summit (Svarga/Deva — a false heaven, not a death), else the death drone.
+    window.SaptalokaAudio?.play?.(e.kind === 'win' ? 'win' : (e.kind === 'falsesummit' ? 'falsesummit' : 'death'));
     lastEndKind = e.kind;
     closeStatInfo();
     state.inRun = false;

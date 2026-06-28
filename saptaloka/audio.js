@@ -69,6 +69,9 @@
     ascend(o)     { const base = 262 + 16 * ((o && o.realm) || 0); chord([base, base * 1.5], 0.9, 'sine', 0.12); noiseBurst(0.5, 2200, 0.06); },
     boss()        { chord([110, 117, 156], 0.7, 'sawtooth', 0.10); },
     death()       { tone(196, 1.2, 'sine', 0.16); tone(146, 1.4, 'sine', 0.12); },
+    // False summit (Svarga/Deva): bright like a victory, but an augmented chord that never
+    // resolves — a heaven that's still a trap. Distinct from both death and the true win.
+    falsesummit() { chord([330, 415, 523], 1.8, 'sine', 0.12); },
     win()         { chord([262, 330, 392, 523], 2.2, 'sine', 0.14); },
     button()      { tone(440, 0.06, 'triangle', 0.10); },
     upgrade()     { tone(523, 0.10, 'triangle', 0.14); tone(784, 0.14, 'triangle', 0.10); },
