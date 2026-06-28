@@ -1,7 +1,7 @@
 # Saptaloka — Consequence beats, first-run tutorial, and audio cues
 
 **Status:** Approved design — ready for implementation plan
-**Date:** 2026-06-28
+**Date:** 2026-06-28 (revised same day: offline relaxed → audio is hybrid recorded-samples + synth)
 **Scope:** `saptaloka/` only (the games-hub root and other games are untouched)
 
 ## Problem
@@ -20,8 +20,12 @@ the game is silent. Three additions close that gap:
 ## Hard constraints (inherited — non-negotiable)
 
 - Pure static. **No build, no bundler, no `package.json`, no npm deps.**
-- **Must work fully offline.** No `fetch` in game code. `sw.js` precaches the
-  `ASSETS` list; its `CACHE` name must bump when any cached file changes.
+- **Offline is no longer required** (relaxed 2026-06-28). The game should still
+  degrade gracefully and, where cheap, keep working offline — `sw.js` continues to
+  precache `ASSETS` (now including `audio.js` and the audio samples), and its
+  `CACHE` name must still bump when any cached file changes. But a first-ever
+  offline launch missing a sound file is acceptable: audio falls back to
+  synth/silence, never an error. Game logic still makes no blocking network calls.
 - Mobile-first, iOS safe-area aware.
 - **Preserve, do not regress** the existing accessibility: `prefers-reduced-motion`
   handling and the `#statAnnounce` `role="status"` polite live region, plus ARIA
@@ -43,6 +47,8 @@ the game is silent. Three additions close that gap:
 | 5 | Tutorial style | **Coachmark / spotlight** on the real board, first-run only |
 | 6 | Tutorial replay | Link inside the existing **How-to-Play** modal |
 | 7 | Veterans | Players with `runs > 0` are treated as **already onboarded** (tutorial suppressed, replayable) |
+| 8 | Offline | **Not required** — graceful degradation only; audio assets may be fetched + precached |
+| 9 | Audio engine | **Hybrid** — CC0/public-domain recorded samples for signature moments + light drone, code-synth for fast per-swipe cues, synth fallback per cue |
 
 ### The "animated cutscene" north star
 
@@ -230,16 +236,29 @@ Runs **inside the opening `playCutscene(0)`'s `onDone`**, before the first
 
 ### Engine
 
-**WebAudio runtime synthesis**, zero binary assets, in a new
-`saptaloka/audio.js` exposing `window.SaptalokaAudio`. Recorded files would force
-base64 bloat or `.mp3` cache files (a `CACHE` bump per tweak) — both fight the
-offline/no-deps constraint. Synth ships as a few KB of code already precached,
-is sample-accurate, and is freely tunable. (A richer recorded ambient loop can be
-an opt-in file added later without touching the cue engine.)
+**Hybrid: recorded samples + WebAudio synth**, in a new `saptaloka/audio.js`
+exposing `window.SaptalokaAudio`. (Offline is relaxed, so recorded audio is now
+viable.) No npm deps — just static audio files plus code.
 
-One lazily-created `AudioContext` + master `GainNode` + primitives
-`tone(freq,dur,type,env)` / `noiseBurst(dur,filterFreq)` / `drone(freqs,dur)`.
-Every cue is a short scheduled `OscillatorNode`+`GainNode` graph with ADSR.
+- **Recorded samples** carry the signature, texture-heavy moments where authentic
+  timbre matters: ghanta bell, conch (śaṅkha), a low tanpura/drone ambient bed,
+  the OM chant on the win, and the boss-entrance + death/false-summit stingers.
+  Sourced **CC0 / public-domain only** (store-safe, no attribution burden; license
+  for each file recorded in a short `saptaloka/audio/CREDITS.md`), stored in
+  `saptaloka/audio/` as small compressed `.ogg` with an `.m4a`/`.mp3` fallback for
+  Safari/iOS. Loaded via `AudioBufferSourceNode` — decode once, cache the
+  `AudioBuffer`, replay cheaply.
+- **Synth** handles the fast, latency-sensitive, frequently-fired per-swipe cues
+  (drag pluck, commit "tak", the 4 per-stat gain/loss pitches, the ghanta-swell
+  layer on big hits): sample-accurate, no decode latency, freely tuned. Primitives
+  `tone(freq,dur,type,env)` / `noiseBurst(dur,filterFreq)` / `drone(freqs,dur)`,
+  each a short scheduled `OscillatorNode`+`GainNode` with ADSR.
+- **Fallback contract:** every recorded cue has a synth stand-in. If a sample is
+  absent or fails to decode (or it's a first-ever offline launch before caching),
+  that cue falls back to synth — never an error, never silence-by-bug.
+
+One lazily-created `AudioContext` + master `GainNode`; samples decode lazily on
+first unlock and are cached as `AudioBuffer`s.
 
 ### Cue set (~24)
 
@@ -287,8 +306,11 @@ channel.
 ## Cross-cutting
 
 - **One `sw.js` `CACHE` bump** for all three features: `saptaloka-v2` →
-  `saptaloka-v3`, once. The only new file is `audio.js`, **appended** to `ASSETS`;
-  `index.html`/`style.css`/`game.js`/`cards.js` are already listed.
+  `saptaloka-v3`, once. New files **appended** to `ASSETS`: `audio.js` plus the
+  `audio/` sample files (so repeat visits still play them offline);
+  `index.html`/`style.css`/`game.js`/`cards.js` are already listed. Precaching the
+  samples is best-effort — a failed audio fetch must not fail the SW install or the
+  game (audio degrades to synth).
 - **All new meta fields additive** to `defaultMeta()` (`tutorialSeen`, `audio`) —
   no `saptaloka.meta.v1` key bump.
 - **Two new state flags**, distinct from `cutscenePaused` (so the L579 stale-drop
@@ -321,10 +343,13 @@ channel.
    effective-delta handling; authored `choice.outcome` (bosses first); replace the
    normal tail; `beatPaused` guard; teardown wiring; reduced-motion skip; `.beat`
    CSS + dominant-stat wash + staged animation.
-2. **Audio engine** — `audio.js` (context+master+primitives+cue table), unlock
-   listeners, two synced toggles + persistence, optional-chained `play()` calls at
-   swipe/commit/stat/big-hit/danger/death/win/ascend/boss/button/upgrade. Beat +
-   tutorial cues layered last.
+2. **Audio engine** — source the CC0/public-domain samples into `saptaloka/audio/`
+   (license-checked, logged in `CREDITS.md`); build `audio.js`
+   (context+master+synth primitives+sample loader/decoder+cue table with a per-cue
+   synth fallback), unlock listeners, two synced toggles + persistence,
+   optional-chained `play()` calls at
+   swipe/commit/stat/big-hit/danger/death/win/ascend/boss/button/upgrade; append
+   the files to `sw.js` `ASSETS`. Beat + tutorial cues layered last.
 3. **First-run tutorial** — `#tutorial` coachmark layer, 8 steps reusing
    `STAT_INFO`, gesture-gated step 2, spotlight scrim, Skip/Escape/keyboard + focus
    management, reduced-motion static path, replay wiring, write `tutorialSeen` on
@@ -347,12 +372,18 @@ channel.
   replay works without clearing the flag; keyboard + SR path voices all 4 fatal
   facts.
 - Audio: silent until first gesture; truly silent when muted; no orphan cue on a
-  dropped stale fly-off; `game.js` runs unchanged if `audio.js` is absent.
-- Offline: bump verified — a returning player gets the v3 build, game still loads
-  with no network.
+  dropped stale fly-off; `game.js` runs unchanged if `audio.js` is absent; every
+  recorded cue falls back to synth when its sample is missing/undecoded; all bundled
+  samples are CC0/public-domain (logged in `CREDITS.md`).
+- Offline (best-effort, no longer required): bump verified — a returning player
+  gets the v3 build and the game still loads with no network; a first-ever offline
+  visit may lack samples and falls back to synth without error.
 
 ## Out of scope (future)
 
+- A full melodic **music bed** (the heavier "all recorded" option) — the hybrid
+  ships only a light drone; a bed can be added later as another sample.
+- Spoken **voice narration** (recorded VO) — left as an opt-in `meta.audio.voice`
+  hook, default off (screen-reader collision risk).
 - Bespoke per-choice animated cutscenes beyond the authored text lines.
-- Recorded ambient music / spoken narration (architecture leaves an opt-in hook).
 - Per-stat or per-realm leitmotif music beds.
