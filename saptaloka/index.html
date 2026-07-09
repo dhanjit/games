@@ -37,18 +37,26 @@
         <div class="realm-name" id="realmName">Bhuloka</div>
         <div class="realm-progress" id="realmProgress"></div>
       </div>
+      <!-- Each virtue is a meter, not a bare number: Prāṇa is a plain fill bar
+           (only empty kills); the other three are needle gauges whose track shades
+           the fatal zones — red for a deadly end, gold for the karma/bhakti
+           false-summit end — so "both extremes end the run" reads at a glance. -->
       <div class="stats">
-        <div class="stat" data-stat="prana" tabindex="0" role="button" aria-expanded="false" aria-label="Prāṇa, life force. Activate for details.">
-          <span class="glyph">❤︎</span><span class="val">50</span>
+        <div class="stat" data-stat="prana" tabindex="0" role="button" aria-expanded="false" aria-label="Prāṇa, life force — deadly only when empty. Activate for details.">
+          <div class="stat-top"><span class="glyph">❤︎</span><span class="val">50</span></div>
+          <div class="meter"><span class="meter-fill"></span></div>
         </div>
-        <div class="stat" data-stat="tejas" tabindex="0" role="button" aria-expanded="false" aria-label="Tejas, divine radiance. Activate for details.">
-          <span class="glyph">✸</span><span class="val">50</span>
+        <div class="stat" data-stat="tejas" tabindex="0" role="button" aria-expanded="false" aria-label="Tejas, divine radiance — deadly when empty and when full. Activate for details.">
+          <div class="stat-top"><span class="glyph">✸</span><span class="val">50</span></div>
+          <div class="meter"><span class="meter-pin"></span></div>
         </div>
-        <div class="stat" data-stat="karma" tabindex="0" role="button" aria-expanded="false" aria-label="Karma, moral weight. Activate for details.">
-          <span class="glyph">☸</span><span class="val">50</span>
+        <div class="stat" data-stat="karma" tabindex="0" role="button" aria-expanded="false" aria-label="Karma, moral weight — empty damns you, full strands you in Svarga. Activate for details.">
+          <div class="stat-top"><span class="glyph">☸</span><span class="val">50</span></div>
+          <div class="meter"><span class="meter-pin"></span></div>
         </div>
-        <div class="stat" data-stat="bhakti" tabindex="0" role="button" aria-expanded="false" aria-label="Bhakti, devotion. Activate for details.">
-          <span class="glyph">✿</span><span class="val">50</span>
+        <div class="stat" data-stat="bhakti" tabindex="0" role="button" aria-expanded="false" aria-label="Bhakti, devotion — empty erases you, full enthrones you short of mokṣa. Activate for details.">
+          <div class="stat-top"><span class="glyph">✿</span><span class="val">50</span></div>
+          <div class="meter"><span class="meter-pin"></span></div>
         </div>
       </div>
       <!-- Shared stat-info popover; a sibling of .stats so it never collides with the .stat preview badge. -->
