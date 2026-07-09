@@ -263,10 +263,20 @@
     }
     for (const s of STATS) {
       statVals[s].textContent = state[s];
+      // Drives the meter (prāṇa fill width / needle position). Values sit outside
+      // 0..100 only transiently pre-endRun; clamp for display.
+      statEls[s].style.setProperty('--pct', Math.max(0, Math.min(100, state[s])));
       statEls[s].classList.remove('preview-up', 'preview-dn');
       statEls[s].removeAttribute('data-delta');
-      const isDanger = state[s] <= 15 || state[s] >= 85;
-      statEls[s].classList.toggle('danger', isDanger);
+      // Red pulse = a deadly end is near. Prāṇa caps safely at 100, so only its
+      // floor warns; tejas warns at both ends (burnout). Karma/bhakti ≥85 pulse
+      // gold instead — the false summit ends the run but is a heaven, not a death.
+      const low = state[s] <= 15, high = state[s] >= 85;
+      const deadly = low || (s === 'tejas' && high);
+      const summit = (s === 'karma' || s === 'bhakti') && high;
+      statEls[s].classList.toggle('danger', deadly);
+      statEls[s].classList.toggle('danger-summit', summit);
+      const isDanger = deadly || summit;
       if (isDanger && !prevDanger[s]) window.SaptalokaAudio?.play?.('danger');
       prevDanger[s] = isDanger;
     }
@@ -429,6 +439,7 @@
         `<h3>The Four Virtues</h3>` +
         `<p class="rule-legend"><span class="pill death">death</span><span class="pill safe">safe</span><span class="pill false">false summit</span></p>` +
         virtues +
+        `<p class="rule-note">Each virtue's meter shades its run-ending zones: <b>red</b> for a deadly end, <b>gold</b> for a false summit. Prāṇa is a plain life bar — only empty kills. The other three are needle gauges: keep the needle out of the shaded ends, near the centre tick.</p>` +
         `<p class="rule-note">Maxing Karma or Bhakti does <i>not</i> win — it strands you in a false heaven (Svarga / Deva), still inside saṃsāra. Tejas burns out at the top; Prāṇa alone is safe when full. The one true victory is reaching <b>Satyaloka</b>.</p>` +
       `</section>` +
       `<section class="rule-sec">` +
