@@ -35,16 +35,30 @@ inside a game folder:
   It's a single JSON **array** with **one entry per game-app** (e.g. Saptaloka's
   `me.dhanjit.saptaloka`); future games append their own entry here. Each entry's
   fingerprint must be that app's **Play app-signing** key SHA-256. Must serve
-  `200` + `application/json`, no redirect (Cloudflare Pages does this fine).
+  `200` + `application/json`, no redirect (the static-assets Worker does this fine).
 
 ## Hosting
 
-Served from **Cloudflare Pages**, connected to this repo's `main` branch — every
-push auto-deploys. Pure static site:
+Served from a **Cloudflare static-assets Worker** named `games` (config in
+`wrangler.jsonc`). Pure static site, no build step — `assets.directory: "."`
+serves the repo root as-is: hub at `/`, each game under its path (e.g.
+`/saptaloka/`). `.assetsignore` keeps repo cruft (`.git`, `.github`, `.claude`,
+`*.md`, …) out of the upload.
 
-- Framework preset: **None**; Build command: *(none)*; Output directory: `/`.
-- Repo root served as-is: hub at `/`, each game under its path (e.g. `/saptaloka/`).
-- Custom domain `games.dhanjit.me` via the Pages Custom domains tab.
+- **Manual deploy** (repo root): `wrangler deploy` — wrangler is OAuth-authed on
+  this machine. Use this to push immediately.
+- **Auto-deploy on push** requires **Workers Builds** connected in the dashboard:
+  Workers & Pages → `games` → Settings → Build → Connect to Git (repo
+  `dhanjit/games`, branch `main`, deploy command `wrangler deploy`). Until that's
+  connected, pushing to `main` does **not** redeploy — deploy manually.
+- Custom domain `games.dhanjit.me` via the Worker's **Domains & Routes** tab (a
+  domain attaches to one product only — if an old Pages project still claims it,
+  detach there first).
+- History: this was originally a Cloudflare **Pages** project; migrated to a
+  static-assets Worker (commit `6d59dc8`). Don't reintroduce Pages config
+  (`pages_build_output_dir`, a Pages Git integration) — a Worker-style
+  `wrangler.jsonc` and a Pages project fighting over the same repo is what broke
+  auto-deploy before.
 
 ## Running locally
 
