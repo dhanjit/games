@@ -5,6 +5,12 @@ This repo hosts **multiple independent games** under one domain
 config. **Each game is self-contained in its own top-level folder and carries its
 own `CLAUDE.md`** with the game-specific notes.
 
+**Read [`DECISIONS.md`](DECISIONS.md) before proposing a stack, a tool, or a
+launch plan.** This file covers *how* to work here; that one covers *why* it
+works this way and what was deliberately rejected — including why there's no
+build step and why a finished game isn't done until it's been put in front of
+players. It supersedes generic best-practice advice.
+
 ## Layout
 
 ```
@@ -12,6 +18,7 @@ index.html              → hub / landing page (games.dhanjit.me); links to each
 saptaloka/              → Saptaloka game (see saptaloka/CLAUDE.md)
 runner/                 → Runner game (see runner/CLAUDE.md), if present
 .well-known/            → shared domain-level files (see below)
+DECISIONS.md            → dated, durable decisions + distribution reference
 README.md               → player-facing docs
 ```
 
@@ -44,7 +51,7 @@ push auto-deploys. Pure static site:
 Relative paths + PWA manifests need an HTTP origin (`file://` is unreliable):
 
 ```
-cd /c/Users/dhanj/Code/games
+cd ~/Code/games        # or wherever you cloned it
 python -m http.server 8080
 ```
 

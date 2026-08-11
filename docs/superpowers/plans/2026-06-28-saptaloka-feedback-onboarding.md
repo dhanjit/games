@@ -10,11 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-28-saptaloka-feedback-onboarding-design.md`
 
-**Working dir for all paths:** repo root `/Users/dhanjit/Code/games/.claude/worktrees/interesting-carson-14a0e5`. Game files live in `saptaloka/`.
+**Working dir for all paths:** the repo root. Game files live in `saptaloka/`.
 
 **How to run the game locally (for every manual-verify step):**
 ```bash
-cd /Users/dhanjit/Code/games/.claude/worktrees/interesting-carson-14a0e5
+cd ~/Code/games        # or wherever you cloned it
 python3 -m http.server 8080
 # open http://localhost:8080/saptaloka/
 ```

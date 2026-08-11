@@ -28,7 +28,7 @@ explicitly asked — it would defeat the "open `index.html` and play" promise.
 root:
 
 ```
-cd /c/Users/dhanj/Code/games
+cd ~/Code/games        # or wherever you cloned it
 python -m http.server 8080
 ```
 

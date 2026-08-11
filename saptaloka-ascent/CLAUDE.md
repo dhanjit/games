@@ -32,7 +32,7 @@ Relative paths + the manifest need an HTTP origin (`file://` is unreliable).
 Serve from the repo root, then open the game path:
 
 ```
-cd /c/Users/dhanj/Code/games
+cd ~/Code/games        # or wherever you cloned it
 python -m http.server 8080
 # → http://localhost:8080/saptaloka-ascent/
 ```
