@@ -8,7 +8,12 @@
 .infisical.json
 
 # Tooling / editor / OS
-.claude/
+# .claude/* is local state (worktrees, caches) — but skills/ are project tooling
+# that must travel with the repo, so they're explicitly re-included.
+# Note: this must be `.claude/*`, not `.claude/` — git won't descend into an
+# excluded directory, so a negation inside it would never match.
+.claude/*
+!.claude/skills/
 node_modules/
 .DS_Store
 

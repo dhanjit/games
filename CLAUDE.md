@@ -18,9 +18,17 @@ index.html              → hub / landing page (games.dhanjit.me); links to each
 saptaloka/              → Saptaloka game (see saptaloka/CLAUDE.md)
 runner/                 → Runner game (see runner/CLAUDE.md), if present
 .well-known/            → shared domain-level files (see below)
+research/               → dated market reports (see .claude/skills below)
+.claude/skills/         → project tooling that travels with the repo
 DECISIONS.md            → dated, durable decisions + distribution reference
 README.md               → player-facing docs
 ```
+
+`.claude/skills/` holds skills specific to *this* project — currently
+`dd-game-market-research`, which writes the monthly reports in `research/`.
+Cross-project personal tooling belongs in dotfiles instead; anything that only
+makes sense for this catalogue lives here so it travels with the repo. The rest
+of `.claude/` (worktrees, caches) stays gitignored.
 
 Keep everything for a game **inside that game's folder** — code, assets, icons,
 PWA manifest/service-worker, and its store/listing artifacts. The root stays
