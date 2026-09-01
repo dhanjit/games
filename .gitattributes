@@ -1,0 +1,5 @@
+# Normalize line endings: LF in the repository, LF in the working tree.
+# Set here rather than via core.autocrlf, which is per-machine and has
+# regressed before. This tree is opened from both Windows and WSL, so a
+# native-per-OS checkout has no single correct answer.
+* text=auto eol=lf
