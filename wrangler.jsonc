@@ -4,6 +4,8 @@
   // Deploy: `wrangler deploy`. Auto-deploy: connect this repo to the `games`
   // Worker via Cloudflare → Workers Builds (it runs `wrangler deploy` on push).
   "name": "games",
+  "workers_dev": false,
+  "routes": [{ "pattern": "games.dhanjit.me", "custom_domain": true }],
   "compatibility_date": "2025-01-01",
   "assets": {
     "directory": "."
