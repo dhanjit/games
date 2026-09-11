@@ -193,6 +193,21 @@ the difficulty ramp. Re-run `/tmp`-style engine simulations after balance edits.
 
 - Touch and mouse share `onPointer*` handlers. iOS double-tap-to-zoom is
   defeated by the global `touchend` guard — don't remove it.
+- **Keyboard (#28)** drives the *same* handlers with a synthetic drag: ← / → (or
+  A / D) hold to weigh at 34% of the card's width — past both the 15% label-reveal
+  and 30% commit thresholds — release commits, Esc while held snaps back, window
+  blur cancels. Don't add a second code path; change the thresholds in one place.
+  `lastInput` ('touch' | 'key') follows the last input used and swaps the `#hint`
+  text and the tutorial's gesture-step copy.
+- Choice labels are visible at rest (`.choice` opacity 0.55) and light to gold when
+  weighed. A first-time player must never have to blind-drag to learn the options.
+- **First run:** the title hides the meta row and the Mirror button until
+  `meta.runs > 0`; the tutorial is four steps (three taps + the real first swipe);
+  each virtue is taught by a toast the first time it enters its danger zone
+  (`DANGER_LESSON`, persisted once-ever per edge in `meta.dangerTaught`).
+- **End screen (#27):** `#endCause` names the virtue, the edge, and the encounter +
+  label that ended the run (`CAUSE` / `causeLine`), coloured by the virtue. On a
+  staged false summit it's withheld until the reveal.
 - Commit threshold: **30% of card width** OR **0.6 px/ms** velocity. Tweak in
   `onPointerUp`.
 - `card` element is reused across encounters — `renderCard` resets its

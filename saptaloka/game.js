@@ -16,6 +16,7 @@
     runs: 0,
     moksha: 0,
     tutorialSeen: false,      // first-run coachmark tutorial shown?
+    dangerTaught: [],         // '<stat>:<low|high>' lessons already shown once (#26)
     audio: { enabled: true, volume: 0.6 },  // global sound pref (NOT per-run)
   });
 
@@ -104,6 +105,7 @@
   const endDeva      = $('endDeva');
   const endTitle     = $('endTitle');
   const endReason    = $('endReason');
+  const endCause     = $('endCause');
   const endStats     = $('endStats');
   const endPrimary   = $('endPrimary');
   const endMirror    = $('endMirror');
@@ -157,6 +159,7 @@
     restDone: false,        // this realm's waystation already drawn (reset on realm entry)
     offerQueue: [],         // stats ('karma'/'bhakti') whose offer is the next draw (#32)
     offered: new Set(),     // stats already offered this run — the offer comes once
+    lastChoiceLabel: '',    // the label just committed — named on the end screen (#27)
     cutscenePaused: false,
     beatPaused: false,      // consequence beat is showing (gates new swipes; distinct from cutscenePaused)
     beatTimer: null,        // auto-advance setTimeout id for the beat
@@ -310,7 +313,16 @@
       statEls[s].classList.toggle('danger', deadly);
       statEls[s].classList.toggle('danger-summit', summit);
       const isDanger = deadly || summit;
-      if (isDanger && !prevDanger[s]) window.SaptalokaAudio?.play?.('danger');
+      if (isDanger && !prevDanger[s]) {
+        window.SaptalokaAudio?.play?.('danger');
+        // Teach the virtue the first time it ever matters (#26) — once per edge, ever.
+        const key = s + ':' + (low ? 'low' : 'high');
+        const lesson = DANGER_LESSON[s] && DANGER_LESSON[s][low ? 'low' : 'high'];
+        if (lesson && !meta.dangerTaught.includes(key)) {
+          meta.dangerTaught.push(key); saveMeta();
+          showToast(STAT_INFO[s].glyph + ' ' + lesson, 4200);
+        }
+      }
       prevDanger[s] = isDanger;
     }
   }
@@ -374,6 +386,19 @@
       oneLiner: '0 erases you · 100 enthrones you as a Deva.',
       detail: "The world's love for you. At 0 the world forgets you and no one chants your name. At 100 devotion crowns you a worshipped Deva — but the idol cannot leave; saṃsāra still turns behind your halo. A false summit, not mokṣa, and not the win.",
     },
+  };
+
+  // One line per fatal edge, shown as a toast the first time a virtue enters that
+  // zone (renderHud). This replaced four back-to-back definitions in the tutorial:
+  // a lesson lands when the meter is actually red, not twenty cards earlier.
+  const DANGER_LESSON = {
+    prana:  { low:  'Prāṇa is nearly spent — at 0 the wheel takes you.' },
+    tejas:  { low:  'Tejas gutters — at 0 you vanish into shadow.',
+              high: 'Tejas overflows — at 100 you burn away. It is fatal at both ends.' },
+    karma:  { low:  'Karma nears 0 — sin damns you to Naraka.',
+              high: 'Karma nears 100 — a heaven waits there. It is not mokṣa.' },
+    bhakti: { low:  'Bhakti nears 0 — the world forgets you.',
+              high: 'Bhakti nears 100 — they will crown you a god. That is not mokṣa either.' },
   };
 
   // Use hover only on a true pointer with NO touch. Phones and hybrid touch+mouse
@@ -468,7 +493,7 @@
       `</section>` +
       `<section class="rule-sec">` +
         `<h3>Controls</h3>` +
-        `<p>Swipe or click-drag the card <b>left</b> or <b>right</b> — the labels show each choice. Commit past a third of the card's width, or flick it. Unlock the <b>Sage's Eye</b> to preview the stat changes a choice will make — though some fated encounters stay veiled until you commit.</p>` +
+        `<p>Both answers are written on the card. Drag it toward one to <b>weigh</b> it (the label lights up), let go to change your mind, or commit — past a third of the card's width, or with a flick. On a keyboard, hold <b>←</b> / <b>→</b> (or <b>A</b> / <b>D</b>) to weigh and release to choose; <b>Esc</b> cancels. Unlock the <b>Sage's Eye</b> to preview the stat changes a choice will make — though some fated encounters stay veiled until you commit.</p>` +
       `</section>` +
       `<section class="rule-sec">` +
         `<h3>The Four Virtues</h3>` +
@@ -797,18 +822,20 @@
   // #statAnnounce is left for deltas.
   let tutOnComplete = null, tutIdx = 0, tutSteps = [], tutGestureTimer = null;
 
+  // Four steps — three taps and the real first swipe (#26). The virtues are NOT
+  // defined here: four definitions in a row landed before any of them mattered and
+  // were gone by the time one did. Each is taught instead the first time it enters
+  // its danger zone (renderHud → the meta.dangerTaught toast), which is when it counts.
   function buildTutSteps() {
-    const statStep = (s) => ({
-      anchor: () => statEls[s],
-      text: `${STAT_INFO[s].glyph} ${STAT_INFO[s].title} — ${STAT_INFO[s].oneLiner}`,
-      cue: () => window.SaptalokaAudio?.play?.('tutorialStat', { stat: s }),
-    });
+    const keys = lastInput === 'key';
     return [
       { anchor: null, text: 'You are a soul at the foot of the worlds. Climb the seven realms — Bhūloka to Satyaloka — and break the wheel of saṃsāra to win mokṣa.' },
-      { anchor: () => card, text: 'Each encounter is a choice. Swipe or drag the card left or right — the labels show what each side does. Try it now.', gesture: true },
-      { anchor: () => statsEl, text: 'These four virtues are your life. Every choice shifts them — let any one reach its fatal edge and the run ends. Here is what each means.' },
-      statStep('prana'), statStep('tejas'), statStep('karma'), statStep('bhakti'),
-      { anchor: () => realmProg, text: 'Each realm ends in a boss. Climb all seven to reach Satyaloka. Tip: tap any virtue any time to recall what it does.' },
+      { anchor: () => card, gesture: true,
+        text: keys
+          ? 'Each encounter is a choice, and both answers are written on the card. Hold ← or → to weigh one, press Esc to change your mind, or release to commit. Try it now.'
+          : 'Each encounter is a choice, and both answers are written on the card. Drag toward one to weigh it, let go to change your mind, or swipe to commit. Try it now.' },
+      { anchor: () => statsEl, text: 'These four virtues are your life. Each has an edge that ends the run — the meters shade the deadly zones red and the false-heaven zones gold. Tap any virtue, any time, to learn it.' },
+      { anchor: () => realmProg, text: 'Each realm ends in a boss, and a rest waits halfway. Climb all seven to reach Satyaloka.' },
     ];
   }
 
@@ -833,11 +860,11 @@
       // Gesture step: advance by swiping the real card (Skip hidden so it doesn't read as
       // "skip the swipe"). But never strand a confused first-time touch player — if they
       // don't discover the drag within a few seconds, reveal Skip as an escape.
-      tutHint.textContent = 'swipe the card';
+      tutHint.textContent = lastInput === 'key' ? 'hold → or ←, then release' : 'swipe the card';
       tutSkip.style.display = 'none';
       tutGestureTimer = setTimeout(() => {
         tutSkip.style.display = 'block';
-        tutHint.textContent = 'swipe the card — or tap Skip';
+        tutHint.textContent = (lastInput === 'key' ? 'hold → or ←, then release' : 'swipe the card') + ' — or tap Skip';
       }, 6000);
     } else {
       tutHint.textContent = 'tap to continue';
@@ -903,6 +930,7 @@
     // once the cutscene veil is up (or the run has ended) the card is gone.
     if (state.cutscenePaused || !state.inRun) return;
     const choice = side === 'left' ? state.currentCard.left : state.currentCard.right;
+    state.lastChoiceLabel = (choice && choice.label) || '';
     const fx = fxFor(choice);
     const before = { prana: state.prana, tejas: state.tejas, karma: state.karma, bhakti: state.bhakti };
     applyFx(fx);
@@ -1038,6 +1066,27 @@
   // later the treatment cools, the hollow chord sounds and the full narration lands.
   // Sighted-only: reduced motion skips it, and the live region announces the whole
   // truth at once. Meta accounting is identical either way (no mokṣa, no bonus).
+  // The plain cause of an ending (#27): which virtue, which edge, and the encounter
+  // that did it. The narration stays poetry; this line is the lesson.
+  const CAUSE = {
+    death_prana:      ['prana',  'Prāṇa reached 0'],
+    death_tejas_low:  ['tejas',  'Tejas reached 0'],
+    death_tejas_burn: ['tejas',  'Tejas reached 100'],
+    death_karma:      ['karma',  'Karma reached 0'],
+    death_bhakti:     ['bhakti', 'Bhakti reached 0'],
+    false_karma:      ['karma',  'Karma reached 100'],
+    false_bhakti:     ['bhakti', 'Bhakti reached 100'],
+  };
+  function causeLine(endKey, chosenHeaven) {
+    const c = CAUSE[endKey];
+    if (!c) return null;
+    const [stat, what] = c;
+    if (chosenHeaven) return { stat, text: `${what} — you chose to stay.` };
+    const who = state.currentCard && state.currentCard.speaker;
+    const label = state.lastChoiceLabel;
+    return { stat, text: who ? `${what} — ${who}${label ? `, “${label}”` : ''}.` : `${what}.` };
+  }
+
   const REVEAL_MS = 2600;
   function endRun(endKey, opts = {}) {
     const e = ENDINGS[endKey] || ENDINGS.death_prana;
@@ -1063,9 +1112,13 @@
     endDeva.textContent = e.deva || '';
     endTitle.textContent = e.title || '';
     endReason.textContent = staged ? e.lie : (e.narration || '');
+    // The cause line waits for the reveal on a staged ending — it would give the game away.
+    const cause = causeLine(endKey, !!opts.staged);
+    endCause.textContent = cause ? cause.text : '';
+    endCause.className = 'end-cause' + (cause ? ' stat-' + cause.stat : '') + ((!cause || staged) ? ' hidden' : '');
     endStats.innerHTML = runStatsHtml();
     endPrimary.textContent = (e.kind === 'win' || staged) ? 'Begin Anew' : 'Reincarnate';
-    if (statAnnounce) statAnnounce.textContent = `${e.title}. ${e.narration || ''}`;
+    if (statAnnounce) statAnnounce.textContent = `${e.title}. ${e.narration || ''}${cause ? ' ' + cause.text : ''}`;
     void endScreen.offsetWidth;
     if (!REDUCED_MOTION) endScreen.classList.add('play');
     endScreen.focus();
@@ -1076,6 +1129,7 @@
         endScreen.classList.remove('end-win');
         endScreen.classList.add('end-falsesummit', 'reveal');
         endReason.textContent = e.narration || '';
+        endCause.classList.remove('hidden');
         endPrimary.textContent = 'Reincarnate';
         window.SaptalokaAudio?.play?.('falsesummit');
       }, REVEAL_MS);
@@ -1239,6 +1293,54 @@
     setTimeout(() => commitChoice(side), 260);
   }
 
+  // ---------- Keyboard (#28) ----------
+  // ← / → (or A / D): hold to weigh — the card tilts, the label and any Sage's Eye
+  // preview show — release to commit; Esc while held snaps it back. Drives the
+  // pointer path with a synthetic drag so both inputs share one set of thresholds.
+  let keyHeld = null;
+  const KEY_SIDE = { ArrowLeft: 'left', ArrowRight: 'right', a: 'left', d: 'right', A: 'left', D: 'right' };
+  function keyPeek(side) {
+    const dx = (side === 'left' ? -1 : 1) * card.offsetWidth * 0.34;   // past the 15% reveal and the 30% commit thresholds
+    onPointerDown({ clientX: 0, clientY: 0 });
+    if (!pointer) return false;
+    onPointerMove({ clientX: dx, clientY: 0 });
+    return true;
+  }
+  function keyRelease(cancel) {
+    if (pointer) {
+      if (cancel) onPointerMove({ clientX: pointer.x0, clientY: pointer.y0 });
+      onPointerUp({});
+    }
+    keyHeld = null;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    const side = KEY_SIDE[e.key];
+    if (side) {
+      if (keyHeld || !state.inRun || state.cutscenePaused || state.beatPaused) return;
+      if (!tutorial.classList.contains('hidden') && !(tutSteps[tutIdx] && tutSteps[tutIdx].gesture)) return;
+      setLastInput('key');
+      if (keyPeek(side)) { keyHeld = side; e.preventDefault(); }
+    } else if (e.key === 'Escape' && keyHeld) {
+      keyRelease(true); e.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (keyHeld && KEY_SIDE[e.key] === keyHeld) { keyRelease(false); e.preventDefault(); }
+  });
+  window.addEventListener('blur', () => { if (keyHeld) keyRelease(true); });   // alt-tab mid-hold: never strand a tilted card
+
+  // The bottom hint follows the last input used, so a keyboard player is never told to swipe.
+  let lastInput = 'touch';
+  function setLastInput(kind) {
+    if (lastInput === kind) return;
+    lastInput = kind; renderHint();
+    // Mid-gesture-step switch (a keyboard player's first key press): re-word the tutorial hint too.
+    if (!tutorial.classList.contains('hidden') && tutSteps[tutIdx] && tutSteps[tutIdx].gesture) renderTutStep();
+  }
+  function renderHint() { hint.textContent = lastInput === 'key' ? '← / →' : 'swipe'; }
+  document.addEventListener('pointerdown', () => setLastInput('touch'), true);
+
   // ---------- Bind events ----------
 
   card.addEventListener('touchstart', onPointerDown, { passive: false });
@@ -1386,6 +1488,11 @@
     renderMetaSummary();
     renderGoal();
     renderSound();
+    // First visit (#26): four zeros and a shop you can't afford anything in say
+    // nothing to someone who hasn't played yet. Both appear after the first run.
+    const played = (meta.runs || 0) > 0;
+    metaSummary.classList.toggle('hidden', !played);
+    mirrorBtn.classList.toggle('hidden', !played);
   }
 
   showTitle();

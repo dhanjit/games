@@ -499,7 +499,9 @@ body {
   max-width: 44%;
   white-space: normal;
   pointer-events: none;
-  opacity: 0;
+  /* Readable at rest (#26) — a first-time player must never have to blind-drag to
+     learn the options. Tilting still lights the weighed side to gold. */
+  opacity: 0.55;
   transition: opacity 0.15s, transform 0.15s, color 0.15s, border-color 0.15s;
 }
 .choice.left  { left: 16px;  text-align: left;  transform: translateX(-6px); }
@@ -693,6 +695,7 @@ body {
 .overlay.end-falsesummit #endTitle { color: var(--gold); opacity: 0.9; transition: text-shadow 1.2s ease, opacity 1.2s ease; }
 /* On reveal, the narration re-enters with the truth and the button re-labels. */
 #endScreen.reveal #endReason { animation: csFadeUp 0.9s ease-out both; }
+#endScreen.reveal .end-cause { animation: csFadeUp 0.6s ease-out 0.2s both; }
 #endScreen.reveal button     { animation: csFadeUp 0.6s ease-out 0.3s both; }
 .overlay.end-falsesummit .end-deva { color: var(--bhakti, #9b7bff); }
 
@@ -701,6 +704,7 @@ body {
 #endScreen.play .end-deva   { animation: csFadeUp 0.6s ease-out 0.50s both; }
 #endScreen.play #endTitle   { animation: csFadeUp 0.6s ease-out 0.70s both; }
 #endScreen.play #endReason  { animation: csFadeUp 0.7s ease-out 0.95s both; }
+#endScreen.play .end-cause  { animation: csFadeUp 0.6s ease-out 1.10s both; }
 #endScreen.play .run-stats  { animation: csFadeUp 0.5s ease-out 1.20s both; }
 #endScreen.play button      { animation: csFadeUp 0.5s ease-out 1.40s both; }
 @keyframes endArtIn { 0% { opacity: 0; transform: translateY(22px) scale(0.82); } 100% { opacity: 1; transform: none; } }
@@ -736,7 +740,10 @@ body {
   color: var(--ink-dim);
   max-width: 32ch;
   margin: 0;
+  text-align: center;
 }
+.footnote p { margin: 0 0 6px; }
+.footnote p:last-child { margin: 0; }
 
 button.primary, button.ghost {
   appearance: none;
@@ -827,6 +834,22 @@ button.ghost:active { background: rgba(255,255,255,0.08); }
   margin: 4px 0 8px;
 }
 .meta-summary span b { color: var(--gold); font-weight: 700; }
+/* There is deliberately no global .hidden (the toast animates its own). These three
+   are toggled by JS: the first-run title (#26) and the end-screen cause line (#27). */
+.meta-summary.hidden, #mirrorBtn.hidden, .end-cause.hidden { display: none; }
+
+/* The plain cause of death (#27), coloured by the virtue that ended the run. */
+.end-cause {
+  margin: -2px 0 12px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink-dim);
+  max-width: 32ch;
+}
+.end-cause.stat-prana  { color: var(--stat-prana); }
+.end-cause.stat-tejas  { color: var(--stat-tejas); }
+.end-cause.stat-karma  { color: var(--stat-karma); }
+.end-cause.stat-bhakti { color: var(--stat-bhakti); }
 
 .run-stats {
   display: grid;
