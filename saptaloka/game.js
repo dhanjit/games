@@ -154,6 +154,7 @@
     nextCardOverride: null,
     flags: new Set(),      // within-run karmic memory: deeds done, NPCs met
     karmaQueue: [],         // scheduled payoffs: { card, atRealm } — deeds that ripen later
+    restDone: false,        // this realm's waystation already drawn (reset on realm entry)
     cutscenePaused: false,
     beatPaused: false,      // consequence beat is showing (gates new swipes; distinct from cutscenePaused)
     beatTimer: null,        // auto-advance setTimeout id for the beat
@@ -183,6 +184,7 @@
     return CARDS.filter(card => {
       if (card.tag === 'boss') return false;
       if (card.tag === 'karma') return false; // payoff-only: drawn from the karma queue, never at random
+      if (card.tag === 'rest')  return false; // waystation: drawn once per realm at its midpoint, never at random
       if (card.realmMin && realmNum < card.realmMin) return false;
       if (card.realmMax && realmNum > card.realmMax) return false;
       // Karmic gating: a card may require past deeds, or be barred once a deed is done.
@@ -217,6 +219,14 @@
 
   function pickBossForRealm(realmNum) {
     return CARDS.find(c => c.tag === 'boss' && c.realm === realmNum);
+  }
+
+  // The realm's waystation (#33): its one reliable prāṇa source, drawn at the
+  // realm's midpoint step (5→2, 6→2, 7→3, 8→3) — far enough in to need it, before
+  // the boss so it can be spent on him. Exactly one `tag: 'rest'` card per realm.
+  function restStep(realm) { return Math.floor((realm.length - 1) / 2); }
+  function pickRestForRealm(realmNum) {
+    return CARDS.find(c => c.tag === 'rest' && c.realm === realmNum);
   }
 
   function rememberCard(id) {
@@ -291,10 +301,11 @@
     cardText.textContent    = c.text || '';
     choiceLeft.textContent  = c.left?.label || '←';
     choiceRight.textContent = c.right?.label || '→';
-    card.classList.remove('boss', 'god', 'karma', 'show-left', 'show-right');
+    card.classList.remove('boss', 'god', 'karma', 'rest', 'show-left', 'show-right');
     if (c.tag === 'boss')  { card.classList.add('boss'); window.SaptalokaAudio?.play?.('boss'); }
     if (c.tag === 'god')   card.classList.add('god');
     if (c.tag === 'karma') card.classList.add('karma');
+    if (c.tag === 'rest')  card.classList.add('rest');
     card.style.transition = 'none';
     card.style.transform = 'translate(0, 80px) scale(0.96) rotate(0deg)';
     card.style.opacity = '0';
@@ -571,6 +582,7 @@
     state.nextCardOverride = null;
     state.flags = new Set();
     state.karmaQueue = [];
+    state.restDone = false;
     applyStartingUpgrades();
     state.inRun = true;
     hideBeat();
@@ -598,6 +610,11 @@
       next = pickBossForRealm(state.realmIdx + 1);
     } else if (state.nextCardOverride) {
       next = pickRandomCard();            // immediate `then` chain consumes the override
+    } else if (!state.restDone && state.realmStep >= restStep(realm)) {
+      // Waystation: once per realm, at the midpoint — or the first free step after
+      // it if a `then` chain held that slot. A ripened deed waits one more card.
+      state.restDone = true;
+      next = pickRestForRealm(state.realmIdx + 1) || dueKarmaCard() || pickRandomCard();
     } else {
       next = dueKarmaCard() || pickRandomCard();  // a ripened deed jumps the queue
     }
@@ -900,6 +917,7 @@
       }
       state.realmIdx++;
       state.realmStep = 0;
+      state.restDone = false;
       renderHud();
       floatDeltas(before);
       // Ascension cutscene; deltas ride along in its single announcement; the

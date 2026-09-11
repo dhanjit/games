@@ -17,11 +17,12 @@
   //   ambient — { stat: n } landed on every card of the realm, whichever way it went
   const RULES = [
     null, // Bhūloka — the tutorial realm stays plain
-    { // Bhuvarloka — the atmospheres. ×1.25, not ×1.5: the sim showed the steeper
-      // version stacked onto prāṇa (already ~57% of careful deaths) and halved the
-      // no-upgrade win rate without adding anything to learn. Revisit with #33.
-      text: 'Here the storm-air steals breath: every loss of prāṇa cuts a quarter deeper.',
-      delta: (stat, d) => (stat === 'prana' && d < 0) ? Math.round(d * 1.25) : d,
+    { // Bhuvarloka — the atmospheres. Shipped at ×1.25 in #31 because the steeper
+      // version stacked onto a prāṇa clock nobody could refill. Back to ×1.5 with
+      // #33: the realm now has a waystation (the yaksha's cave), so the storm is a
+      // cost you can answer — the sim reads the same win rate at ×1.25 and ×1.5.
+      text: 'Here the storm-air steals breath: every loss of prāṇa cuts half again as deep.',
+      delta: (stat, d) => (stat === 'prana' && d < 0) ? Math.round(d * 1.5) : d,
     },
     { // Svarloka — Indra's heaven
       text: "In Indra's heaven the gods give freely — their gifts of tejas land twice as hard.",
@@ -33,10 +34,11 @@
       text: 'Austerity burns: your tejas climbs with every step, whether you will it or not.',
       ambient: { tejas: 3 },
     },
-    // Satyaloka — truth. Its rule ("no breath returns — what prāṇa you carry is all
-    // you have") is held until prāṇa can be earned (#33): with no source in the deck
-    // it only tightens a countdown the player can't influence. Re-introduce there.
-    null,
+    { // Satyaloka — truth. Restored with #33: now that every realm below has a
+      // waystation, "no breath returns" is a test of what you banked, not a tax.
+      text: 'At the last threshold no breath returns — what prāṇa you carry is all you have.',
+      delta: (stat, d) => (stat === 'prana' && d > 0) ? 0 : d,
+    },
   ];
 
   function rule(realmIdx) {

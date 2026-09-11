@@ -434,6 +434,19 @@ body {
 }
 .card.karma .card-speaker { color: var(--stat-karma); }
 
+/* A waystation — the realm's one rest. Warm and low-lit, a lamp in a doorway. */
+.card.rest {
+  background:
+    radial-gradient(120% 60% at 50% 100%, rgba(245,201,122,0.22), transparent 60%),
+    linear-gradient(180deg, #221634 0%, #1a1026 100%);
+  border-color: rgba(245,201,122,0.4);
+  box-shadow:
+    0 30px 60px -20px rgba(0,0,0,0.75),
+    0 0 26px rgba(245,201,122,0.12),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+.card.rest .card-speaker { color: var(--stat-prana); }
+
 .card-art {
   font-size: 96px;
   line-height: 1;

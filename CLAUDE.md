@@ -55,10 +55,12 @@ serves the repo root as-is: hub at `/`, each game under its path (e.g.
 
 - **Manual deploy** (repo root): `wrangler deploy` — wrangler is OAuth-authed on
   this machine. Use this to push immediately.
-- **Auto-deploy on push** requires **Workers Builds** connected in the dashboard:
-  Workers & Pages → `games` → Settings → Build → Connect to Git (repo
-  `dhanjit/games`, branch `main`, deploy command `wrangler deploy`). Until that's
-  connected, pushing to `main` does **not** redeploy — deploy manually.
+- **Auto-deploy on push is live.** Workers Builds is connected (repo
+  `dhanjit/games`, branch `main`, deploy command `wrangler deploy`), so a merge to
+  `main` redeploys within about half a minute (observed 2026-09-11: merged
+  16:00:17 UTC, deployed 16:00:51). `wrangler deploy` still works for an
+  immediate manual push. If the connection is ever dropped, reconnect it under
+  Workers & Pages → `games` → Settings → Build → Connect to Git.
 - Custom domain `games.dhanjit.me` via the Worker's **Domains & Routes** tab (a
   domain attaches to one product only — if an old Pages project still claims it,
   detach there first).
