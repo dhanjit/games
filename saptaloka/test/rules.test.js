@@ -18,10 +18,10 @@ test('Bhūloka has no rule: every delta is identity, no ambient, no text', () =>
   assert.strictEqual(Rules.rule(BHULOKA), null);
 });
 
-test('Bhuvarloka: prāṇa drains ×1.25 (rounded); gains and other stats untouched', () => {
-  assert.strictEqual(Rules.delta(BHUVARLOKA, 'prana', -8, mortal), -10);
-  assert.strictEqual(Rules.delta(BHUVARLOKA, 'prana', -12, mortal), -15);
-  assert.strictEqual(Rules.delta(BHUVARLOKA, 'prana', -7, mortal), Math.round(-8.75));
+test('Bhuvarloka: prāṇa drains ×1.5 (rounded); gains and other stats untouched', () => {
+  assert.strictEqual(Rules.delta(BHUVARLOKA, 'prana', -8, mortal), -12);
+  assert.strictEqual(Rules.delta(BHUVARLOKA, 'prana', -12, mortal), -18);
+  assert.strictEqual(Rules.delta(BHUVARLOKA, 'prana', -7, mortal), Math.round(-10.5));
   assert.strictEqual(Rules.delta(BHUVARLOKA, 'prana', +4, mortal), +4);
   assert.strictEqual(Rules.delta(BHUVARLOKA, 'tejas', -8, mortal), -8);
   assert.strictEqual(Rules.delta(BHUVARLOKA, 'karma', -8, mortal), -8);
@@ -37,8 +37,8 @@ test("Svarloka: tejas gains from god cards doubled; mortals' gifts and any loss 
   assert.strictEqual(Rules.ambient(SVARLOKA), null);
 });
 
-test('Maharloka, Janaloka and Satyaloka are neutral in this pass (Satyaloka waits on #33)', () => {
-  for (const r of [MAHARLOKA, JANALOKA, SATYALOKA]) {
+test('Maharloka and Janaloka are neutral in this pass', () => {
+  for (const r of [MAHARLOKA, JANALOKA]) {
     for (const s of STATS) assert.strictEqual(Rules.delta(r, s, -5, god), -5);
     assert.strictEqual(Rules.ambient(r), null);
     assert.strictEqual(Rules.rule(r), null);
@@ -50,8 +50,15 @@ test('Tapoloka: +3 tejas ambient on every card; deltas themselves identity', () 
   for (const s of STATS) assert.strictEqual(Rules.delta(TAPOLOKA, s, +5, god), +5);
 });
 
+test('Satyaloka: prāṇa gains become 0; drains and other stats untouched', () => {
+  assert.strictEqual(Rules.delta(SATYALOKA, 'prana', +4, mortal), 0);
+  assert.strictEqual(Rules.delta(SATYALOKA, 'prana', -5, mortal), -5);
+  assert.strictEqual(Rules.delta(SATYALOKA, 'bhakti', +11, god), +11);
+  assert.strictEqual(Rules.ambient(SATYALOKA), null);
+});
+
 test('every realm with a rule carries one line of cutscene text', () => {
-  for (const r of [BHUVARLOKA, SVARLOKA, TAPOLOKA]) {
+  for (const r of [BHUVARLOKA, SVARLOKA, TAPOLOKA, SATYALOKA]) {
     const rule = Rules.rule(r);
     assert.ok(rule && typeof rule.text === 'string' && rule.text.length > 20, `realm ${r}`);
   }

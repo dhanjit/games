@@ -46,6 +46,13 @@ the machine's LAN IP. iOS PWA install: Share → Add to Home Screen.
   realm. `pickBossForRealm` does `find`, not filter — duplicates silently lose.
 - Bosses are auto-drawn at the last step of each realm; do not put them in the
   normal pool.
+- **Waystations** use **`realm: <n>` + `tag: 'rest'`**, exactly one per realm, and
+  are likewise never in the pool. `drawNextCard` draws the realm's waystation once,
+  at `restStep(realm)` = `floor((length − 1) / 2)` — or the first free step after
+  it if a `then` chain held that slot (`state.restDone` tracks it, reset on realm
+  entry). Realms 1–6 give prāṇa on one side at the cost of another virtue;
+  Satyaloka's is dry by design (its realm rule zeroes prāṇa gains).
+  `test/cards.test.js` enforces all of this.
 - `weight` defaults to 1 if omitted.
 - `recentIds` keeps the last 7 drawn cards out of the pool. If a too-narrow
   realm filter empties the pool, the engine wipes `recentIds` and falls back to
@@ -82,7 +89,7 @@ Invariants:
   them. So they need **no** `realmMin/realmMax` — gating is the schedule. Don't
   put a normal card behind `tag:'karma'` or it'll never draw at random.
 - Draw priority in `drawNextCard`: boss step → `nextCardOverride` (`then`) →
-  due karma → random.
+  the realm's waystation (once, at/after its midpoint) → due karma → random.
 - Payoff `fx` should be **plain objects** (not function fx) so Sage's Eye
   previews them.
 - `renderCard` adds a `.card.karma` class (karma-blue cast in `style.css`) so a

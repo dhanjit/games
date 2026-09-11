@@ -612,6 +612,69 @@ const CARDS = [
              outcome: 'You deny ever keeping watch for the thief, lying to the very god you robbed. The unpaid debt curdles into something far heavier than the theft.' },
   }),
 
+  // ---------- WAYSTATIONS (one per realm) ----------
+  // tag:'rest' + realm:<n>, like bosses: never in the random pool, drawn once per
+  // realm at its midpoint (see drawNextCard). Each is the realm's one reliable
+  // source of prāṇa — bought with another virtue, so breath is a decision rather
+  // than a countdown. Satyaloka's is dry on purpose: its realm rule says no breath
+  // returns there, so the last waystation only asks what you'll carry across.
+
+  c('rest_dharamshala', {
+    realm: 1, tag: 'rest',
+    art: '🛖', speaker: 'The keeper of a dharamshala',
+    text: '"Dal, a mat, a roof that mostly holds. Free to any pilgrim. The god who built this asks only that you stay till dawn."',
+    left:  { label: 'Walk on through the night', fx: { tejas: +4 } },
+    right: { label: 'Stay till dawn',            fx: { prana: +10, tejas: -4 } },
+  }),
+
+  c('rest_yaksha_cave', {
+    realm: 2, tag: 'rest',
+    art: '🌩', speaker: 'A yaksha, dry inside its cave',
+    text: '"The storm out there strips the breath from you. Shelter is mine to give — for a tithe. A kindness you once did will do; I collect those."',
+    left:  { label: 'Weather it outside',    fx: { tejas: +3, bhakti: +2 } },
+    right: { label: 'Pay the tithe, shelter', fx: { prana: +9, karma: -5 } },
+  }),
+
+  c('rest_amrita', {
+    realm: 3, tag: 'rest',
+    art: '🏺', speaker: 'A cupbearer of the devas',
+    text: '"Amṛta. One sip mends the body entire. It also makes a mortal forget, a little, what he was climbing toward."',
+    left:  { label: 'Refuse the cup', fx: { bhakti: +4 } },
+    right: { label: 'One sip',        fx: { prana: +11, bhakti: -6 } },
+  }),
+
+  c('rest_sage_fire', {
+    realm: 4, tag: 'rest',
+    art: '🪵', speaker: "A sage's hut, its fire banked",
+    text: '"Sit. I will not speak, nor ask you to. Silence mends what speech cannot. But my fire is fed with tapas, and tonight it will be fed with yours."',
+    left:  { label: 'Bow and pass on',  fx: { karma: +3 } },
+    right: { label: 'Sit by the fire',  fx: { prana: +10, tejas: -6 } },
+  }),
+
+  c('rest_mind_born', {
+    realm: 5, tag: 'rest',
+    art: '🌙', speaker: "A mind-born child of Brahmā",
+    text: '"I can dream you whole again — the body, the breath, all of it. What I dream, I keep. Give me a deed to remember you by."',
+    left:  { label: 'Keep your deeds',              fx: { tejas: +3 } },
+    right: { label: 'Give a deed, be dreamed whole', fx: { prana: +10, karma: -5 } },
+  }),
+
+  c('rest_begging_bowl', {
+    realm: 6, tag: 'rest',
+    art: '🍚', speaker: "An ascetic's bowl, set down full",
+    text: '"He has fasted a hundred years and the bowl is full anyway — offered, never asked. Eat, and his devotion feeds you. Leave it, and it feeds him."',
+    left:  { label: 'Leave it for him',  fx: { bhakti: +4 } },
+    right: { label: 'Eat from the bowl', fx: { prana: +11, bhakti: -6 } },
+  }),
+
+  c('rest_dry_well', {
+    realm: 7, tag: 'rest',
+    art: '🏜', speaker: 'A well at the threshold, dry',
+    text: '"No water. No breath returns here — you carry across what you carried up. Choose what to set down."',
+    left:  { label: 'Set down your pride',   fx: { tejas: -6, bhakti: +4 } },
+    right: { label: 'Set down your longing', fx: { bhakti: -6, tejas: +4 } },
+  }),
+
   // ---------- BOSSES (one per realm) ----------
 
   c('boss_mahishasura', {
