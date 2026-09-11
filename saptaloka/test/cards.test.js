@@ -101,3 +101,27 @@ test('every ending has a title, Devanagari, narration and an inline SVG', () => 
     assert.ok(['death', 'falsesummit', 'win'].includes(e.kind), k);
   }
 });
+
+test("the offer: one per stat, accept on one side naming that stat's false summit, authored outcome on the other", () => {
+  for (const stat of ['karma', 'bhakti']) {
+    const offers = CARDS.filter(c => c.tag === 'offer' && c.stat === stat);
+    assert.strictEqual(offers.length, 1, `${stat} offers`);
+    const o = offers[0];
+    const acceptSides = ['left', 'right'].filter(s => o[s].accept);
+    assert.strictEqual(acceptSides.length, 1, `${o.id}: exactly one accept side`);
+    assert.strictEqual(o[acceptSides[0]].accept, 'false_' + stat, `${o.id}: accept names the ${stat} summit`);
+    assert.ok(ENDINGS[o[acceptSides[0]].accept], `${o.id}: accept must name a real ending`);
+    const refuse = acceptSides[0] === 'left' ? 'right' : 'left';
+    assert.ok(typeof o[refuse].outcome === 'string' && o[refuse].outcome.length > 20, `${o.id}: refuse carries an authored outcome`);
+    assert.ok(!o.realm && !o.realmMin && !o.realmMax, `${o.id}: served from the offer queue, not gated by realm`);
+  }
+});
+
+test('false-summit endings carry a `lie` that opens their narration (the staged reveal depends on it)', () => {
+  for (const k of ['false_karma', 'false_bhakti']) {
+    const e = ENDINGS[k];
+    assert.ok(typeof e.lie === 'string' && e.lie.length > 20, k);
+    assert.ok(e.narration.startsWith(e.lie), `${k}: lie must be the narration's opening`);
+    assert.ok(e.narration.length > e.lie.length + 20, `${k}: there must be a truth left to reveal`);
+  }
+});

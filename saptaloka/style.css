@@ -447,6 +447,20 @@ body {
 }
 .card.rest .card-speaker { color: var(--stat-prana); }
 
+/* The offer — heaven's gate, open. Brighter than a god card: this is the one that
+   wants to be taken. */
+.card.offer {
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(245,201,122,0.55), transparent 62%),
+    linear-gradient(180deg, #3b2a1a 0%, #1f1426 100%);
+  border-color: rgba(245,201,122,0.85);
+  box-shadow:
+    0 30px 60px -20px rgba(0,0,0,0.75),
+    0 0 42px rgba(245,201,122,0.35),
+    inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.card.offer .card-speaker { color: var(--gold); }
+
 .card-art {
   font-size: 96px;
   line-height: 1;
@@ -669,12 +683,17 @@ body {
 }
 .overlay.end-falsesummit {
   background: radial-gradient(120% 80% at 50% 34%, rgba(42,30,63,0.96) 0%, rgba(11,6,19,0.98) 100%);
+  transition: background 1.4s ease;   /* the staged reveal (#32) cools from end-win into this */
 }
 .overlay.end-win {
   background: radial-gradient(120% 80% at 50% 34%, rgba(64,44,18,0.96) 0%, rgba(11,6,19,0.98) 100%);
+  transition: background 1.4s ease;
 }
-.overlay.end-win #endTitle      { color: var(--gold); text-shadow: 0 0 26px rgba(245,201,122,0.55); }
-.overlay.end-falsesummit #endTitle { color: var(--gold); opacity: 0.9; }
+.overlay.end-win #endTitle      { color: var(--gold); text-shadow: 0 0 26px rgba(245,201,122,0.55); transition: text-shadow 1.2s ease; }
+.overlay.end-falsesummit #endTitle { color: var(--gold); opacity: 0.9; transition: text-shadow 1.2s ease, opacity 1.2s ease; }
+/* On reveal, the narration re-enters with the truth and the button re-labels. */
+#endScreen.reveal #endReason { animation: csFadeUp 0.9s ease-out both; }
+#endScreen.reveal button     { animation: csFadeUp 0.6s ease-out 0.3s both; }
 .overlay.end-falsesummit .end-deva { color: var(--bhakti, #9b7bff); }
 
 /* Staged reveal (skipped under reduced-motion — JS only adds .play then). */
