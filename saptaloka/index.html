@@ -98,8 +98,12 @@
       <button class="ghost" id="mirrorBtn">Mirror of Maya</button>
       <button class="ghost" id="rulesBtn">How to Play</button>
       <button class="ghost" id="soundBtnTitle">Sound: On</button>
-      <p class="footnote">Swipe left or right on each encounter. Keep all four virtues between 0 and 100.</p>
-      <p class="footnote"><a href="privacy.html">Privacy Policy</a></p>
+      <!-- One absolutely-positioned block, not two: two .footnote siblings shared the
+           same bottom offset and overlapped by a line at 375×812 (#26). -->
+      <div class="footnote">
+        <p>Swipe or drag each card left or right — or hold ← / → on a keyboard. Keep all four virtues between 0 and 100.</p>
+        <p><a href="privacy.html">Privacy Policy</a></p>
+      </div>
     </section>
 
     <!-- Unified ending screen: SVG art + Devanagari + title + narration per ending. -->
@@ -108,6 +112,9 @@
       <div class="end-deva" id="endDeva" aria-hidden="true"></div>
       <h2 id="endTitle"></h2>
       <p id="endReason"></p>
+      <!-- The plain cause (#27): which virtue, which edge, and the encounter that did it.
+           The narration above stays poetry; this line is the lesson. -->
+      <p class="end-cause hidden" id="endCause"></p>
       <div class="run-stats" id="endStats"></div>
       <button class="primary" id="endPrimary">Reincarnate</button>
       <button class="ghost" id="endMirror">Mirror of Maya</button>
