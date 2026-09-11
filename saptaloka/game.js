@@ -155,6 +155,8 @@
     flags: new Set(),      // within-run karmic memory: deeds done, NPCs met
     karmaQueue: [],         // scheduled payoffs: { card, atRealm } — deeds that ripen later
     restDone: false,        // this realm's waystation already drawn (reset on realm entry)
+    offerQueue: [],         // stats ('karma'/'bhakti') whose offer is the next draw (#32)
+    offered: new Set(),     // stats already offered this run — the offer comes once
     cutscenePaused: false,
     beatPaused: false,      // consequence beat is showing (gates new swipes; distinct from cutscenePaused)
     beatTimer: null,        // auto-advance setTimeout id for the beat
@@ -185,6 +187,7 @@
       if (card.tag === 'boss') return false;
       if (card.tag === 'karma') return false; // payoff-only: drawn from the karma queue, never at random
       if (card.tag === 'rest')  return false; // waystation: drawn once per realm at its midpoint, never at random
+      if (card.tag === 'offer') return false; // the false-summit offer: served from offerQueue, never at random
       if (card.realmMin && realmNum < card.realmMin) return false;
       if (card.realmMax && realmNum > card.realmMax) return false;
       // Karmic gating: a card may require past deeds, or be barred once a deed is done.
@@ -227,6 +230,24 @@
   function restStep(realm) { return Math.floor((realm.length - 1) / 2); }
   function pickRestForRealm(realmNum) {
     return CARDS.find(c => c.tag === 'rest' && c.realm === realmNum);
+  }
+
+  // The offer (#32): a false summit made a choice. Crossing OFFER_AT queues it;
+  // it's built at draw time from the live value so both sides carry concrete
+  // deltas Sage's Eye can preview. Refuse drops the virtue to OFFER_FLOOR — the
+  // merit that opened the gates is spent on the turning — and costs OFFER_TOLL
+  // prāṇa: "the climb is long". Without the toll the sim showed refusal acting as
+  // a summit safety valve (careful play 45% → 73%); −6 breath lands it back at
+  // neutral (42%) with the accidental summit itself gone (20% → 4%). Accept fills
+  // the virtue to 100 and ends the run at that heaven (commitChoice → endRun, staged).
+  const OFFER_AT = 85, OFFER_FLOOR = 75, OFFER_TOLL = 6;
+  function buildOffer(stat) {
+    const t = CARDS.find(c => c.tag === 'offer' && c.stat === stat);
+    if (!t) return null;
+    return Object.assign({}, t, {
+      left:  Object.assign({}, t.left,  { fx: { [stat]: OFFER_FLOOR - state[stat], prana: -OFFER_TOLL } }),
+      right: Object.assign({}, t.right, { fx: { [stat]: Math.max(0, 100 - state[stat]) } }),
+    });
   }
 
   function rememberCard(id) {
@@ -301,11 +322,12 @@
     cardText.textContent    = c.text || '';
     choiceLeft.textContent  = c.left?.label || '←';
     choiceRight.textContent = c.right?.label || '→';
-    card.classList.remove('boss', 'god', 'karma', 'rest', 'show-left', 'show-right');
+    card.classList.remove('boss', 'god', 'karma', 'rest', 'offer', 'show-left', 'show-right');
     if (c.tag === 'boss')  { card.classList.add('boss'); window.SaptalokaAudio?.play?.('boss'); }
     if (c.tag === 'god')   card.classList.add('god');
     if (c.tag === 'karma') card.classList.add('karma');
     if (c.tag === 'rest')  card.classList.add('rest');
+    if (c.tag === 'offer') card.classList.add('offer');
     card.style.transition = 'none';
     card.style.transform = 'translate(0, 80px) scale(0.96) rotate(0deg)';
     card.style.opacity = '0';
@@ -563,9 +585,11 @@
     if (state.tejas <= 0)   return 'death_tejas_low';
     if (state.tejas >= 100) return 'death_tejas_burn';
     if (state.karma <= 0)   return 'death_karma';
-    if (state.karma >= 100) return 'false_karma';
+    // A summit can't take you while its offer is pending — the gates open at the
+    // next draw, and what you do there decides (#32).
+    if (state.karma >= 100  && !state.offerQueue.includes('karma'))  return 'false_karma';
     if (state.bhakti <= 0)  return 'death_bhakti';
-    if (state.bhakti >= 100) return 'false_bhakti';
+    if (state.bhakti >= 100 && !state.offerQueue.includes('bhakti')) return 'false_bhakti';
     return null;
   }
 
@@ -583,6 +607,9 @@
     state.flags = new Set();
     state.karmaQueue = [];
     state.restDone = false;
+    state.offerQueue = [];
+    state.offered = new Set();
+    clearTimeout(revealTimer); revealTimer = null;   // a staged reveal from the last run must not land on this one
     applyStartingUpgrades();
     state.inRun = true;
     hideBeat();
@@ -610,6 +637,9 @@
       next = pickBossForRealm(state.realmIdx + 1);
     } else if (state.nextCardOverride) {
       next = pickRandomCard();            // immediate `then` chain consumes the override
+    } else if (state.offerQueue.length) {
+      // Heaven's reach: the offer jumps everything but a boss or a `then` chain.
+      next = buildOffer(state.offerQueue.shift()) || dueKarmaCard() || pickRandomCard();
     } else if (!state.restDone && state.realmStep >= restStep(realm)) {
       // Waystation: once per realm, at the midpoint — or the first free step after
       // it if a `then` chain held that slot. A ripened deed waits one more card.
@@ -902,6 +932,17 @@
 
     const realm = REALMS[state.realmIdx];
     const isFinalStep = state.realmIdx === REALMS.length - 1 && state.realmStep >= realm.length - 1;
+    // Accepting a false heaven ends the run there, staged as a win first. It must
+    // pre-empt checkEnd, which would see 100 and fire the same ending un-staged.
+    if (choice && choice.accept) return endRun(choice.accept, { staged: true });
+    // Crossing into heaven's reach queues that stat's offer as the next draw. Once
+    // per stat per run: refuse it, and the second time the summit simply takes you.
+    for (const s of ['karma', 'bhakti']) {
+      if (before[s] < OFFER_AT && state[s] >= OFFER_AT && !state.offered.has(s)) {
+        state.offered.add(s); state.offerQueue.push(s);
+      }
+    }
+
     let endKey = checkEnd();
     // On the last step of the last realm, completing the climb wins — don't let a
     // virtue overshooting to 100 demote it to a false summit. Deaths still fire.
@@ -990,12 +1031,20 @@
   }
 
   let lastEndKind = 'death';
+  let revealTimer = null;   // the staged false summit's pending reveal (#32)
 
-  function endRun(endKey) {
+  // opts.staged (#32): an accepted false heaven arrives dressed as the true win —
+  // gold, the OM resolve, the ending's `lie` line, "Begin Anew" — and REVEAL_MS
+  // later the treatment cools, the hollow chord sounds and the full narration lands.
+  // Sighted-only: reduced motion skips it, and the live region announces the whole
+  // truth at once. Meta accounting is identical either way (no mokṣa, no bonus).
+  const REVEAL_MS = 2600;
+  function endRun(endKey, opts = {}) {
     const e = ENDINGS[endKey] || ENDINGS.death_prana;
+    const staged = !!(opts.staged && e.kind === 'falsesummit' && e.lie && !REDUCED_MOTION);
     // Distinct cue per ending kind: the OM resolve for a true win, a hollow unresolved
     // chord for a false summit (Svarga/Deva — a false heaven, not a death), else the death drone.
-    window.SaptalokaAudio?.play?.(e.kind === 'win' ? 'win' : (e.kind === 'falsesummit' ? 'falsesummit' : 'death'));
+    window.SaptalokaAudio?.play?.((e.kind === 'win' || staged) ? 'win' : (e.kind === 'falsesummit' ? 'falsesummit' : 'death'));
     lastEndKind = e.kind;
     closeStatInfo();
     state.inRun = false;
@@ -1009,17 +1058,28 @@
     meta.bestRealm = Math.max(meta.bestRealm || 0, state.realmIdx + 1);
     saveMeta();
 
-    endScreen.className = 'overlay end-' + e.kind;
+    endScreen.className = 'overlay end-' + (staged ? 'win' : e.kind);
     endArt.innerHTML = e.svg || '';
     endDeva.textContent = e.deva || '';
     endTitle.textContent = e.title || '';
-    endReason.textContent = e.narration || '';
+    endReason.textContent = staged ? e.lie : (e.narration || '');
     endStats.innerHTML = runStatsHtml();
-    endPrimary.textContent = e.kind === 'win' ? 'Begin Anew' : 'Reincarnate';
+    endPrimary.textContent = (e.kind === 'win' || staged) ? 'Begin Anew' : 'Reincarnate';
     if (statAnnounce) statAnnounce.textContent = `${e.title}. ${e.narration || ''}`;
     void endScreen.offsetWidth;
     if (!REDUCED_MOTION) endScreen.classList.add('play');
     endScreen.focus();
+    if (staged) {
+      clearTimeout(revealTimer);
+      revealTimer = setTimeout(() => {
+        revealTimer = null;
+        endScreen.classList.remove('end-win');
+        endScreen.classList.add('end-falsesummit', 'reveal');
+        endReason.textContent = e.narration || '';
+        endPrimary.textContent = 'Reincarnate';
+        window.SaptalokaAudio?.play?.('falsesummit');
+      }, REVEAL_MS);
+    }
   }
 
   function runStatsHtml() {

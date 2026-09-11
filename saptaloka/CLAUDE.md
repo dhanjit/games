@@ -89,7 +89,21 @@ Invariants:
   them. So they need **no** `realmMin/realmMax` — gating is the schedule. Don't
   put a normal card behind `tag:'karma'` or it'll never draw at random.
 - Draw priority in `drawNextCard`: boss step → `nextCardOverride` (`then`) →
-  the realm's waystation (once, at/after its midpoint) → due karma → random.
+  a pending **offer** → the realm's waystation (once, at/after its midpoint) →
+  due karma → random.
+- **The offer (#32)** — `tag: 'offer'` + `stat`, one per stat, never in the pool.
+  `commitChoice` queues a stat's offer the first time it crosses `OFFER_AT` (85) in
+  a run (`state.offered` makes it once-only); while it's queued, `checkEnd` won't
+  fire that stat's false summit. `buildOffer` copies the template at draw time with
+  concrete fx (refuse → `OFFER_FLOOR` 75 and −`OFFER_TOLL` 6 prāṇa, accept → 100)
+  so Sage's Eye previews both. The toll is what keeps the offer difficulty-neutral
+  — re-sim before changing any of the three constants. The accept side carries `accept: '<ending key>'`; `commitChoice` routes it to
+  `endRun(key, { staged: true })` *before* `checkEnd`, which would otherwise fire the
+  same ending un-staged. Staging: the false summit arrives dressed as the win
+  (`ENDINGS[key].lie`, gold, OM cue, "Begin Anew"), then `REVEAL_MS` later swaps to
+  `end-falsesummit reveal` with the full narration. Reduced motion skips the
+  staging; the live region always announces the full truth. Refuse it and a later
+  overshoot ends the run the old way — the offer is made once.
 - Payoff `fx` should be **plain objects** (not function fx) so Sage's Eye
   previews them.
 - `renderCard` adds a `.card.karma` class (karma-blue cast in `style.css`) so a
