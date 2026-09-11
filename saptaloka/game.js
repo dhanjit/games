@@ -3,6 +3,7 @@
 
 (() => {
   const { REALMS, CARDS, CUTSCENES, ENDINGS } = window.SAPTALOKA;
+  const Rules = window.SaptalokaRules;   // rules.js — one mechanical rule per realm
   const STATS = ['prana', 'tejas', 'karma', 'bhakti'];
 
   // ---------- Persistent meta-progression ----------
@@ -122,6 +123,7 @@
   const csRoman      = $('csRoman');
   const csMeaning    = $('csMeaning');
   const csNarration  = $('csNarration');
+  const csRule       = $('csRule');
   const beatEl       = $('beat');
   const beatText     = $('beatText');
   const beatDeltas   = $('beatDeltas');
@@ -478,14 +480,17 @@
       statEls[s].removeAttribute('data-delta');
     }
     if (!fx || !state.preview) return;
+    const amb = Rules.ambient(state.realmIdx);
     for (const s of STATS) {
-      let d = fx[s];
+      // Mirror every applyFx transform, in its order, so the badge equals the
+      // post-commit (floating) delta: realm rule → Pilgrim's Stamina drain-softening
+      // → realm ambient → prāṇa cap → Equanimity damping.
+      let d = fx[s] ? Rules.delta(state.realmIdx, s, fx[s], state.currentCard) : 0;
+      if (s === 'prana' && d < 0) d = Math.round(d * state.pranaDrainFactor);
+      d += (amb && amb[s]) || 0;
       if (!d) continue;
-      // Mirror every applyFx transform so the badge equals the post-commit (floating)
-      // delta: prāṇa cap + Pilgrim's Stamina drain-softening + Equanimity damping.
       if (s === 'prana') {
-        if (d < 0) d = Math.round(d * state.pranaDrainFactor);
-        else d = Math.min(d, 100 - state.prana);
+        if (d > 0) d = Math.min(d, 100 - state.prana);
       } else if ((s === 'karma' || s === 'bhakti') && state.temperanceFactor < 1) {
         let nv = state[s] + d;
         if (nv > 82) nv = Math.round(82 + (nv - 82) * state.temperanceFactor);
@@ -506,13 +511,19 @@
 
   function applyFx(fx) {
     if (!fx) return;
+    // Realm rule first (rules.js): the loka bends the card's raw delta, then the
+    // Mirror upgrades soften what's left. showPreview mirrors this exact order.
+    const card = state.currentCard;
     for (const s of STATS) {
       if (!fx[s]) continue;
-      let d = fx[s];
+      let d = Rules.delta(state.realmIdx, s, fx[s], card);
       // Pilgrim's Stamina softens prāṇa drains only.
       if (s === 'prana' && d < 0) d = Math.round(d * state.pranaDrainFactor);
       state[s] += d;
     }
+    // The realm's ambient toll lands on every card, whichever way it was swiped.
+    const amb = Rules.ambient(state.realmIdx);
+    if (amb) for (const s of STATS) if (amb[s]) state[s] += amb[s];
     // Allow prana > 100 to be clamped (excess life is fine, just capped).
     state.prana = Math.min(100, state.prana);
     // Equanimity softens the approach to the karma/bhakti "false-summit" exits, so
@@ -613,12 +624,17 @@
     csRoman.textContent      = realm.name;
     csMeaning.textContent    = realm.subtitle;
     csNarration.textContent  = cs.narration || '';
+    // The realm's one rule, stated once here so the player meets it before it bites.
+    const rule = Rules.rule(realmIdx);
+    csRule.textContent = rule ? rule.text : '';
+    csRule.hidden = !rule;
     if (statAnnounce) {
       // Fold the boss-kill deltas into the same write so the live region doesn't
       // announce them and then immediately overwrite (they'd never be voiced).
       const lead = announcePrefix ? announcePrefix + '. ' : '';
+      const ruleLine = rule ? ' ' + rule.text : '';
       statAnnounce.textContent =
-        `${lead}Entering ${realm.name}, ${realm.subtitle}. ${cs.narration || ''} Tap to continue.`;
+        `${lead}Entering ${realm.name}, ${realm.subtitle}. ${cs.narration || ''}${ruleLine} Tap to continue.`;
     }
     cutscene.classList.remove('hidden', 'play');
     window.SaptalokaAudio?.play?.('ascend', { realm: realmIdx });
@@ -640,8 +656,9 @@
   }
 
   // ---------- Consequence beat ----------
-  // A short animated "what happened" shown after a normal (non-end, non-realm-complete)
-  // swipe. Auto-advances; an early tap/click/key skips it. Decorative (aria-hidden) —
+  // A short animated "what happened" shown after a swipe whose choice carries a
+  // hand-written `outcome` (karma payoffs today). Ordinary cards skip it and go
+  // straight to the next card. Auto-advances; an early tap/click/key skips it. Decorative (aria-hidden) —
   // the #statAnnounce live region remains the single screen-reader source, written once
   // in onDone. Under reduced motion the visual is skipped and onDone fires immediately.
   // Auto-advance is a *fallback* for when the player doesn't tap — so it must be long
@@ -674,15 +691,19 @@
     for (const s of ['karma', 'bhakti', 'tejas', 'prana']) {
       const a = Math.abs(d[s]); if (a > domAbs) { domAbs = a; dom = s; }
     }
-    const text = (window.SaptalokaBeat && window.SaptalokaBeat.outcomeText)
-      ? window.SaptalokaBeat.outcomeText(choice, d, state.currentCard)
-      : '';
-
+    // The beat is reserved for choices with a hand-written `outcome` (karma payoffs
+    // today; bosses once theirs are written). Ordinary cards go straight to the next
+    // card — the HUD's floating deltas already say what happened, and a templated
+    // sentence 47 times a climb was a pause, not a reward. (#30)
+    const authored = !!(choice && typeof choice.outcome === 'string' && choice.outcome);
     // Skip the visual beat under reduced motion OR while the tutorial overlay is up
     // (the tutorial's own spotlights explain the first swipe; a beat would sit behind it).
-    if (REDUCED_MOTION || (tutorial && !tutorial.classList.contains('hidden'))) {
+    if (!authored || REDUCED_MOTION || (tutorial && !tutorial.classList.contains('hidden'))) {
       Promise.resolve().then(onDone); return;
     }
+    const text = (window.SaptalokaBeat && window.SaptalokaBeat.outcomeText)
+      ? window.SaptalokaBeat.outcomeText(choice, d, state.currentCard)
+      : choice.outcome;
 
     let done = false;
     const finish = () => {

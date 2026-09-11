@@ -133,12 +133,14 @@
     <!-- Realm-ascension cutscene. Whole surface is the tap target (no buttons). -->
     <section id="cutscene" class="overlay cutscene hidden"
              role="dialog" aria-modal="true" aria-labelledby="csRoman"
-             aria-describedby="csMeaning csNarration" tabindex="-1">
+             aria-describedby="csMeaning csNarration csRule" tabindex="-1">
       <div class="cs-inner">
         <div class="cs-deva title-art" id="csDevanagari" aria-hidden="true"></div>
         <div class="cs-roman"     id="csRoman"></div>
         <div class="cs-meaning"   id="csMeaning"></div>
         <p   class="cs-narration" id="csNarration"></p>
+        <!-- The realm's one mechanical rule (rules.js), stated once on entry. Hidden for realms without one. -->
+        <p   class="cs-rule"      id="csRule" hidden></p>
         <div class="cs-hint"      id="csHint" aria-hidden="true">tap to ascend</div>
       </div>
     </section>
@@ -159,6 +161,7 @@
 
   <script src="cards.js"></script>
   <script src="beat.js"></script>
+  <script src="rules.js"></script>
   <script src="audio.js"></script>
   <script src="game.js"></script>
   <!-- Register the offline service worker. Kept after the game scripts so it never
