@@ -9,9 +9,12 @@ this `saptaloka/` folder (the repo root is a game-agnostic hub — see the root
 ## Architecture in 30 seconds
 
 ```
-saptaloka/index.html  → loads cards.js, then game.js (order matters)
-cards.js    → exposes window.SAPTALOKA = { REALMS, CARDS } (data only)
-game.js     → IIFE; reads window.SAPTALOKA at boot
+saptaloka/index.html  → loads cards.js, beat.js, rules.js, audio.js, then game.js (order matters)
+cards.js    → exposes window.SAPTALOKA = { REALMS, CARDS, CUTSCENES, ENDINGS } (data only)
+beat.js     → window.SaptalokaBeat; consequence-beat text (pure, node-tested)
+rules.js    → window.SaptalokaRules; one mechanical rule per realm (pure, node-tested,
+              and the file balance sims should load — see "Realm rules" below)
+game.js     → IIFE; reads window.SAPTALOKA / SaptalokaRules at boot
 style.css   → CSS vars in :root drive the theme; mobile-first, safe-area aware
 manifest.webmanifest → PWA install metadata; icons in icons/ (PNG)
 sw.js       → offline service worker (precache + stale-while-revalidate)
@@ -114,6 +117,25 @@ not grant mokṣa.
 
 `Second Breath` only saves prāṇa-zero deaths. The other four end conditions
 ignore it.
+
+## Realm rules (rules.js)
+
+Each realm may carry **one** mechanical rule, indexed by 0-based `realmIdx` in
+[rules.js](rules.js): a `delta(stat, d, card)` transform on a card's raw delta,
+and/or an `ambient` `{stat: n}` landed on every card of that realm. The entry
+cutscene states the rule's `text` once (`#csRule`). Order inside `applyFx`:
+**realm delta → Pilgrim's Stamina → realm ambient → prāṇa cap → Equanimity**, and
+`showPreview` (Sage's Eye) mirrors that order exactly — change one, change both.
+Keep rules.js DOM-free: it's `require`d by `test/rules.test.js` and by balance
+sims, so the numbers a sim reports are the game's own, not a re-implementation.
+
+## Consequence beat (beat.js)
+
+The post-swipe beat (`showConsequenceBeat`) fires **only** for a choice with a
+hand-written `outcome` string — the karma payoffs today. Ordinary cards go straight
+to the next card; the HUD's floating deltas carry the "what happened". The
+templated generator in beat.js still exists and is tested, but the game no longer
+reaches it — remove it only if you're sure nobody wants it back.
 
 Two Mirror upgrades add post-effect transforms in `applyFx` (default off — both
 factors are 1 without the upgrade):
