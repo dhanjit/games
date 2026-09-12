@@ -195,3 +195,34 @@ exists, and a repo nobody can open forfeits it entirely.
 competitive — unreleased commercial plans, a publisher agreement, revenue
 detail. Then supersede this entry rather than quietly self-censoring entries
 one at a time, which is how a decisions log rots into a press release.
+
+## 7 — A balance change is a hypothesis until the simulator has run it.
+
+*2026-09-12.* Saptaloka's engine is small enough to mirror in a script: load
+`cards.js` and `rules.js` the way the game does, play a few thousand runs with
+two or three crude strategies, and read the win rate and the death mix. It takes
+a minute. In one week of tuning it overturned four designs that read as
+obviously right:
+
+- Realm rules that stacked on prāṇa — already the dominant cause of death —
+  halved the win rate without adding anything to learn. Shipped softer, then
+  restored once every realm had a source of breath.
+- The false-summit offer, with refusal costing only the virtue, was a *gift*: it
+  defused the summit and careful play jumped from 45% to 73%. Six prāṇa on
+  refusal put it back at neutral.
+- Boss variants keyed to random seed cards moved the win rate by about one
+  point, however strong the boon — a seed that appears in a third of runs cannot
+  be a skill.
+- And the largest lever in the game turned out to be one nobody had designed: a
+  player who plays the waystation well beats a careful one by seventeen points
+  with no boss variants at all. So the bosses *name* the stance instead of
+  pricing it — amplifying that decision mostly punished players who hadn't
+  learned it yet.
+
+The rule: no balance or system change ships on the strength of reading well.
+Sim it before, sim it after, and put the before/after in the pull request. The
+simulator itself is disposable; the habit is not.
+
+**Revisit when:** the engine grows a mechanic a script can't mirror cheaply —
+real-time input, hidden information the bot can't see. Then the answer is a
+better harness, not skipping the step.

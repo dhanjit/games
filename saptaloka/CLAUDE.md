@@ -42,8 +42,21 @@ the machine's LAN IP. iOS PWA install: Share → Add to Home Screen.
 ## Card data — invariants and gotchas
 
 - Normal card gating uses **`realmMin` / `realmMax`** (1..7, inclusive).
-- Boss card gating uses **`realm: <n>` + `tag: 'boss'`**, exactly one per
-  realm. `pickBossForRealm` does `find`, not filter — duplicates silently lose.
+- Boss card gating uses **`realm: <n>` + `tag: 'boss'`**. Each realm has exactly
+  one **unconditional base** boss and any number of **variants** carrying
+  `requires` / `forbids` on flags planted earlier in the run (#34: the boss reads
+  the seeds). `pickBossForRealm` returns the first eligible variant, else the
+  base — order in CARDS only breaks ties between variants. A variant keeps the
+  base's `speaker`: same boss, different footing. `test/cards.test.js` checks one
+  base per realm and that every required flag is actually planted by some choice.
+- **Stance (text only).** Every waystation plants `rested` (the breath side) or
+  `pressed` and clears the other; each base boss carries `stance: { rested,
+  pressed }` and `withStance` appends the matching line to its text at draw time.
+  No fx, deliberately: the sim showed the waystation decision is already the
+  game's largest skill lever (+17 points for playing it well, no variants needed)
+  and that pricing the stance into the boss mostly punished players who hadn't
+  learned it — see `DECISIONS.md` #7. Deed variants override the base and carry
+  no stance line. Don't give the stance numbers without re-running that sim.
 - Bosses are auto-drawn at the last step of each realm; do not put them in the
   normal pool.
 - **Waystations** use **`realm: <n>` + `tag: 'rest'`**, exactly one per realm, and
