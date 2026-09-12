@@ -94,11 +94,11 @@ const CARDS = [
   }),
 
   c('river_crossing', {
-    realmMin: 1, realmMax: 3, weight: 1,
+    realmMin: 1, realmMax: 2, weight: 1,   // Vṛtra (realm 2) reads the Ganga — a seed must come before its boss
     art: '🌊', speaker: 'The Ganga',
     text: 'The river-mother whispers from the foam. "Drink, and remember a former life. Or pass dry-mouthed."',
-    left:  { label: 'Cross dry-shod', fx: { prana: +4, bhakti: -3 } },
-    right: { label: 'Drink deeply',   fx: { prana: -5, bhakti: +8, tejas: +2 } },
+    left:  { label: 'Cross dry-shod', fx: { prana: +4, bhakti: -3 }, set: ['crossed_dry'] },
+    right: { label: 'Drink deeply',   fx: { prana: -5, bhakti: +8, tejas: +2 }, set: ['drank_ganga'] },
   }),
 
   c('forest_tiger', {
@@ -388,13 +388,13 @@ const CARDS = [
   // ---------- Travelers / mortals - filler with meaningful tradeoffs ----------
 
   c('dying_soldier', {
-    realmMin: 1, realmMax: 4, weight: 1, forbids: ['met_soldier'],
+    realmMin: 1, realmMax: 2, weight: 1, forbids: ['met_soldier'],   // Vṛtra reads the sword
     art: '🗡', speaker: 'A dying soldier',
     text: '"Take my sword. Promise to use it for the side I betrayed."',
     left:  { label: 'Bury it with him',  fx: { karma: +4, bhakti: +3, tejas: -2 },
-             set: ['met_soldier'], ripens: { card: 'soldier_spirit', in: 1 } },
+             set: ['met_soldier', 'buried_sword'], ripens: { card: 'soldier_spirit', in: 1 } },
     right: { label: 'Take it',           fx: { tejas: +5, karma: -6 },
-             set: ['met_soldier'], ripens: { card: 'sword_reckoning', in: 1 } },
+             set: ['met_soldier', 'took_sword'], ripens: { card: 'sword_reckoning', in: 1 } },
   }),
 
   c('runaway_bride', {
@@ -408,13 +408,13 @@ const CARDS = [
   }),
 
   c('thief_at_temple', {
-    realmMin: 1, realmMax: 4, weight: 1, forbids: ['met_thief'],
+    realmMin: 1, realmMax: 3, weight: 1, forbids: ['met_thief'],   // Bali (realm 3) reads the temple
     art: '💎', speaker: 'A thief in temple shadow',
     text: '"Half the loot if you keep watch. The deity has plenty."',
     left:  { label: 'Refuse and warn priest', fx: { karma: +5, tejas: -2, bhakti: +3 },
-             set: ['met_thief'], ripens: { card: 'priest_honor', in: 1 } },
+             set: ['met_thief', 'warned_priest'], ripens: { card: 'priest_honor', in: 1 } },
     right: { label: 'Keep watch',             fx: { tejas: +7, karma: -10 },
-             set: ['met_thief'], ripens: { card: 'temple_wrath', in: 1 } },
+             set: ['met_thief', 'kept_watch'], ripens: { card: 'temple_wrath', in: 1 } },
   }),
 
   c('mute_oracle', {
@@ -650,57 +650,57 @@ const CARDS = [
   c('rest_dharamshala', {
     realm: 1, tag: 'rest',
     art: '🛖', speaker: 'The keeper of a dharamshala',
-    text: '"Dal, a mat, a roof that mostly holds. Free to any pilgrim. The god who built this asks only that you stay till dawn."',
-    left:  { label: 'Walk on through the night', fx: { tejas: +4 } },
-    right: { label: 'Stay till dawn',            fx: { prana: +10, tejas: -4 } },
+    text: '"Dal, a mat, a roof that mostly holds. Free to any pilgrim. The god who built this asks only that you stay till dawn." The road ends in a horn-shadow; it will know whether you slept.',
+    left:  { label: 'Walk on through the night', fx: { tejas: +4 },             set: ['pressed'], clear: ['rested'] },
+    right: { label: 'Stay till dawn',            fx: { prana: +10, tejas: -4 }, set: ['rested'],  clear: ['pressed'] },
   }),
 
   c('rest_yaksha_cave', {
     realm: 2, tag: 'rest',
     art: '🌩', speaker: 'A yaksha, dry inside its cave',
-    text: '"The storm out there strips the breath from you. Shelter is mine to give — for a tithe. A kindness you once did will do; I collect those."',
-    left:  { label: 'Weather it outside',    fx: { tejas: +3, bhakti: +2 } },
-    right: { label: 'Pay the tithe, shelter', fx: { prana: +9, karma: -5 } },
+    text: '"The storm out there strips the breath from you. Shelter is mine to give — for a tithe. A kindness you once did will do; I collect those." The storm has a mouth at the end of it, and it is listening.',
+    left:  { label: 'Weather it outside',    fx: { tejas: +3, bhakti: +2 }, set: ['pressed'], clear: ['rested'] },
+    right: { label: 'Pay the tithe, shelter', fx: { prana: +9, karma: -5 },  set: ['rested'],  clear: ['pressed'] },
   }),
 
   c('rest_amrita', {
     realm: 3, tag: 'rest',
     art: '🏺', speaker: 'A cupbearer of the devas',
-    text: '"Amṛta. One sip mends the body entire. It also makes a mortal forget, a little, what he was climbing toward."',
-    left:  { label: 'Refuse the cup', fx: { bhakti: +4 } },
-    right: { label: 'One sip',        fx: { prana: +11, bhakti: -6 } },
+    text: '"Amṛta. One sip mends the body entire. It also makes a mortal forget, a little, what he was climbing toward." The king of this heaven will taste it on you either way.',
+    left:  { label: 'Refuse the cup', fx: { bhakti: +4 },             set: ['pressed'], clear: ['rested'] },
+    right: { label: 'One sip',        fx: { prana: +11, bhakti: -6 }, set: ['rested'],  clear: ['pressed'] },
   }),
 
   c('rest_sage_fire', {
     realm: 4, tag: 'rest',
     art: '🪵', speaker: "A sage's hut, its fire banked",
-    text: '"Sit. I will not speak, nor ask you to. Silence mends what speech cannot. But my fire is fed with tapas, and tonight it will be fed with yours."',
-    left:  { label: 'Bow and pass on',  fx: { karma: +3 } },
-    right: { label: 'Sit by the fire',  fx: { prana: +10, tejas: -6 } },
+    text: '"Sit. I will not speak, nor ask you to. Silence mends what speech cannot. But my fire is fed with tapas, and tonight it will be fed with yours." The tyrant beyond the hut can smell tapas — spent or kept.',
+    left:  { label: 'Bow and pass on',  fx: { karma: +3 },              set: ['pressed'], clear: ['rested'] },
+    right: { label: 'Sit by the fire',  fx: { prana: +10, tejas: -6 },  set: ['rested'],  clear: ['pressed'] },
   }),
 
   c('rest_mind_born', {
     realm: 5, tag: 'rest',
     art: '🌙', speaker: "A mind-born child of Brahmā",
-    text: '"I can dream you whole again — the body, the breath, all of it. What I dream, I keep. Give me a deed to remember you by."',
-    left:  { label: 'Keep your deeds',              fx: { tejas: +3 } },
-    right: { label: 'Give a deed, be dreamed whole', fx: { prana: +10, karma: -5 } },
+    text: '"I can dream you whole again — the body, the breath, all of it. What I dream, I keep. Give me a deed to remember you by." What you leave with the dreamer, the thing past him will notice missing.',
+    left:  { label: 'Keep your deeds',              fx: { tejas: +3 },             set: ['pressed'], clear: ['rested'] },
+    right: { label: 'Give a deed, be dreamed whole', fx: { prana: +10, karma: -5 }, set: ['rested'],  clear: ['pressed'] },
   }),
 
   c('rest_begging_bowl', {
     realm: 6, tag: 'rest',
     art: '🍚', speaker: "An ascetic's bowl, set down full",
-    text: '"He has fasted a hundred years and the bowl is full anyway — offered, never asked. Eat, and his devotion feeds you. Leave it, and it feeds him."',
-    left:  { label: 'Leave it for him',  fx: { bhakti: +4 } },
-    right: { label: 'Eat from the bowl', fx: { prana: +11, bhakti: -6 } },
+    text: '"He has fasted a hundred years and the bowl is full anyway — offered, never asked. Eat, and his devotion feeds you. Leave it, and it feeds him." Ten heads wait past the ascetic, and every one of them keeps count.',
+    left:  { label: 'Leave it for him',  fx: { bhakti: +4 },             set: ['pressed'], clear: ['rested'] },
+    right: { label: 'Eat from the bowl', fx: { prana: +11, bhakti: -6 }, set: ['rested'],  clear: ['pressed'] },
   }),
 
   c('rest_dry_well', {
     realm: 7, tag: 'rest',
     art: '🏜', speaker: 'A well at the threshold, dry',
-    text: '"No water. No breath returns here — you carry across what you carried up. Choose what to set down."',
-    left:  { label: 'Set down your pride',   fx: { tejas: -6, bhakti: +4 } },
-    right: { label: 'Set down your longing', fx: { bhakti: -6, tejas: +4 } },
+    text: '"No water. No breath returns here — you carry across what you carried up. Choose what to set down." The Voice at the threshold will weigh whichever you kept.',
+    left:  { label: 'Set down your pride',   fx: { tejas: -6, bhakti: +4 }, set: ['rested'],  clear: ['pressed'] },
+    right: { label: 'Set down your longing', fx: { bhakti: -6, tejas: +4 }, set: ['pressed'], clear: ['rested'] },
   }),
 
   // ---------- BOSSES (one per realm) ----------
@@ -711,6 +711,13 @@ const CARDS = [
     text: '"No man, no god has slain me. You are neither. Step into my horn-shadow, then."',
     left:  { label: 'Strike low (Prana)', fx: { prana: -19, tejas: +4, karma: +5 } },
     right: { label: 'Pray to the Devi (Bhakti)', fx: { prana: -9, bhakti: -8, karma: +7, tejas: +2 } },
+    // Text only (#34): the boss notices how you met the waystation. No fx — the sim
+    // showed that amplifying the rest decision mostly punishes players who haven't
+    // learned it yet; naming it teaches it.
+    stance: {
+      rested:  '"You slept under a roof and come to me full of breath. Good — it will take longer."',
+      pressed: '"You walked the night through to reach me, and the fire is high in you. Good — it burns quickly."',
+    },
   }),
 
   c('boss_vritra', {
@@ -719,6 +726,10 @@ const CARDS = [
     text: '"I have swallowed the rivers. Cut me, and a flood drowns the world. Bargain — what do you offer?"',
     left:  { label: 'Cut anyway', fx: { prana: -17, tejas: +8, karma: -6 } },
     right: { label: 'Offer a vow of rain', fx: { prana: -7, bhakti: -10, karma: +8, tejas: +1 } },
+    stance: {
+      rested:  '"You sheltered from my storm and paid the yaksha\'s tithe. Dry, rested, and in debt — I know the type."',
+      pressed: '"You stood in my storm and let it strip you. Whatever is left of you is at least your own."',
+    },
   }),
 
   c('boss_bali', {
@@ -727,6 +738,64 @@ const CARDS = [
     text: '"I am no monster. I rule heaven justly. Strike me down, and you uphold a god\'s pride. Spare me, and the gods rage."',
     left:  { label: 'Strike him down', fx: { prana: -14, tejas: +8, karma: -10 } },
     right: { label: 'Bow and pass',    fx: { karma: +8, bhakti: +5, tejas: -8 } },
+    stance: {
+      rested:  '"You drank the devas\' amṛta on the way up. Then you already know how sweet this heaven is."',
+      pressed: '"You refused the cup. A mortal who declines amṛta in Svarga — I have not seen that in an age."',
+    },
+  }),
+
+  // ---------- BOSS VARIANTS — the boss reads the realm's seeds (#34) ----------
+  // Same realm + tag as the base; `requires` names a flag planted by an earlier
+  // choice. pickBossForRealm serves the first eligible variant, else the base.
+  // A variant is the same boss on a different footing — what you did on the road
+  // up decides who stands beside you, and what the blow costs.
+
+  c('boss_mahishasura_devi', {
+    realm: 1, tag: 'boss', requires: ['gave_alms'],
+    art: '🐃', speaker: 'Mahiṣāsura, the buffalo-demon',
+    text: '"No man, no god has slain me. You are neither—" A voice behind you, one you fed once in rags: "Neither. Stand aside, child. This one was always mine."',
+    left:  { label: 'Strike low, beside her', fx: { prana: -8, tejas: +5, karma: +3 } },
+    right: { label: 'Let the Devi strike',    fx: { prana: -2, tejas: +3, bhakti: +3 } },
+  }),
+
+  c('boss_mahishasura_alone', {
+    realm: 1, tag: 'boss', requires: ['spurned_beggar'],
+    art: '🐃', speaker: 'Mahiṣāsura, the buffalo-demon',
+    text: '"No man, no god has slain me. You are neither — and you fed no one, knelt to no one, on the road up. Whose name will you call? Step into my horn-shadow alone."',
+    left:  { label: 'Strike low (Prana)', fx: { prana: -24, tejas: +5, karma: +3 } },
+    right: { label: 'Pray to the Devi',   fx: { prana: -14, bhakti: -12, karma: +4 } },
+  }),
+
+  c('boss_vritra_ganga', {
+    realm: 2, tag: 'boss', requires: ['drank_ganga'],
+    art: '🐉', speaker: 'Vṛtra, the drought-serpent',
+    text: '"I have swallowed the rivers — and one of them is in you. The river-mother speaks for you from inside me, and she has already named her price. Bargain, then. Or cut."',
+    left:  { label: 'Cut anyway',           fx: { prana: -17, tejas: +8, karma: -6 } },
+    right: { label: 'Let the Ganga answer', fx: { prana: +6, tejas: +2, bhakti: -2 } },
+  }),
+
+  c('boss_vritra_sword', {
+    realm: 2, tag: 'boss', requires: ['took_sword'],
+    art: '🐉', speaker: 'Vṛtra, the drought-serpent',
+    text: '"I have swallowed the rivers. Cut me, and a flood drowns the world — but you carry a dead man\'s blade, and I can smell the oath on it. Cut me with that, and the flood is on his head, not yours."',
+    left:  { label: "Cut with the soldier's blade", fx: { prana: -4, tejas: +6 } },
+    right: { label: 'Offer a vow of rain',          fx: { prana: -7, bhakti: -10, karma: +8, tejas: +1 } },
+  }),
+
+  c('boss_bali_priest', {
+    realm: 3, tag: 'boss', requires: ['warned_priest'],
+    art: '👑', speaker: 'Bali, the dharmic asura-king',
+    text: '"The temple you guarded sent word ahead of you. I am no monster — and you, it seems, are no thief. Pass, and be welcome in my heaven. Or strike, if a god\'s pride truly needs it."',
+    left:  { label: 'Strike him down', fx: { prana: -14, tejas: +8, karma: -13 } },
+    right: { label: 'Bow and pass',    fx: { prana: +5, tejas: +2, karma: +3 } },
+  }),
+
+  c('boss_bali_thief', {
+    realm: 3, tag: 'boss', requires: ['kept_watch'],
+    art: '👑', speaker: 'Bali, the dharmic asura-king',
+    text: '"You kept watch while a shrine was stripped bare, and you call ME the monster? Strike, then — a thief\'s blow. Or bow, and we will see which of us the gods believe."',
+    left:  { label: 'Strike him down', fx: { prana: -14, tejas: +8, karma: -14 } },
+    right: { label: 'Bow and pass',    fx: { karma: +4, bhakti: +2, tejas: -10 } },
   }),
 
   c('boss_hiranyakashipu', {
@@ -735,6 +804,10 @@ const CARDS = [
     text: '"Not by man nor beast, not by day nor night, not within nor without — what loophole brings you here?"',
     left:  { label: '"At dusk, on a threshold."', fx: { prana: -14, tejas: +7, karma: +4 } },
     right: { label: '"With a half-lion claw."',    fx: { prana: -19, tejas: +11, karma: -4 } },
+    stance: {
+      rested:  '"You sat by a sage\'s fire and let it eat your tapas. You come to me quiet. The quiet ones find loopholes."',
+      pressed: '"You bowed to the sage and kept walking. Your fire is your own. So was mine, once."',
+    },
   }),
 
   c('boss_taraka', {
@@ -743,6 +816,10 @@ const CARDS = [
     text: '"Only a son of Śiva can end me. You are not. Do you bluff, or kneel?"',
     left:  { label: 'Bluff',  fx: { prana: -20, tejas: +10, karma: -6 } },
     right: { label: 'Kneel', fx: { karma: +8, tejas: -10, bhakti: +6, prana: -3 } },
+    stance: {
+      rested:  '"You let a mind-born child dream you whole, and gave it a deed to keep. Something of you is missing. I can see the gap."',
+      pressed: '"You kept your deeds from the dreamer. All of you is here, then. All of you will not be enough."',
+    },
   }),
 
   c('boss_ravana', {
@@ -751,6 +828,10 @@ const CARDS = [
     text: '"Each head is a Veda. Cut one, two grow. Reason with me — or burn this whole realm to ash."',
     left:  { label: 'Reason with him', fx: { prana: -9, tejas: -6, karma: +10, bhakti: +5 } },
     right: { label: 'Burn it all',     fx: { prana: -22, tejas: +12, karma: -14 } },
+    stance: {
+      rested:  '"You ate from an ascetic\'s bowl and let his hundred years feed you. Ten heads, and every one of them tasted it."',
+      pressed: '"You left the ascetic his bowl. Hunger sharpens the mind — and I have ten of them to sharpen."',
+    },
   }),
 
   c('boss_final', {
@@ -759,6 +840,10 @@ const CARDS = [
     text: '"You stand at the edge of moksha. Surrender what you carried — or claim it."',
     left:  { label: 'Surrender the self', fx: { prana: -12, tejas: -10, bhakti: +12, karma: +8 } },
     right: { label: 'Claim what you earned', fx: { prana: -9, tejas: +10, karma: -6, bhakti: -4 } },
+    stance: {
+      rested:  '"You set your pride down at the dry well. What is left to surrender is lighter than you think."',
+      pressed: '"You set your longing down at the dry well and kept your fire. Careful — the fire is the last thing to go."',
+    },
   }),
 
 ];

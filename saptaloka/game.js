@@ -223,8 +223,28 @@
     return pool[pool.length - 1];
   }
 
+  // Bosses read the seeds (#34): each realm has one unconditional base boss and
+  // variants gated on flags planted earlier in the run (`requires` / `forbids`).
+  // The first eligible variant wins; the base is the fallback. Order in CARDS only
+  // breaks ties between variants — specificity, not position, decides.
   function pickBossForRealm(realmNum) {
-    return CARDS.find(c => c.tag === 'boss' && c.realm === realmNum);
+    const ok = c => (!c.requires || c.requires.every(f => state.flags.has(f)))
+                 && (!c.forbids || !c.forbids.some(f => state.flags.has(f)));
+    const cands = CARDS.filter(c => c.tag === 'boss' && c.realm === realmNum && ok(c));
+    return cands.find(c => c.requires) || cands.find(c => !c.requires) || null;
+  }
+
+  // The boss notices how you met the realm's waystation (#34): every waystation
+  // plants `rested` or `pressed` (clearing the other), and a boss card with a
+  // `stance` block gets the matching line appended to its text. TEXT ONLY, by
+  // design: the sim found the waystation decision is already the game's largest
+  // skill lever (+17 points for playing it well) and that giving the stance fx
+  // mostly punished players who hadn't learned it yet. Naming it teaches it.
+  function withStance(card) {
+    if (!card || !card.stance) return card;
+    const line = state.flags.has('rested') ? card.stance.rested
+               : state.flags.has('pressed') ? card.stance.pressed : null;
+    return line ? Object.assign({}, card, { text: card.text + ' ' + line }) : card;
   }
 
   // The realm's waystation (#33): its one reliable prāṇa source, drawn at the
@@ -496,6 +516,10 @@
         `<p>Both answers are written on the card. Drag it toward one to <b>weigh</b> it (the label lights up), let go to change your mind, or commit — past a third of the card's width, or with a flick. On a keyboard, hold <b>←</b> / <b>→</b> (or <b>A</b> / <b>D</b>) to weigh and release to choose; <b>Esc</b> cancels. Unlock the <b>Sage's Eye</b> to preview the stat changes a choice will make — though some fated encounters stay veiled until you commit.</p>` +
       `</section>` +
       `<section class="rule-sec">` +
+        `<h3>The Road</h3>` +
+        `<p>Halfway through every realm is a <b>waystation</b> — the one place breath can be bought, at the cost of another virtue. Rest there and the boss at the end finds you slow and full of breath; press on and he finds you burning. He will say which. Some bosses remember other things too — a coin given, a blade taken, a river drunk from.</p>` +
+      `</section>` +
+      `<section class="rule-sec">` +
         `<h3>The Four Virtues</h3>` +
         `<p class="rule-legend"><span class="pill death">death</span><span class="pill safe">safe</span><span class="pill false">false summit</span></p>` +
         virtues +
@@ -659,7 +683,7 @@
     const isBoss = state.realmStep >= realm.length - 1;
     let next;
     if (isBoss) {
-      next = pickBossForRealm(state.realmIdx + 1);
+      next = withStance(pickBossForRealm(state.realmIdx + 1));
     } else if (state.nextCardOverride) {
       next = pickRandomCard();            // immediate `then` chain consumes the override
     } else if (state.offerQueue.length) {
@@ -835,7 +859,7 @@
           ? 'Each encounter is a choice, and both answers are written on the card. Hold ← or → to weigh one, press Esc to change your mind, or release to commit. Try it now.'
           : 'Each encounter is a choice, and both answers are written on the card. Drag toward one to weigh it, let go to change your mind, or swipe to commit. Try it now.' },
       { anchor: () => statsEl, text: 'These four virtues are your life. Each has an edge that ends the run — the meters shade the deadly zones red and the false-heaven zones gold. Tap any virtue, any time, to learn it.' },
-      { anchor: () => realmProg, text: 'Each realm ends in a boss, and a rest waits halfway. Climb all seven to reach Satyaloka.' },
+      { anchor: () => realmProg, text: 'Each realm ends in a boss, and a rest waits halfway — how you meet the rest is how you meet the boss. Climb all seven to reach Satyaloka.' },
     ];
   }
 

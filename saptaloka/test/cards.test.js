@@ -30,16 +30,56 @@ test('every card has an id, speaker, text and two labelled choices', () => {
   }
 });
 
-test('exactly one boss and exactly one waystation per realm, both outside the random pool', () => {
+const flagsPlanted = new Set();
+for (const c of CARDS) for (const side of ['left', 'right']) for (const f of (c[side].set || [])) flagsPlanted.add(f);
+
+test('every realm has exactly one unconditional base boss; variants are gated on planted flags', () => {
   for (let n = 1; n <= REALMS.length; n++) {
     const bosses = CARDS.filter(c => c.tag === 'boss' && c.realm === n);
-    const rests  = CARDS.filter(c => c.tag === 'rest' && c.realm === n);
-    assert.strictEqual(bosses.length, 1, `realm ${n} bosses`);
-    assert.strictEqual(rests.length, 1, `realm ${n} waystations`);
+    assert.ok(bosses.length >= 1, `realm ${n} has a boss`);
+    assert.strictEqual(bosses.filter(b => !b.requires).length, 1, `realm ${n}: exactly one unconditional base boss`);
+    for (const v of bosses.filter(b => b.requires)) {
+      assert.ok(Array.isArray(v.requires) && v.requires.length >= 1, `${v.id}: requires must name a flag`);
+      for (const f of v.requires) assert.ok(flagsPlanted.has(f), `${v.id} requires '${f}' but no choice plants it`);
+      assert.strictEqual(v.speaker, bosses.find(b => !b.requires).speaker, `${v.id}: a variant is the same boss on a different footing`);
+    }
+  }
+});
+
+test('exactly one waystation per realm; bosses and waystations sit outside the random pool', () => {
+  for (let n = 1; n <= REALMS.length; n++) {
+    assert.strictEqual(CARDS.filter(c => c.tag === 'rest' && c.realm === n).length, 1, `realm ${n} waystations`);
   }
   for (const c of CARDS.filter(c => c.tag === 'boss' || c.tag === 'rest')) {
     assert.ok(Number.isInteger(c.realm), `${c.id} needs realm:<n>`);
     assert.ok(!c.realmMin && !c.realmMax, `${c.id} is gated by realm:, not realmMin/Max`);
+  }
+});
+
+test('every base boss carries text-only stance lines; every waystation plants one stance and clears the other', () => {
+  for (const b of CARDS.filter(c => c.tag === 'boss' && !c.requires)) {
+    assert.ok(b.stance && typeof b.stance.rested === 'string' && b.stance.rested.length > 20, `${b.id}.stance.rested`);
+    assert.ok(typeof b.stance.pressed === 'string' && b.stance.pressed.length > 20, `${b.id}.stance.pressed`);
+  }
+  for (const r of CARDS.filter(c => c.tag === 'rest')) {
+    const stanceOf = side => (r[side].set || []).find(f => f === 'rested' || f === 'pressed');
+    const l = stanceOf('left'), rr = stanceOf('right');
+    assert.ok(l && rr && l !== rr, `${r.id}: one side rested, the other pressed`);
+    for (const side of ['left', 'right']) {
+      const other = stanceOf(side) === 'rested' ? 'pressed' : 'rested';
+      assert.ok((r[side].clear || []).includes(other), `${r.id}.${side} must clear '${other}'`);
+    }
+    if (r.realm !== 7) {
+      const breath = ['left', 'right'].find(side => (r[side].fx.prana || 0) > 0);
+      assert.strictEqual(stanceOf(breath), 'rested', `${r.id}: the breath side is the rested stance`);
+    }
+  }
+});
+
+test('every requires/forbids flag anywhere in the deck is planted by some choice', () => {
+  for (const c of CARDS) {
+    for (const f of (c.requires || [])) assert.ok(flagsPlanted.has(f), `${c.id} requires '${f}' — nothing sets it`);
+    for (const f of (c.forbids || []))  assert.ok(flagsPlanted.has(f), `${c.id} forbids '${f}' — nothing sets it`);
   }
 });
 
