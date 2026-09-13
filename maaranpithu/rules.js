@@ -10,10 +10,18 @@
  * Node with no renderer. `game.js` only reads the world and feeds the human's
  * inputs.
  *
+ * The ball has height. z is yards above the grass; gravity brings it down. A
+ * line throw stays under head height the whole way; a lob arcs over anyone in
+ * between and comes down late. School rule: **a ball that has bounced is dead** —
+ * it cannot put anyone out and cannot be caught, only picked up. That rule needs
+ * no flag: the first bounce turns the ball `loose`, and only a ball in `flight`
+ * ever reaches contact().
+ *
  * API:  createWorld(opts) → world;  step(world, dt, inputsById) → world.events
- * inputs: { mx, my (−1..1), aimX, aimY (yards), throwEdge, slideEdge, catchHold }
- * throwEdge throws when holding. catchHold (held) braces: you stand still and a ball
- * arriving inside the catch cone of your aim/facing is caught instead of hitting.
+ * inputs: { mx, my (−1..1), aimX, aimY (yards), throwEdge, lob, slideEdge, catchHold }
+ * throwEdge throws when holding; lob makes that throw a lob. catchHold (held) braces:
+ * you stand still and a live ball arriving inside the catch cone of your aim/facing
+ * is caught instead of hitting.
  */
 
 export const T = {
@@ -29,11 +37,19 @@ export const T = {
   airGapStun: 0.5,     // s the thrower is frozen after a voided throw
   holdLimit: 3,        // s holding before the referee takes the ball
   ballR: 0.15,
-  ballSpeed: 24,       // yd/s thrown (sim-tuned: 20 left 15 yd throws at 16% hits)
-  ballRange: 25,       // yd of flight before it drops and rolls
-  ballDropKeep: 0.35,  // fraction of speed kept when it drops
-  ballFriction: 9,     // yd/s² deceleration while rolling
+  ballSpeed: 26,       // yd/s of a line throw (24 → 26 buys the 22 yd arc; sim-tuned)
+  ballFriction: 9,     // yd/s² deceleration while rolling on the grass
+  gravity: 10.7,       // yd/s² (9.8 m/s²)
+  releaseZ: 1.2,       // yd — the ball leaves the hand about chest-high
+  kidHeight: 1.7,      // yd — top of the strike zone; a ball whose underside is above it sails over
+  throwVz: 3.2,        // yd/s up on a line throw: apex 1.68 yd — under every head — landing at 22.3 yd
+  lobSpeed: 19,        // yd/s of a lob …
+  lobVz: 5.5,          // … which apexes at 2.6 yd, clears heads from 2.6 to 16.9 yd, lands at 23.1 yd
+  bounceRestitution: 0.55, // fraction of vertical speed kept on a bounce
+  bounceKeep: 0.8,     // fraction of horizontal speed kept on a bounce
+  bounceStopVz: 1.0,   // yd/s — a hop slower than this settles into a roll
   pickupR: 0.9,        // yd from centre to grab a loose ball
+  pickupZ: 1.7,        // yd — a loose ball higher than this is out of reach
   outWalk: 4,          // yd/s walk to the sideline when out
   botThinkDt: 0.1,     // s between bot decisions
   scorePlacement: 5, scoreHit: 2, scoreCatch: 3,
@@ -80,7 +96,7 @@ export function createWorld(opts = {}) {
   const humanBias = opts.humanBias ?? 1;       // >1 = bots prefer the human as a target
   const w = { t: 0, seed, rng, humanBias, field: { w: T.fieldW, h: T.fieldH }, players: [], ball: null,
     events: [], alive: 0, winner: null, over: false, nextThink: 0, n: humans + nBots,
-    stats: { throws: 0, hits: 0, catches: 0, airgaps: 0, holdings: 0, looseTime: 0 } };
+    stats: { throws: 0, lobs: 0, hits: 0, catches: 0, airgaps: 0, holdings: 0, deadOnBounce: 0, looseTime: 0 } };
   w.bounds = { x0: 0, y0: 0, x1: T.fieldW, y1: T.fieldH };
   w.boundsTarget = { ...w.bounds };
   w.ref = { x: T.fieldW / 2, y: -1.6, say: null, sayUntil: 0 };
@@ -92,7 +108,7 @@ export function createWorld(opts = {}) {
       color: i < humans ? '#ffffff' : SHIRTS[(i - humans) % SHIRTS.length],
       isHuman: i < humans, x: 0, y: 0, vx: 0, vy: 0, r: T.playerR,
       out: false, outTarget: null, hits: 0, catches: 0, placement: 0, score: 0,
-      facing: { x: 1, y: 0 }, aim: null, wantThrow: false, wantSlide: false,
+      facing: { x: 1, y: 0 }, aim: null, wantThrow: false, wantLob: false, wantSlide: false,
       slideT: 0, slideCd: 0, slideDir: { x: 1, y: 0 }, stunT: 0, bracing: false,
       persona, bot: persona ? { mode: 'idle', target: null, plan: null, planAt: 0, seenThrow: -1, wander: { x: 0, y: 0 }, wanderAt: 0 } : null,
     });
@@ -105,9 +121,42 @@ export function createWorld(opts = {}) {
     p.x = cx + Math.cos(a) * rad * 1.3; p.y = cy + Math.sin(a) * rad * 0.8;
   });
   w.alive = n;
-  w.ball = { state: 'loose', x: cx, y: cy, vx: 0, vy: 0, holder: null, thrower: null,
-    flown: 0, heldFor: 0, thrownAt: -1, dir: { x: 1, y: 0 } };
+  w.ball = { state: 'loose', x: cx, y: cy, z: 0, vx: 0, vy: 0, vz: 0, holder: null, thrower: null,
+    flown: 0, heldFor: 0, thrownAt: -1, dir: { x: 1, y: 0 }, kind: 'line', hops: 0,
+    z0: 0, vz0: 0, ft: 0 };
   return w;
+}
+
+// ── the arc ──────────────────────────────────────────────────────────────────
+// z is integrated analytically from the last launch or bounce (z0, vz0, ft), so
+// the flight is identical whatever the step size and the sim stays reproducible.
+const strikeTop = () => T.kidHeight + T.ballR;   // ball centre above this and it sails over
+
+export function timeToGround(z, vz) {
+  const g = T.gravity;
+  return (vz + Math.sqrt(Math.max(0, vz * vz + 2 * g * Math.max(0, z)))) / g;
+}
+// height of the ball t seconds from now, if nothing interrupts it
+export function ballHeightIn(b, t) { return b.z + b.vz * t - 0.5 * T.gravity * t * t; }
+function setArc(b, z, vz) { b.z = b.z0 = z; b.vz = b.vz0 = vz; b.ft = 0; }
+function advanceArc(b, dt) {
+  b.ft += dt;
+  b.z = b.z0 + b.vz0 * b.ft - 0.5 * T.gravity * b.ft * b.ft;
+  b.vz = b.vz0 - T.gravity * b.ft;
+}
+// What a throw of this kind does: horizontal speed, how far it lands, and the
+// distance at which it comes back down under head height (0 = never goes above).
+export function throwArc(kind) {
+  const speed = kind === 'lob' ? T.lobSpeed : T.ballSpeed;
+  const vz = kind === 'lob' ? T.lobVz : T.throwVz;
+  const over = vz * vz - 2 * T.gravity * (strikeTop() - T.releaseZ);
+  const root = over <= 0 ? 0 : Math.sqrt(over);
+  return {
+    speed, vz,
+    range: speed * timeToGround(T.releaseZ, vz),
+    high: over <= 0 ? 0 : speed * (vz - root) / T.gravity,   // clears heads from here …
+    low: over <= 0 ? 0 : speed * (vz + root) / T.gravity,    // … until here
+  };
 }
 
 export function alivePlayers(w) { return w.players.filter(p => !p.out); }
@@ -130,7 +179,7 @@ export function step(w, dt, inputsById = {}) {
     if (p.out) { walkOut(p, dt); continue; }
     const inp = p.isHuman ? (inputsById[p.id] || {}) : botInput(w, p);
     if (inp.aimX !== undefined) p.aim = { x: inp.aimX, y: inp.aimY };
-    if (inp.throwEdge) p.wantThrow = true;
+    if (inp.throwEdge) { p.wantThrow = true; p.wantLob = !!inp.lob; }
     // bracing: only while a ball is in flight from someone else, never while holding or sliding
     p.bracing = !!inp.catchHold && b.state === 'flight' && b.thrower !== p.id && p.slideT <= 0 && p.stunT <= 0;
     if (p.bracing && p.aim) { const ax = p.aim.x - p.x, ay = p.aim.y - p.y, al = Math.hypot(ax, ay); if (al > 0.2) p.facing = { x: ax / al, y: ay / al }; }
@@ -171,35 +220,47 @@ export function step(w, dt, inputsById = {}) {
     const h = w.players[b.holder];
     b.x = h.x + h.facing.x * 0.7; b.y = h.y + h.facing.y * 0.7;
     b.heldFor += dt;
-    if (h.wantThrow && h.aim && h.stunT <= 0) throwBall(w, h);
+    if (h.wantThrow && h.aim && h.stunT <= 0) throwBall(w, h, h.wantLob);
     else if (b.heldFor >= T.holdLimit) refTakes(w, h);
   } else if (b.state === 'flight') {
-    const stepLen = T.ballSpeed * dt;
+    const stepLen = Math.hypot(b.vx, b.vy) * dt;
     const n = Math.max(1, Math.ceil(stepLen / 0.25));   // no tunnelling through a 0.5 yd kid
+    const sdt = dt / n;
     for (let i = 0; i < n && b.state === 'flight'; i++) {
-      b.x += b.vx * dt / n; b.y += b.vy * dt / n; b.flown += stepLen / n;
-      for (const p of w.players) {
-        if (p.out || p.id === b.thrower) continue;
-        if (Math.hypot(p.x - b.x, p.y - b.y) < p.r + T.ballR) { contact(w, p); break; }
+      b.x += b.vx * sdt; b.y += b.vy * sdt; b.flown += stepLen / n;
+      advanceArc(b, sdt);
+      // a ball whose underside is above the kids passes over them
+      if (b.z - T.ballR <= T.kidHeight) {
+        for (const p of w.players) {
+          if (p.out || p.id === b.thrower) continue;
+          if (Math.hypot(p.x - b.x, p.y - b.y) < p.r + T.ballR) { contact(w, p); break; }
+        }
       }
-      if (b.state === 'flight' && (b.flown >= T.ballRange || outOfBounds(w, b))) {
-        b.state = 'loose'; b.vx *= T.ballDropKeep; b.vy *= T.ballDropKeep; b.thrower = null; emit(w, 'drop', {});
-      }
+      if (b.state !== 'flight') break;
+      if (b.z <= 0) { bounce(w, true); break; }          // first bounce: the ball is dead
+      if (outOfBounds(w, b)) { goLoose(w, T.bounceKeep); emit(w, 'drop', {}); }
     }
   }
   if (b.state === 'loose') {
-    const sp = Math.hypot(b.vx, b.vy);
-    if (sp > 0) { const ns = Math.max(0, sp - T.ballFriction * dt); b.vx *= ns / sp; b.vy *= ns / sp; }
+    if (b.z > 0 || b.vz !== 0) {
+      advanceArc(b, dt);
+      if (b.z <= 0) bounce(w, false);
+    } else {
+      const sp = Math.hypot(b.vx, b.vy);   // friction only bites once it is on the grass
+      if (sp > 0) { const ns = Math.max(0, sp - T.ballFriction * dt); b.vx *= ns / sp; b.vy *= ns / sp; }
+    }
     b.x += b.vx * dt; b.y += b.vy * dt;
     // the ball stays inside the live boundary so it can always be fetched
     const B = w.bounds;
     if (b.x < B.x0) { b.x = B.x0; b.vx = Math.abs(b.vx) * 0.5; } if (b.x > B.x1) { b.x = B.x1; b.vx = -Math.abs(b.vx) * 0.5; }
     if (b.y < B.y0) { b.y = B.y0; b.vy = Math.abs(b.vy) * 0.5; } if (b.y > B.y1) { b.y = B.y1; b.vy = -Math.abs(b.vy) * 0.5; }
-    let best = null, bd = T.pickupR;
-    for (const p of w.players) { if (p.out || p.stunT > 0) continue; const d = Math.hypot(p.x - b.x, p.y - b.y); if (d < bd) { bd = d; best = p; } }
-    if (best) hold(w, best, 'pickup');
+    if (b.z <= T.pickupZ) {
+      let best = null, bd = T.pickupR;
+      for (const p of w.players) { if (p.out || p.stunT > 0) continue; const d = Math.hypot(p.x - b.x, p.y - b.y); if (d < bd) { bd = d; best = p; } }
+      if (best) hold(w, best, 'pickup');
+    }
   }
-  for (const p of w.players) p.wantThrow = false;
+  for (const p of w.players) { p.wantThrow = false; p.wantLob = false; }
 
   // referee jogs along the top sideline following the ball
   w.ref.x += (Math.min(w.field.w - 2, Math.max(2, b.x)) - w.ref.x) * Math.min(1, dt * 3);
@@ -222,18 +283,39 @@ export function scoreOf(w, p) {
 
 function hold(w, p, how) {
   const b = w.ball;
-  b.state = 'held'; b.holder = p.id; b.thrower = null; b.heldFor = 0; b.vx = b.vy = 0;
+  b.state = 'held'; b.holder = p.id; b.thrower = null; b.heldFor = 0; b.vx = b.vy = 0; b.hops = 0;
+  setArc(b, T.releaseZ, 0);
   p.bracing = false;
   emit(w, how, { id: p.id });
 }
 
-function throwBall(w, h) {
+// leave flight without hitting anyone: the ball is dead from here on
+function goLoose(w, keep) {
+  const b = w.ball;
+  b.state = 'loose'; b.thrower = null; b.vx *= keep; b.vy *= keep;
+}
+
+// ground contact. `first` = the end of a live flight, which kills the ball.
+function bounce(w, first) {
+  const b = w.ball;
+  const down = Math.abs(b.vz);
+  if (first) { goLoose(w, T.bounceKeep); w.stats.deadOnBounce++; } else { b.vx *= T.bounceKeep; b.vy *= T.bounceKeep; }
+  b.hops++;
+  if (down * T.bounceRestitution < T.bounceStopVz) setArc(b, 0, 0);   // settles into a roll
+  else setArc(b, 0, down * T.bounceRestitution);
+  emit(w, 'bounce', { x: b.x, y: b.y, first, hop: b.hops, speed: down });
+}
+
+function throwBall(w, h, lob) {
   const b = w.ball;
   let dx = h.aim.x - h.x, dy = h.aim.y - h.y;
   const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+  const arc = throwArc(lob ? 'lob' : 'line');
   b.state = 'flight'; b.holder = null; b.thrower = h.id; b.flown = 0; b.thrownAt = w.t; b.dir = { x: dx, y: dy };
+  b.kind = lob ? 'lob' : 'line'; b.hops = 0;
   b.x = h.x + dx * (h.r + T.ballR + 0.05); b.y = h.y + dy * (h.r + T.ballR + 0.05);
-  b.vx = dx * T.ballSpeed; b.vy = dy * T.ballSpeed;
+  b.vx = dx * arc.speed; b.vy = dy * arc.speed;
+  setArc(b, T.releaseZ, arc.vz);
   h.facing = { x: dx, y: dy };
   // who is this aimed at? nearest alive player inside a narrow cone — for the balance sim
   let td = null, best = Infinity;
@@ -244,8 +326,8 @@ function throwBall(w, h) {
     if (cos > 0.94 && d < best) { best = d; td = d; }
   }
   b.targetDist = td;
-  w.stats.throws++;
-  emit(w, 'throw', { id: h.id, x: b.x, y: b.y, targetDist: td });
+  w.stats.throws++; if (lob) w.stats.lobs++;
+  emit(w, 'throw', { id: h.id, x: b.x, y: b.y, targetDist: td, kind: b.kind });
 }
 
 // ball meets a player: void (no air gap), catch, or hit
@@ -272,7 +354,8 @@ function contact(w, p) {
   p.out = true; p.placement = w.alive; p.score = scoreOf(w, p);
   const cand = [{ x: -1.5, y: p.y }, { x: w.field.w + 1.5, y: p.y }, { x: p.x, y: -1.5 }, { x: p.x, y: w.field.h + 1.5 }];
   p.outTarget = cand.reduce((a, c) => dist(c, p) < dist(a, p) ? c : a);
-  b.state = 'loose'; b.vx *= 0.15; b.vy *= 0.15; b.thrower = null;
+  goLoose(w, 0.15);   // it drops at their feet from wherever it struck
+  setArc(b, b.z, 0);
   refSay(w, `${p.name}, out!`);
   emit(w, 'hit', { id: p.id, by: thrower ? thrower.id : null, x: b.x, y: b.y, dist: b.flown });
   retargetBounds(w);
@@ -286,8 +369,9 @@ function facingBall(p, b) {
 
 function refTakes(w, h) {
   const b = w.ball, a = w.rng() * Math.PI * 2;
-  b.state = 'loose'; b.holder = null; b.thrower = null; b.heldFor = 0;
+  b.state = 'loose'; b.holder = null; b.thrower = null; b.heldFor = 0; b.hops = 0;
   b.x = h.x + Math.cos(a) * 3; b.y = h.y + Math.sin(a) * 3; b.vx = b.vy = 0;
+  setArc(b, 0, 0);
   h.stunT = 0.3;
   w.stats.holdings++; refSay(w, 'Holding!');
   emit(w, 'holding', { id: h.id });
@@ -336,17 +420,24 @@ function clampAll(w) {
 }
 
 // ── bots ─────────────────────────────────────────────────────────────────────
-// Is a ball in flight going to pass near p? Returns perpendicular distance and
-// whether p is ahead of the ball; null if not threatened.
-function threat(w, p) {
+// Is a live ball going to arrive at p, low enough to hit? Reads the arc: a lob
+// that will still be over head height when it gets there is not a threat, and a
+// ball that lands short of p is not a threat either. A bounced ball is `loose`,
+// so it is never a threat. Shared with the renderer's "incoming" tell.
+export function threat(w, p) {
   const b = w.ball;
-  if (b.state !== 'flight' || b.thrower === p.id) return null;
+  if (!p || p.out || b.state !== 'flight' || b.thrower === p.id) return null;
+  const sp = Math.hypot(b.vx, b.vy) || 1;
   const rx = p.x - b.x, ry = p.y - b.y;
   const along = rx * b.dir.x + ry * b.dir.y;
-  if (along < 0 || along > T.ballRange - b.flown + 1) return null;
+  if (along < 0) return null;
+  const eta = along / sp;
+  if (eta > timeToGround(b.z, b.vz) + 0.05) return null;    // lands short of them
+  const z = ballHeightIn(b, eta);
+  if (z - T.ballR > T.kidHeight) return null;               // sails over their head
   const perp = Math.abs(rx * b.dir.y - ry * b.dir.x);
   if (perp > 2.2) return null;
-  return { along, perp, eta: along / T.ballSpeed };
+  return { along, perp, eta, z };
 }
 
 function thinkBots(w) {
@@ -388,15 +479,18 @@ function thinkBots(w) {
   }
 }
 
-// anyone (not just the target) standing inside the air gap along the throw line?
-function someoneInGap(w, p, t) {
+// How far along the p→t line does the nearest other kid stand? 0 = clear. Under
+// airGap they void the throw; further out a line throw hits them instead of the
+// target, and a lob is the way over.
+function blockerOn(w, p, t) {
   const dx = t.x - p.x, dy = t.y - p.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+  let near = 0;
   for (const q of w.players) {
     if (q.out || q === p) continue;
     const qx = q.x - p.x, qy = q.y - p.y, along = qx * ux + qy * uy;
-    if (along > 0 && along < T.airGap + 0.6 && Math.abs(qx * uy - qy * ux) < q.r + T.ballR + 0.3) return true;
+    if (along > 0 && along < L - 0.5 && Math.abs(qx * uy - qy * ux) < q.r + T.ballR + 0.3 && (!near || along < near)) near = along;
   }
-  return false;
+  return near;
 }
 function toward(p, x, y, sign = 1) {
   const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy) || 1;
@@ -438,13 +532,21 @@ function botInput(w, p) {
     let inp = { ...mv };
     const ux = (t.x - p.x) / (d || 1), uy = (t.y - p.y) / (d || 1);
     const closing = -((t.vx - p.vx) * ux + (t.vy - p.vy) * uy);          // yd/s, positive = approaching
-    if (d - Math.max(0, closing) * 0.25 < T.airGap + 1 || someoneInGap(w, p, t)) return toward(p, t.x, t.y, -1);
+    // the lob: it clears anyone in the way but only bites in the band where it
+    // comes back down, so a bot only reaches for it inside that band.
+    const line = throwArc('line'), arc = throwArc('lob');
+    const canLob = (p.persona === 'sniper' || p.persona === 'coward') && d > arc.low + 0.5 && d < arc.range - 0.5;
+    const blk = blockerOn(w, p, t);
+    const over = canLob && blk > arc.high + 0.3 && blk < arc.low;   // a lob sails over this one
+    if (d - Math.max(0, closing) * 0.25 < T.airGap + 1) return toward(p, t.x, t.y, -1);
+    if (blk > 0 && blk < T.airGap + 0.6 && !over) return toward(p, t.x, t.y, -1);
+    const lob = canLob && (over || d > line.range - 1);
     if (settled && (inRange || mustThrow || (p.persona === 'coward' && d < 10))) {
-      const lead = d / T.ballSpeed;
+      const lead = d / (lob ? arc.speed : line.speed);
       let ax = t.x + t.vx * lead - p.x, ay = t.y + t.vy * lead - p.y;
       const na = Math.atan2(ay, ax) + (w.rng() - 0.5) * 2 * P.aimNoise;
       const L = Math.hypot(ax, ay);
-      inp.aimX = p.x + Math.cos(na) * L; inp.aimY = p.y + Math.sin(na) * L; inp.throwEdge = true;
+      inp.aimX = p.x + Math.cos(na) * L; inp.aimY = p.y + Math.sin(na) * L; inp.throwEdge = true; inp.lob = lob;
     }
     return inp;
   }

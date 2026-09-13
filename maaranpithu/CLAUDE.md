@@ -7,6 +7,28 @@ it hits) and a 3 s holding limit. Last one standing. Top-down canvas, you vs 19
 bots, offline. Design spec: `docs/superpowers/specs/2026-09-13-maaran-pithu-design.md`.
 Tracker: issue #40.
 
+## The ball has height
+
+`z` is yards above the grass and gravity (`T.gravity`) brings it down. Two throws:
+
+| | speed | up | lands | flight | over heads |
+|---|---|---|---|---|---|
+| **line** | 26 yd/s | 3.2 yd/s | 22.3 yd | 0.86 s | never — apex 1.68 yd, under the 1.85 yd strike top |
+| **lob** | 19 yd/s | 5.5 yd/s | 23.1 yd | 1.21 s | 2.6 → 16.9 yd, apex 2.6 yd |
+
+A throw only hits when the ball's **underside is at or below `T.kidHeight`**
+(`b.z - T.ballR <= T.kidHeight`), so a lob sails over anyone standing in between
+and only bites in the band where it comes back down.
+
+**A ball that has bounced is dead.** The first ground contact turns the ball
+`loose`, and only a ball in `flight` ever reaches `contact()` — so the rule needs
+no flag: a dead ball cannot put anyone out and cannot be caught, only picked up
+(and `pickup` needs `b.z <= T.pickupZ`). The loose ball keeps its height physics,
+hopping with `bounceRestitution` / `bounceKeep` until a hop is slower than
+`bounceStopVz`, then rolls off `ballFriction`. `throwArc(kind)` derives a throw's
+range and its over-the-heads band from `T`, so bots and the sim never hard-code
+a distance; `threat(w, p)` reads the arc and is shared with the renderer's tell.
+
 ## Files
 
 | File | Role |
@@ -23,23 +45,40 @@ Tracker: issue #40.
   change to `T` or `PERSONAS` ships with a before/after from `sim/run.mjs` in the
   PR. The first pass (2026-09-13) is in PR #48: ball speed 20 → 24 was the lever
   that moved 15 yd hits from 16% to 51%; nothing tried moves round length.
+  The height pass (#52) cost 24 → 26: a 22 yd throw at 24 yd/s has to arc 1.84 yd
+  up, which would sail over every kid in the 4–13 yd band. Speed and the strike
+  ceiling trade off directly — (speed, kidHeight) pairs that land a flat 22 yd
+  line are 24/1.84, 25/1.74, **26/1.70**, 27/1.60.
 - Keep `rules.js` importable from Node: no `window`, `document`, `performance`.
 - Units are yards and seconds. Screen scaling lives only in `game.js`.
 - Query flags: `?bots=N` (default 19), `?bias=1.6` (bots prefer the human),
-  `?harness` (no SW, for headless driving).
+  `?harness` (no SW, for headless driving). `?harness` exposes
+  `window.__mp = { world(), state(), touch(), mouse, charge, view }` — `mouse`
+  and `charge` are there so a scripted `PointerEvent` can drive a real throw and
+  you can assert which arc came out.
 
 ## Inputs
 
-Keyboard: WASD/arrows run, mouse aims, click throws, holding the button or C braces to
-catch (stand still, face the ball, ±75° cone), space slides, Esc or P pauses, R restarts, M mutes. Touch: left half is a floating
-joystick, right half tap = throw toward the tap, hold = brace to catch, swipe = slide that way.
+Keyboard: WASD/arrows run, mouse aims, space slides, Esc or P pauses, R restarts, M mutes.
+
+**Throwing is press-and-release, and only while you hold the ball**: a flick
+(< `LOB_MS`, 200 ms) throws a line, a longer hold lobs, and Shift+click lobs
+straight away. A charge bar over your head fills to a gold **LOB**. When you
+*don't* hold the ball the same held button (or C) braces to catch instead —
+stand still, face the ball, ±75° cone — so the two never collide.
+
+Touch: left half is a floating joystick; on the right half a tap throws a line
+toward the tap, and a hold is a lob when you hold the ball and a brace when you
+don't; swipe = slide that way.
 
 ## How-to demos
 
-The four demos on the how-to screen are real two-kid worlds from `rules.js`
+The five demos on the how-to screen are real two-kid worlds from `rules.js`
 driven by a script (`DEMO_DEFS` in `game.js`), drawn with the same code as the
 round via `drawScene()`, which swaps the module draw targets. A demo therefore
 can't show a rule the sim doesn't have; when a rule changes, the demo follows.
+A demo may set its own `win` (the lob one needs a 32 × 12 yd window and spans
+both grid columns via `.demo.wide`).
 
 ## Theme
 
