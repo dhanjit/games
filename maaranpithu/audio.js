@@ -42,6 +42,8 @@ export const sfx = {
   hit() { tone(180, 0.12, { type: 'square', peak: 0.25, slide: -120 }); noise(0.08, { peak: 0.3, hp: 400 }); },
   catch() { tone(520, 0.08, { type: 'triangle', peak: 0.3 }); tone(780, 0.12, { type: 'triangle', peak: 0.3, delay: 0.07 }); },
   slide() { noise(0.25, { peak: 0.12, hp: 300 }); },
+  // grass bounce: a soft thud that gets quieter as the hops die away
+  bounce(v = 1) { tone(150, 0.07, { type: 'sine', peak: 0.1 * v, slide: -60 }); noise(0.05, { peak: 0.08 * v, hp: 600 }); },
   whistle() { tone(2400, 0.18, { type: 'square', peak: 0.12, slide: 300 }); tone(2400, 0.22, { type: 'square', peak: 0.12, slide: -200, delay: 0.2 }); },
   win() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, { type: 'triangle', peak: 0.25, delay: i * 0.12 })); },
   out() { tone(300, 0.25, { type: 'sawtooth', peak: 0.15, slide: -150 }); },

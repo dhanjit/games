@@ -32,15 +32,16 @@
       <button class="ghost" id="howtoBtn">How to play</button>
       <div class="how how-kb">
         <div class="how-row"><span class="key">WASD / arrows</span><span>run</span></div>
-        <div class="how-row"><span class="key">mouse + click</span><span>aim and throw</span></div>
+        <div class="how-row"><span class="key">mouse + click</span><span>aim and throw a line ball</span></div>
+        <div class="how-row"><span class="key">hold click / shift+click</span><span>lob it — over anyone in the way, but it lands late</span></div>
         <div class="how-row"><span class="key">hold click / C</span><span>brace to catch a ball coming at you — face it, stand still</span></div>
         <div class="how-row"><span class="key">space</span><span>slide-dodge</span></div>
         <div class="how-row"><span class="key">Esc / R / M</span><span>pause / restart / mute</span></div>
       </div>
       <div class="how how-touch">
         <div class="how-row"><span class="key">left thumb</span><span>drag to run</span></div>
-        <div class="how-row"><span class="key">tap right</span><span>throw there</span></div>
-        <div class="how-row"><span class="key">hold right</span><span>brace to catch a ball coming at you</span></div>
+        <div class="how-row"><span class="key">tap right</span><span>throw a line ball there</span></div>
+        <div class="how-row"><span class="key">hold right</span><span>holding the ball, lob it — otherwise brace to catch</span></div>
         <div class="how-row"><span class="key">swipe right</span><span>slide-dodge that way</span></div>
       </div>
       <p class="best-line" id="best"></p>
@@ -82,10 +83,15 @@
           <canvas id="demo-airgap" aria-label="A throw from too close is waved off by the referee"></canvas>
           <figcaption><b>No air gap.</b> Throw from inside three yards and the ref voids it: they get the ball, you're dazed.</figcaption>
         </figure>
+        <figure class="demo wide">
+          <canvas id="demo-lob" aria-label="A lobbed ball arcs over the kid in front and bounces down the field"></canvas>
+          <figcaption><b>Lob.</b> <span class="kb">Hold the click (or Shift+click)</span><span class="tch">Hold your finger down</span> and the ball goes up and over anyone in the way — but it lands late, around twenty-three yards. Once it has bounced the ball is <b>dead</b>: it can't put anyone out and it can't be caught, only picked up.</figcaption>
+        </figure>
       </div>
       <ul class="rules">
         <li>Whoever holds the ball throws it. Get hit and you're out. Last kid standing wins.</li>
         <li>Holding the ball you can only shuffle. Hold it three seconds and the ref takes it.</li>
+        <li>A ball that has bounced is dead — chase it down and it's yours.</li>
         <li>The field shrinks as kids go out.</li>
         <li>Score: your place, two per hit, three per catch.</li>
       </ul>
