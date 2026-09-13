@@ -52,3 +52,30 @@ h2 { font-size: clamp(28px, 7vw, 44px); margin: 0; color: var(--chalk); }
 
 .best-line { color: var(--accent); font-weight: 700; margin: 4px 0 0; min-height: 1.2em; }
 #overSub b { color: var(--accent); }
+
+.icon-btn {
+  position: absolute; top: max(6px, env(safe-area-inset-top)); right: 10px; z-index: 5;
+  width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer; font-size: 20px;
+  background: rgba(0,0,0,0.3); color: var(--chalk); touch-action: manipulation;
+}
+#hud { padding-right: 48px; }
+.how-touch { display: none; }
+@media (pointer: coarse) { .how-kb { display: none; } .how-touch { display: grid; } }
+#rotate {
+  position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+  background: #245c26; text-align: center; padding: 24px; z-index: 10;
+}
+#rotate .rotate-icon { font-size: 56px; color: var(--accent); }
+#rotate p { margin: 4px 0; }
+#rotate .rotate-title { font-size: 22px; font-weight: 700; }
+#rotate .rotate-sub { color: var(--muted); }
+@media (orientation: portrait) and (max-width: 700px) { #rotate { display: flex; } }
+.overlay { overflow-y: auto; }
+@media (max-height: 460px) {
+  .overlay { justify-content: flex-start; padding-top: 14px; gap: 6px; }
+  h1 { font-size: 34px; text-shadow: 2px 2px 0 #1d4a1f; }
+  .tagline { font-size: 14px; }
+  .primary { font-size: 17px; padding: 8px 28px; margin-top: 2px; }
+  .how { gap: 3px; font-size: 12px; }
+  .footnote { display: none; }
+}

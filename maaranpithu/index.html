@@ -3,7 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Maaran Pithu" />
   <meta name="theme-color" content="#2f7d32" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <meta name="description" content="Maaran Pithu — a school-field dodgeball. One tennis ball, twenty kids, a referee. Last one standing." />
   <link rel="stylesheet" href="style.css" />
   <title>Maaran Pithu</title>
@@ -16,16 +22,22 @@
       <span id="alive">20 in</span>
       <span id="msg"></span>
     </div>
+    <button id="muteBtn" class="icon-btn" aria-label="Toggle sound" aria-pressed="false">♪</button>
 
     <section id="titleScreen" class="overlay">
       <h1>Maaran Pithu</h1>
       <p class="tagline">One tennis ball. Twenty kids. Last one standing.</p>
       <button class="primary" id="playBtn">Play</button>
-      <div class="how">
+      <div class="how how-kb">
         <div class="how-row"><span class="key">WASD / arrows</span><span>run</span></div>
         <div class="how-row"><span class="key">mouse + click</span><span>aim and throw · click as a ball arrives to catch it</span></div>
         <div class="how-row"><span class="key">space</span><span>slide-dodge</span></div>
-        <div class="how-row"><span class="key">R</span><span>restart</span></div>
+        <div class="how-row"><span class="key">R / M</span><span>restart / mute</span></div>
+      </div>
+      <div class="how how-touch">
+        <div class="how-row"><span class="key">left thumb</span><span>drag to run</span></div>
+        <div class="how-row"><span class="key">tap right</span><span>throw there · tap as a ball arrives to catch</span></div>
+        <div class="how-row"><span class="key">swipe right</span><span>slide-dodge that way</span></div>
       </div>
       <p class="footnote">Hit someone and they're out. Catch and the ball is yours. Throw from too close and the ref calls "no air gap". Hold it 3 seconds and the ref takes it. The field shrinks as kids go out.</p>
       <p class="best-line" id="best"></p>
@@ -36,6 +48,11 @@
       <p id="overSub"></p>
       <button class="primary" id="againBtn">Play again</button>
     </section>
+    <div id="rotate" aria-hidden="true">
+      <div class="rotate-icon">⟲</div>
+      <p class="rotate-title">Rotate your phone</p>
+      <p class="rotate-sub">The field is wider than it is tall</p>
+    </div>
   </div>
   <script type="module" src="game.js"></script>
 </body>

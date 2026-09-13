@@ -2,6 +2,7 @@
  * it except through step(). Fixed-timestep sim (1/120 s), render on rAF.
  * Field is drawn in yards → screen with a uniform scale that fits the viewport. */
 import { createWorld, step, scoreOf, T } from './rules.js';
+import { sfx } from './audio.js';
 
 const HARNESS = location.search.includes('harness');
 const Q = new URLSearchParams(location.search);
@@ -47,9 +48,42 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => keys.clear());
-canvas.addEventListener('pointermove', (e) => { mouse.x = wx(e.clientX); mouse.y = wy(e.clientY); });
-canvas.addEventListener('pointerdown', (e) => { mouse.x = wx(e.clientX); mouse.y = wy(e.clientY); mouse.throwEdge = true; });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+window.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
+window.addEventListener('keydown', () => sfx.unlock(), { once: true });
+
+// Touch: left half of the screen is a floating joystick (touch down = centre),
+// right half is tap to throw/catch toward the tap, swipe to slide that way.
+const touch = { stick: null, stickVec: { x: 0, y: 0 }, action: null, used: false };
+const STICK_R = 48, SWIPE_PX = 28, TAP_MS = 260;
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') { mouse.x = wx(e.clientX); mouse.y = wy(e.clientY); mouse.throwEdge = true; return; }
+  touch.used = true;
+  if (e.clientX < view.w / 2 && !touch.stick) { touch.stick = { id: e.pointerId, x: e.clientX, y: e.clientY }; touch.stickVec = { x: 0, y: 0 }; }
+  else if (!touch.action) touch.action = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), swiped: false };
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse') { mouse.x = wx(e.clientX); mouse.y = wy(e.clientY); return; }
+  if (touch.stick && e.pointerId === touch.stick.id) {
+    let dx = e.clientX - touch.stick.x, dy = e.clientY - touch.stick.y; const d = Math.hypot(dx, dy);
+    if (d > STICK_R) { touch.stick.x = e.clientX - dx / d * STICK_R; touch.stick.y = e.clientY - dy / d * STICK_R; dx = dx / d * STICK_R; dy = dy / d * STICK_R; }
+    const dead = 6; touch.stickVec = d < dead ? { x: 0, y: 0 } : { x: dx / STICK_R, y: dy / STICK_R };
+  } else if (touch.action && e.pointerId === touch.action.id && !touch.action.swiped) {
+    const dx = e.clientX - touch.action.x, dy = e.clientY - touch.action.y;
+    if (Math.hypot(dx, dy) > SWIPE_PX) { touch.action.swiped = true; const d = Math.hypot(dx, dy); mouse.slideDir = { x: dx / d, y: dy / d }; mouse.slideEdge = true; }
+  }
+});
+function endTouch(e) {
+  if (e.pointerType === 'mouse') return;
+  if (touch.stick && e.pointerId === touch.stick.id) { touch.stick = null; touch.stickVec = { x: 0, y: 0 }; }
+  else if (touch.action && e.pointerId === touch.action.id) {
+    const a = touch.action; touch.action = null;
+    if (!a.swiped && performance.now() - a.t < TAP_MS) { mouse.x = wx(a.x); mouse.y = wy(a.y); mouse.throwEdge = true; }
+  }
+}
+canvas.addEventListener('pointerup', endTouch);
+canvas.addEventListener('pointercancel', endTouch);
+window.addEventListener('blur', () => { touch.stick = null; touch.action = null; touch.stickVec = { x: 0, y: 0 }; });
 
 function humanInput() {
   let mx = 0, my = 0;
@@ -57,13 +91,17 @@ function humanInput() {
   if (keys.has('s') || keys.has('arrowdown')) my += 1;
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1;
   if (keys.has('d') || keys.has('arrowright')) mx += 1;
+  if (touch.stick) { mx = touch.stickVec.x; my = touch.stickVec.y; }
+  // a swipe slides in the swipe direction even when the stick is idle
+  if (mouse.slideEdge && mouse.slideDir && Math.hypot(mx, my) < 0.05) { mx = mouse.slideDir.x * 0.05; my = mouse.slideDir.y * 0.05; }
   const inp = { mx, my, aimX: mouse.x, aimY: mouse.y, throwEdge: mouse.throwEdge, slideEdge: mouse.slideEdge };
-  mouse.throwEdge = false; mouse.slideEdge = false;
+  mouse.throwEdge = false; mouse.slideEdge = false; mouse.slideDir = null;
   return inp;
 }
 
 // ── state ────────────────────────────────────────────────────────────────────
 let world = null, state = 'title';
+if (HARNESS) window.__mp = { world: () => world, state: () => state, touch: () => touch, view };
 let fx = [];          // transient visuals {type, x, y, t, ttl, ...}
 let hitStop = 0;      // seconds the sim is frozen for a catch/hit punch
 let msgUntil = 0;
@@ -87,34 +125,42 @@ function onEvents(evts) {
     switch (e.type) {
       case 'hit':
         fx.push({ type: 'pop', x: e.x, y: e.y, t: 0, ttl: 0.45 });
+        sfx.hit(); if (p.isHuman) sfx.out();
         hitStop = Math.max(hitStop, p.isHuman || by?.isHuman ? 0.09 : 0.03);
         setMsg(`${p.name} out${by ? ' — ' + by.name : ''}!`, 2.2);
         if (p.isHuman) endRound(false);
         break;
       case 'caught':
         fx.push({ type: 'flash', x: e.x, y: e.y, t: 0, ttl: 0.4 });
+        sfx.catch();
         hitStop = Math.max(hitStop, p.isHuman ? 0.12 : 0.04);
         if (p.isHuman) setMsg('Caught!', 1.5); else if (by?.isHuman) setMsg(`${p.name} caught it!`, 1.5);
         break;
       case 'airgap':
         fx.push({ type: 'whistle', x: e.x, y: e.y, t: 0, ttl: 0.6 });
+        sfx.whistle();
         if (p?.isHuman) setMsg('No air gap! Ball goes to them.', 2);
         break;
       case 'holding':
+        sfx.whistle();
         if (p?.isHuman) setMsg('Holding! Ref takes the ball.', 2);
         break;
       case 'throw':
         fx.push({ type: 'puff', x: e.x, y: e.y, t: 0, ttl: 0.3 });
+        if (p.isHuman || dist2(p, world.players[0]) < 400) sfx.throw();
         break;
       case 'slide':
         fx.push({ type: 'streak', x: e.x, y: e.y, dx: p.slideDir.x, dy: p.slideDir.y, t: 0, ttl: 1.4 });
+        if (p.isHuman) sfx.slide();
         break;
       case 'win':
+        if (p?.isHuman) sfx.win();
         endRound(p?.isHuman);
         break;
     }
   }
 }
+function dist2(a, b) { return (a.x - b.x) ** 2 + (a.y - b.y) ** 2; }
 function endRound(won) {
   if (state !== 'play') return;
   state = 'over';
@@ -130,12 +176,22 @@ function endRound(won) {
   setTimeout(() => { if (state === 'over') $('overScreen').classList.remove('hidden'); }, won ? 600 : 900);
 }
 $('best').textContent = meta.bestScore ? `Best ${meta.bestScore}` : '';
+const muteBtn = $('muteBtn');
+function reflectMute() { muteBtn.textContent = sfx.enabled ? '♪' : '♪̸'; muteBtn.setAttribute('aria-pressed', String(!sfx.enabled)); muteBtn.style.opacity = sfx.enabled ? '1' : '0.5'; }
+muteBtn.addEventListener('click', () => { sfx.setEnabled(!sfx.enabled); reflectMute(); });
+window.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 'm') { sfx.setEnabled(!sfx.enabled); reflectMute(); } });
+reflectMute();
+if ('serviceWorker' in navigator && !HARNESS && location.protocol !== 'file:') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { /* offline is a bonus, not a requirement */ }));
+}
 
 // ── loop ─────────────────────────────────────────────────────────────────────
 const DT = 1 / 120;
 let last = 0, acc = 0;
-function frame(now) {
-  requestAnimationFrame(frame);
+function frame(now) { requestAnimationFrame(frame); tick(now); }
+// headless driving: rAF stops when the tab is hidden, so the harness ticks on a timer instead
+if (HARNESS) setInterval(() => { if (document.hidden) tick(performance.now()); }, 16);
+function tick(now) {
   if (!last) last = now;
   let ft = Math.min((now - last) / 1000, 0.1); last = now;
   if (world && (state === 'play' || state === 'over')) {
@@ -225,6 +281,11 @@ function render() {
     const k = b.heldFor / T.holdLimit;
     ctx.strokeStyle = k > 0.66 ? '#ff5050' : 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(sx(me.x), sy(me.y), 1.9 * s, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - k)); ctx.stroke();
+  }
+  if (touch.stick) {
+    const st = touch.stick;
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(st.x, st.y, STICK_R, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.arc(st.x + touch.stickVec.x * STICK_R, st.y + touch.stickVec.y * STICK_R, 18, 0, Math.PI * 2); ctx.fill();
   }
   $('alive').textContent = `${world.alive} in`;
 }
