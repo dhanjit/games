@@ -116,8 +116,13 @@ throw. Both get a brief hit-stop and a sound.
 
 - **Sim harness** (#43): median round length, hit rate by distance bucket, time
   the ball is loose, win share per personality, referee call counts. Targets:
-  ~50% hits at 15 yd, >85% at 5 yd, <20% at 25 yd; median round 90–150 s; no
-  personality above ~40% win share.
+  ~50% hits at 15 yd, >85% at 5 yd, <20% at 25 yd; no personality above ~40%
+  win share. Round length target was 90–150 s; the first balance pass
+  (2026-09-13) found bot-only rounds settle at 60–70 s median and that no
+  lever tried (shrink rate, minimum box, throw delays, hold speed, ball
+  friction) moves it more than a few seconds — pace is set by player count
+  and hit rate. Revised target: 60–90 s bot-only; a human in the field is
+  slower to the ball and lengthens it.
 - **Browser smoke:** `?harness` query skips focus/visibility auto-pause so the
   in-app browser can drive a round headlessly, as `runner/` does.
 - No unit-test framework; `rules.js` is exercised by the harness.

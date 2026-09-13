@@ -28,7 +28,7 @@ export const T = {
   airGapStun: 0.5,     // s the thrower is frozen after a voided throw
   holdLimit: 3,        // s holding before the referee takes the ball
   ballR: 0.15,
-  ballSpeed: 20,       // yd/s thrown
+  ballSpeed: 24,       // yd/s thrown (sim-tuned: 20 left 15 yd throws at 16% hits)
   ballRange: 25,       // yd of flight before it drops and rolls
   ballDropKeep: 0.35,  // fraction of speed kept when it drops
   ballFriction: 9,     // yd/s² deceleration while rolling
@@ -42,10 +42,10 @@ export const T = {
 // responding to a throw; catch = chance to try a catch instead of dodging;
 // throwDelay = s to settle before releasing; aimNoise = radians of scatter.
 export const PERSONAS = {
-  rusher: { range: [4.5, 8],  reaction: 0.35, catch: 0.10, throwDelay: 0.25, aimNoise: 0.06, keep: 6 },
-  sniper: { range: [12, 18],  reaction: 0.25, catch: 0.35, throwDelay: 0.40, aimNoise: 0.02, keep: 12 },
-  coward: { range: [15, 22],  reaction: 0.30, catch: 0.30, throwDelay: 0.15, aimNoise: 0.10, keep: 16 },
-  kid:    { range: [5, 20],   reaction: 0.50, catch: 0.10, throwDelay: 0.50, aimNoise: 0.25, keep: 8 },
+  rusher: { range: [4.5, 8],  reaction: 0.22, catch: 0.30, throwDelay: 0.40, aimNoise: 0.06, keep: 6 },
+  sniper: { range: [12, 18],  reaction: 0.45, catch: 0.20, throwDelay: 0.60, aimNoise: 0.02, keep: 12 },
+  coward: { range: [15, 22],  reaction: 0.50, catch: 0.30, throwDelay: 0.40, aimNoise: 0.15, keep: 16 },
+  kid:    { range: [5, 20],   reaction: 0.60, catch: 0.10, throwDelay: 0.70, aimNoise: 0.25, keep: 8 },
 };
 const PERSONA_MIX = ['rusher', 'sniper', 'coward', 'kid', 'rusher', 'sniper', 'kid'];
 
@@ -233,8 +233,17 @@ function throwBall(w, h) {
   b.x = h.x + dx * (h.r + T.ballR + 0.05); b.y = h.y + dy * (h.r + T.ballR + 0.05);
   b.vx = dx * T.ballSpeed; b.vy = dy * T.ballSpeed;
   h.facing = { x: dx, y: dy };
+  // who is this aimed at? nearest alive player inside a narrow cone — for the balance sim
+  let td = null, best = Infinity;
+  for (const q of w.players) {
+    if (q.out || q === h) continue;
+    const qx = q.x - h.x, qy = q.y - h.y, d = Math.hypot(qx, qy);
+    const cos = (qx * dx + qy * dy) / (d || 1);
+    if (cos > 0.94 && d < best) { best = d; td = d; }
+  }
+  b.targetDist = td;
   w.stats.throws++;
-  emit(w, 'throw', { id: h.id, x: b.x, y: b.y });
+  emit(w, 'throw', { id: h.id, x: b.x, y: b.y, targetDist: td });
 }
 
 // ball meets a player: void (no air gap), catch, or hit
@@ -352,10 +361,13 @@ function thinkBots(w) {
     }
     if (b.state === 'held' && b.holder === p.id) {
       // choose a target: nearest, with the human made to look closer by the bias
+      const [lo, hi] = P.range;
       let t = null, td = Infinity;
       for (const q of alive) {
         if (q === p) continue;
-        const d = dist(p, q) / (q.isHuman ? w.humanBias : 1);
+        const raw = dist(p, q);
+        // distance as the bot feels it: in-range targets look closer, the human looks closer by the bias
+        const d = (raw >= lo && raw <= hi ? raw * 0.5 : raw) / (q.isHuman ? w.humanBias : 1);
         if (d < td) { td = d; t = q; }
       }
       bot.target = t; bot.mode = 'hold'; continue;
@@ -366,6 +378,16 @@ function thinkBots(w) {
   }
 }
 
+// anyone (not just the target) standing inside the air gap along the throw line?
+function someoneInGap(w, p, t) {
+  const dx = t.x - p.x, dy = t.y - p.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+  for (const q of w.players) {
+    if (q.out || q === p) continue;
+    const qx = q.x - p.x, qy = q.y - p.y, along = qx * ux + qy * uy;
+    if (along > 0 && along < T.airGap + 0.6 && Math.abs(qx * uy - qy * ux) < q.r + T.ballR + 0.3) return true;
+  }
+  return false;
+}
 function toward(p, x, y, sign = 1) {
   const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy) || 1;
   return { mx: sign * dx / d, my: sign * dy / d };
@@ -404,7 +426,9 @@ function botInput(w, p) {
     const mustThrow = b.heldFor > T.holdLimit - 0.5;
     const settled = b.heldFor > P.throwDelay;
     let inp = { ...mv };
-    if (d < T.airGap + 1) return toward(p, t.x, t.y, -1);
+    const ux = (t.x - p.x) / (d || 1), uy = (t.y - p.y) / (d || 1);
+    const closing = -((t.vx - p.vx) * ux + (t.vy - p.vy) * uy);          // yd/s, positive = approaching
+    if (d - Math.max(0, closing) * 0.25 < T.airGap + 1 || someoneInGap(w, p, t)) return toward(p, t.x, t.y, -1);
     if (settled && (inRange || mustThrow || (p.persona === 'coward' && d < 10))) {
       const lead = d / T.ballSpeed;
       let ax = t.x + t.vx * lead - p.x, ay = t.y + t.vy * lead - p.y;
