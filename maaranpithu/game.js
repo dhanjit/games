@@ -266,6 +266,7 @@ if (HARNESS) setInterval(() => { if (document.hidden) tick(performance.now()); }
 function tick(now) {
   if (!last) last = now;
   let ft = Math.min((now - last) / 1000, 0.1); last = now;
+  rdt = ft;                       // wall clock for the render-only easings below
   if (world && (state === 'play' || state === 'over')) {
     const inp = humanInput();
     if (hitStop > 0) hitStop -= ft;
@@ -340,11 +341,13 @@ function drawField() {
     ctx.fillStyle = i % 2 ? '#358a38' : '#2f7d32'; ctx.fillRect(x, 0, stripe + 1, H);
   }
   if (!world) return;
-  // slide streaks go under everything
+  if (ctx === mainCtx) drawWear(s);      // worn paths sit above the stripes, under the chalk
+  // slide streaks and their dust go under everything
   for (const f of fx) if (f.type === 'streak') {
     const k = f.t / f.ttl;
     ctx.strokeStyle = `rgba(90,140,60,${0.55 * (1 - k)})`; ctx.lineWidth = 0.7 * s; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(sx(f.x), sy(f.y)); ctx.lineTo(sx(f.x + f.dx * T.slideDist), sy(f.y + f.dy * T.slideDist)); ctx.stroke();
+    drawSlideDust(f, s);
   }
   // chalk field line + live boundary
   ctx.strokeStyle = 'rgba(255,248,220,0.8)'; ctx.lineWidth = Math.max(2, 0.12 * s);
@@ -407,45 +410,229 @@ function drawField() {
 // reading the bots use, so the tell never lies about a lob going overhead.
 function incomingTo(me) { return !!threat(world, me); }
 
+// ── kid animation (render-only) ──────────────────────────────────────────────
+// Nothing here is written back to the world: rules.js stays the only thing that
+// moves a kid. State is keyed by world identity first (the how-to demos are their
+// own two-kid worlds and reuse ids 0/1) and then by player id, so a new round —
+// a new world from startRound() — starts clean and the old state is collected.
+const animStore = new WeakMap();
+const TWO_PI = Math.PI * 2;
+const STRIDE_YD = 1.15;       // ground covered per full stride cycle
+const THROW_POSE = 0.25;      // s of whip-forward after a release
+const CLUTCH = 0.22;          // s of hugging the ball in after taking it
+const DUST_LIFE = 0.55;
+const SKIN = '#e8b892', LIMB = '#d79c74', HAIR = '#2b1a10', SHOE = '#3b2b1c';
+let rdt = 0;
+const reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+let MOTION = reduceMQ && reduceMQ.matches ? 0.3 : 1;   // damps the bob and the dust, never the poses
+reduceMQ?.addEventListener?.('change', (e) => { MOTION = e.matches ? 0.3 : 1; });
+
+function animOf(w, key) {
+  let m = animStore.get(w);
+  if (!m) { m = new Map(); animStore.set(w, m); }
+  let a = m.get(key);
+  if (!a) {
+    a = { px: null, py: null, phase: (typeof key === 'number' ? key * 2.4 : 0) % TWO_PI, spd: 0,
+      lx: 1, ly: 0, throwT: 0, tx: 1, ty: 0, seenThrow: -1, sit: 0, dAcc: 0, tAcc: 0 };
+    m.set(key, a);
+  }
+  return a;
+}
+function blob(X, Y, rr, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X, Y, rr, 0, TWO_PI); ctx.fill(); }
+function limb(X0, Y0, X1, Y1, wd, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = wd; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(X0, Y0); ctx.lineTo(X1, Y1); ctx.stroke();
+}
+
+// ── grass wear ───────────────────────────────────────────────────────────────
+// A 2 px-per-yard mask stamped where feet fall, drawn back scaled up (and so
+// blurred) under the chalk line. Alpha saturates, and the draw caps it at
+// WEAR_MAX, so a busy patch goes worn, never black. Main scene only — the demos
+// are 3 s loops in tiny worlds with nothing to wear.
+const WEAR_PPY = 2, WEAR_MAX = 0.17;
+let wearCv = null, wearCtx = null, wearWorld = null;
+function drawWear(s) {
+  if (!wearCv) {
+    wearCv = document.createElement('canvas');
+    wearCv.width = Math.round(T.fieldW * WEAR_PPY); wearCv.height = Math.round(T.fieldH * WEAR_PPY);
+    wearCtx = wearCv.getContext('2d');
+    wearCtx.fillStyle = 'rgba(58,44,18,0.014)';
+  }
+  if (wearWorld !== world) { wearCtx.clearRect(0, 0, wearCv.width, wearCv.height); wearWorld = world; }
+  if (state === 'play') for (const p of world.players) {
+    if (p.out && parked(p)) continue;                       // nobody wears grass sitting down
+    // both feet live inside a yard of the centre, which is two pixels here
+    wearCtx.fillRect(p.x * WEAR_PPY - 1.1, p.y * WEAR_PPY - 0.8, 2.2, 1.6);
+  }
+  ctx.globalAlpha = WEAR_MAX;
+  ctx.drawImage(wearCv, sx(0), sy(0), T.fieldW * s, T.fieldH * s);
+  ctx.globalAlpha = 1;
+}
+const parked = (p) => !!p.outTarget && Math.abs(p.outTarget.x - p.x) + Math.abs(p.outTarget.y - p.y) < 0.3;
+
+// dust and grass flecks kicked up by a slide, derived from the streak's own age
+// so nothing is spawned per frame. Jitter comes off a fixed table, not rng.
+const DUST_J = [0.31, -0.42, 0.18, -0.25, 0.47, -0.12, 0.05, 0.36];
+function drawSlideDust(f, s) {
+  const n = MOTION < 1 ? 3 : 6;
+  for (let i = 0; i < n; i++) {
+    const age = f.t - (i + 0.5) / n * T.slideTime;
+    if (age < 0 || age > DUST_LIFE) continue;
+    const q = age / DUST_LIFE, along = T.slideDist * ((i + 0.5) / n);
+    const jx = DUST_J[i & 7] * 0.7, jy = DUST_J[(i * 3 + 1) & 7] * 0.7;
+    const X = sx(f.x + f.dx * along + jx), Y = sy(f.y + f.dy * along + jy) - q * 0.4 * s * MOTION;
+    ctx.fillStyle = i % 2 ? `rgba(216,204,164,${0.5 * (1 - q)})` : `rgba(118,158,72,${0.5 * (1 - q)})`;
+    ctx.beginPath(); ctx.arc(X, Y, (0.28 + 0.7 * q) * s, 0, TWO_PI); ctx.fill();
+  }
+}
+
 function drawRef(s) {
-  const r = world.ref, x = sx(r.x), y = sy(r.y), R = 0.55 * s;
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y + R * 0.35, R * 1.05, R * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  const r = world.ref, a = animOf(world, 'ref'), x = sx(r.x), y = sy(r.y), R = 0.55 * s;
+  if (a.px === null) { a.px = r.x; a.py = r.y; }
+  const dx = r.x - a.px, dy = r.y - a.py; a.px = r.x; a.py = r.y;
+  const moved = Math.hypot(dx, dy);
+  a.phase = (a.phase + moved * (TWO_PI / 1.1)) % TWO_PI;    // jogs the sideline with the ball
+  a.dAcc += moved; a.tAcc += rdt;                            // ground per second, over a window:
+  if (a.tAcc >= 0.1) { a.spd = a.dAcc / a.tAcc; a.dAcc = 0; a.tAcc = 0; }   // a single frame may have no sim step in it
+  const pace = Math.min(1, a.spd / 4), gait = Math.sin(a.phase);
+  const bob = (0.5 - 0.5 * Math.cos(a.phase * 2)) * R * 0.18 * pace * MOTION;
+  const by = y - bob;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y + R * 0.35, R * 1.05 - bob * 0.3, R * 0.5, 0, 0, TWO_PI); ctx.fill();
+  for (let k = -1; k <= 1; k += 2) {
+    const fx2 = x + gait * k * R * (0.15 + 0.5 * pace) + k * R * 0.3;
+    blob(fx2, y + R * 0.5 - Math.max(0, gait * k) * R * 0.14 * pace * MOTION, R * 0.2, '#1a1a1a');
+  }
   // black-and-white stripes
-  ctx.save(); ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.clip();
-  for (let i = -3; i <= 3; i++) { ctx.fillStyle = i % 2 ? '#111' : '#f2f2f2'; ctx.fillRect(x + i * R * 0.34 - R * 0.17, y - R, R * 0.34, R * 2); }
+  ctx.save(); ctx.beginPath(); ctx.arc(x, by, R, 0, TWO_PI); ctx.clip();
+  for (let i = -3; i <= 3; i++) { ctx.fillStyle = i % 2 ? '#111' : '#f2f2f2'; ctx.fillRect(x + i * R * 0.34 - R * 0.17, by - R, R * 0.34, R * 2); }
   ctx.restore();
-  ctx.fillStyle = '#e8b892'; ctx.beginPath(); ctx.arc(x, y - R * 0.55, R * 0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(x, y - R * 0.68, R * 0.45, Math.PI, Math.PI * 2); ctx.fill();
-  if (r.say) {
+  blob(x, by - R * 0.55, R * 0.5, SKIN);
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(x, by - R * 0.68, R * 0.45, Math.PI, TWO_PI); ctx.fill();
+  if (r.say) {   // a call: one arm up, the whistle at the mouth, for as long as the bubble is up
+    const ux = x + R * 1.15, uy = by - R * 1.35;
+    limb(x + R * 0.5, by - R * 0.15, ux, uy, R * 0.26, LIMB); blob(ux, uy, R * 0.2, LIMB);
+    const wx2 = x - R * 0.38, wy2 = by - R * 0.42;
+    limb(x - R * 0.55, by, wx2, wy2, R * 0.26, LIMB); blob(wx2, wy2, R * 0.18, LIMB);
+    blob(wx2 + R * 0.16, wy2 - R * 0.04, R * 0.12, '#dcdcdc');
     ctx.font = `bold ${Math.max(11, 0.7 * s)}px Trebuchet MS, sans-serif`; ctx.textAlign = 'center';
     const tw = ctx.measureText(r.say).width + 0.8 * s, th = 1.1 * s;
-    const bx = Math.min(view.w - tw / 2 - 4, Math.max(tw / 2 + 4, x + 1.6 * s)), by = y - 2.4 * s;
-    ctx.fillStyle = '#fffdf5'; roundRect(bx - tw / 2, by - th / 2, tw, th, 0.35 * s); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(bx - 0.4 * s, by + th / 2); ctx.lineTo(x + 0.3 * s, y - R); ctx.lineTo(bx + 0.2 * s, by + th / 2); ctx.fill();
-    ctx.fillStyle = '#222'; ctx.textBaseline = 'middle'; ctx.fillText(r.say, bx, by + 1); ctx.textBaseline = 'alphabetic';
+    const bx = Math.min(view.w - tw / 2 - 4, Math.max(tw / 2 + 4, x + 1.6 * s)), byy = y - 2.4 * s;
+    ctx.fillStyle = '#fffdf5'; roundRect(bx - tw / 2, byy - th / 2, tw, th, 0.35 * s); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bx - 0.4 * s, byy + th / 2); ctx.lineTo(x + 0.3 * s, y - R); ctx.lineTo(bx + 0.2 * s, byy + th / 2); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.textBaseline = 'middle'; ctx.fillText(r.say, bx, byy + 1); ctx.textBaseline = 'alphabetic';
   }
 }
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
 function drawKid(p, s) {
-  const x = sx(p.x), y = sy(p.y), r = p.r * s;
-  const held = world.ball.state === 'held' && world.ball.holder === p.id;
-  ctx.globalAlpha = p.out ? 0.45 : 1;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(x, y + r * 0.35, r * 1.05, r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-  const squash = p.slideT > 0 ? 0.7 : 1;                     // sliding kids go low
-  ctx.fillStyle = p.color; ctx.beginPath(); ctx.ellipse(x, y, r * (2 - squash), r * squash, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#e8b892'; ctx.beginPath(); ctx.arc(x, y - r * 0.55 * squash, r * 0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#2b1a10'; ctx.beginPath(); ctx.arc(x, y - r * 0.68 * squash, r * 0.45, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + p.facing.x * r * 1.2, y + p.facing.y * r * 1.2); ctx.stroke();
+  const b = world.ball, a = animOf(world, p.id), r = p.r * s;
+  const x = sx(p.x), y = sy(p.y);
+  const held = b.state === 'held' && b.holder === p.id;
+  if (a.px === null) { a.px = p.x; a.py = p.y; a.lx = p.facing.x; a.ly = p.facing.y; }
+
+  // Stride phase advances with ground covered rather than with time, so a sprint
+  // and a ball-holder's 1.5 yd/s shuffle read as different gaits for free.
+  const dx = p.x - a.px, dy = p.y - a.py; a.px = p.x; a.py = p.y;
+  const moved = Math.hypot(dx, dy);
+  a.phase = (a.phase + moved * (TWO_PI / STRIDE_YD)) % TWO_PI;
+  a.spd += (Math.hypot(p.vx, p.vy) - a.spd) * Math.min(1, rdt * 16);
+  const pace = Math.min(1, a.spd / T.moveSpeed), gait = Math.sin(a.phase);
+  const hx = p.facing.x, hy = p.facing.y, qx = -hy, qy = hx;      // facing, and the kid's right side
+  let mx = hx, my = hy;
+  if (moved > 1e-4) { mx = dx / moved; my = dy / moved; }         // feet travel where the body does
+  const nx = -my, ny = mx;
+
+  // a release latches the whip-forward pose: the ball can hit someone before it plays out
+  if (b.thrownAt !== a.seenThrow && b.thrower === p.id) { a.seenThrow = b.thrownAt; a.throwT = THROW_POSE; a.tx = b.dir.x; a.ty = b.dir.y; }
+  a.throwT = Math.max(0, a.throwT - rdt);
+  const thr = a.throwT / THROW_POSE;
+  const clutch = held && b.heldFor < CLUTCH ? 1 - b.heldFor / CLUTCH : 0;
+  const brace = p.bracing ? 1 : 0, slid = p.slideT > 0 ? 1 : 0;
+
+  // the head turns toward a ball in flight, lerped so it never snaps. Render only:
+  // p.facing belongs to the sim and decides catches.
+  let lx = hx, ly = hy;
+  if (b.state === 'flight') { const ex = b.x - p.x, ey = b.y - p.y, d = Math.hypot(ex, ey) || 1; lx = ex / d; ly = ey / d; }
+  const kl = 1 - Math.exp(-rdt * 9);
+  a.lx += (lx - a.lx) * kl; a.ly += (ly - a.ly) * kl;
+  const ll = Math.hypot(a.lx, a.ly) || 1, gx = a.lx / ll, gy = a.ly / ll;
+
+  // out kids walk off, then sit down on the sideline facing the game
+  a.sit += ((p.out && parked(p) ? 1 : 0) - a.sit) * Math.min(1, rdt * 5);
+  const sit = a.sit;
+  let tx = mx, ty = my;
+  if (sit > 0.01) { const ex = world.field.w / 2 - p.x, ey = world.field.h / 2 - p.y, d = Math.hypot(ex, ey) || 1; tx = ex / d; ty = ey / d; }
+
+  const squash = slid ? 0.7 : 1;
+  const bob = (0.5 - 0.5 * Math.cos(a.phase * 2)) * r * 0.22 * pace * MOTION * (1 - sit) * (1 - slid);
+  const by = y - bob + r * 0.5 * sit;                              // body centre, bobbing over the ground
+
+  ctx.globalAlpha = p.out ? 0.45 - 0.1 * sit : 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(x, y + r * 0.35, r * 1.05 - bob * 0.3, r * 0.5 - bob * 0.15, 0, 0, TWO_PI); ctx.fill();
+
+  // legs: alternating along the travel axis, planted wide to brace, stretched out to sit
+  const stride = r * (0.3 + 1.25 * pace) * (1 - brace) * (1 - sit) * (1 - slid);
+  const spread = r * (0.4 + 0.45 * brace + 0.25 * slid);
+  for (let i = 0; i < 2; i++) {
+    const sg = i ? -1 : 1, ph = gait * sg, reach = r * (0.55 + 1.2 * sit);
+    const hipx = x + nx * spread * 0.5 * sg, hipy = by + ny * spread * 0.5 * sg + r * 0.15;
+    const footx = x + nx * spread * sg + mx * stride * ph + tx * reach * sit - hx * r * 0.25 * brace;
+    const footy = y + ny * spread * sg + my * stride * ph + ty * reach * sit - hy * r * 0.25 * brace
+      + r * 0.34 * (1 - sit) - Math.max(0, ph) * r * 0.16 * pace * MOTION;
+    limb(hipx, hipy, footx, footy, r * 0.3, LIMB);
+    blob(footx, footy, r * 0.22, SHOE);
+  }
+
+  // arms, drawn under the shirt so only what reaches past it shows: swinging,
+  // both out to brace, hugged in on a catch, cocked back while holding the ball,
+  // whipping through toward b.dir on a throw
+  const shx = x + qx * r * 0.7, shy = by + qy * r * 0.7, s2x = x - qx * r * 0.7, s2y = by - qy * r * 0.7;
+  const swing = r * (0.35 + 0.9 * pace) * (1 - sit * 0.6);
+  let h1x, h1y, h2x, h2y, ballx = 0, bally = 0;
+  if (thr > 0) {
+    const reach = r * (1.2 + 0.8 * thr);
+    h1x = x + a.tx * reach + qx * r * 0.25; h1y = by + a.ty * reach + qy * r * 0.25;
+    h2x = x - a.tx * r * 0.4 - qx * r * 0.9; h2y = by - a.ty * r * 0.4 - qy * r * 0.9;
+  } else if (clutch > 0) {                          // pulled in around the ball
+    const pull = r * (1.3 - 0.35 * clutch);
+    h1x = x + hx * pull + qx * r * 0.4; h1y = by + hy * pull + qy * r * 0.4;
+    h2x = x + hx * pull - qx * r * 0.4; h2y = by + hy * pull - qy * r * 0.4;
+    ballx = x + hx * r * (0.9 - 0.5 * clutch); bally = by + hy * r * (0.9 - 0.5 * clutch);
+  } else if (held) {
+    const cock = Math.min(1, b.heldFor / 0.8);      // a wind-up while the thrower settles
+    h1x = x + hx * r * (0.3 - 0.9 * cock) + qx * r * (1 + 0.35 * cock);
+    h1y = by + hy * r * (0.3 - 0.9 * cock) + qy * r * (1 + 0.35 * cock);
+    h2x = x + hx * r * 0.9 - qx * r * 0.7; h2y = by + hy * r * 0.9 - qy * r * 0.7;
+    ballx = h1x; bally = h1y;
+  } else if (brace) {
+    h1x = x + hx * r * 1.35 + qx * r * 0.6; h1y = by + hy * r * 1.35 + qy * r * 0.6;
+    h2x = x + hx * r * 1.35 - qx * r * 0.6; h2y = by + hy * r * 1.35 - qy * r * 0.6;
+  } else {
+    h1x = shx - mx * swing * gait + qx * r * 0.3; h1y = shy - my * swing * gait + qy * r * 0.3;
+    h2x = s2x + mx * swing * gait - qx * r * 0.3; h2y = s2y + my * swing * gait - qy * r * 0.3;
+  }
+  limb(shx, shy, h1x, h1y, r * 0.26, LIMB); blob(h1x, h1y, r * 0.2, LIMB);
+  limb(s2x, s2y, h2x, h2y, r * 0.26, LIMB); blob(h2x, h2y, r * 0.2, LIMB);
+
+  // body: sliding kids go low and stretch along the slide, seated kids slump wide
+  ctx.fillStyle = p.color; ctx.beginPath();
+  ctx.ellipse(x, by, r * (2 - squash) * (1 + 0.2 * sit), r * squash * (1 - 0.2 * sit),
+    slid ? Math.atan2(p.slideDir.y, p.slideDir.x) : 0, 0, TWO_PI); ctx.fill();
+  limb(x + hx * r * 0.5, by + hy * r * 0.5, x + hx * r * 1.15, by + hy * r * 1.15, 2, 'rgba(0,0,0,0.35)');   // facing tick
+
+  // head, turned toward whatever the kid is watching; the hair sits at the back of it
+  blob(x + gx * r * 0.22, by - r * 0.55 * squash + gy * r * 0.22, r * 0.5, SKIN);
+  ctx.fillStyle = HAIR; ctx.beginPath();
+  ctx.arc(x + gx * r * 0.14, by - r * 0.68 * squash + gy * r * 0.14, r * 0.45, Math.PI, TWO_PI); ctx.fill();
+
+  if (held) {
+    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, TWO_PI); ctx.stroke();
+    ctx.fillStyle = '#e8ff3a'; ctx.beginPath(); ctx.arc(ballx, bally, Math.max(3, 0.2 * s), 0, TWO_PI); ctx.fill();
+  }
   if (p.stunT > 0 && !p.out) { // dazed stars
     ctx.fillStyle = '#ffd23f'; ctx.font = `${0.6 * s}px sans-serif`; ctx.textAlign = 'center';
-    ctx.fillText('✦ ✦', x, y - r * 1.9);
-  }
-  if (held) {
-    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2); ctx.stroke();
-    const bx = x + p.facing.x * r * 1.4, by = y + p.facing.y * r * 1.4;
-    ctx.fillStyle = '#e8ff3a'; ctx.beginPath(); ctx.arc(bx, by, Math.max(3, 0.2 * s), 0, Math.PI * 2); ctx.fill();
+    ctx.fillText('✦ ✦', x, by - r * 1.9);
   }
   if (p.bracing) {   // catch cone, drawn for anyone bracing
     const a0 = Math.atan2(p.facing.y, p.facing.x), c = T.catchCone * Math.PI / 180;
@@ -453,13 +640,13 @@ function drawKid(p, s) {
     ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r * 3.2, a0 - c, a0 + c); ctx.closePath(); ctx.fill();
   }
   if (p.id === hero && !p.out) {   // the ring marks you
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * 1.25, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * 1.25, 0, TWO_PI); ctx.stroke();
     if (p.slideCd > 0) { // slide cooldown arc
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, r * 1.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - p.slideCd / T.slideCooldown)); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, r * 1.5, -Math.PI / 2, -Math.PI / 2 + TWO_PI * (1 - p.slideCd / T.slideCooldown)); ctx.stroke();
     }
   }
-  ctx.globalAlpha = p.out ? 0.45 : 0.9;
+  ctx.globalAlpha = p.out ? 0.45 - 0.1 * sit : 0.9;
   ctx.fillStyle = '#fffdf5'; ctx.font = `${Math.max(9, 0.55 * s)}px Trebuchet MS, sans-serif`; ctx.textAlign = 'center';
   ctx.fillText(p.name, x, y + r * 2.1);
   ctx.globalAlpha = 1;

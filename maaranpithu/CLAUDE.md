@@ -29,6 +29,36 @@ hopping with `bounceRestitution` / `bounceKeep` until a hop is slower than
 range and its over-the-heads band from `T`, so bots and the sim never hard-code
 a distance; `threat(w, p)` reads the arc and is shared with the renderer's tell.
 
+## Animation
+
+Kids, the ref and the grass are animated entirely in `game.js`. The sim is
+untouched: rendering reads the world and never writes to it.
+
+**Render-only state** lives in `animStore`, a `WeakMap` keyed by *world* and then
+by player id (plus `'ref'`) — `animOf(w, key)` → `{phase, spd, lx/ly, throwT, sit, …}`.
+Keying by world means a new round (a new `createWorld`) starts from a clean slate
+and the how-to demos, which are their own two-kid worlds reusing ids 0/1, never
+collide with the round.
+
+- **Stride** phase advances with *ground covered* (`STRIDE_YD` per cycle), so a
+  6 yd/s sprint and a 1.5 yd/s ball-holder shuffle read as different gaits with
+  nothing passed in. Amplitude comes off `p.vx/p.vy`: deriving speed from the
+  distance between two renders does **not** work, because `render()` runs every
+  rAF while the world only moves on a 1/120 s step, so the frames in between
+  measure zero and the pace decays to nothing.
+- **Poses** are read off the world — `p.bracing` (arms out, feet planted),
+  `p.slideT` + `p.slideDir` (squash, stretched along the slide, dust off the
+  streak fx), `b.holder`/`b.heldFor` (clutch, then a hand cocked back that the
+  held ball rides), `b.thrownAt`/`b.thrower` (a latched 0.25 s whip-forward),
+  `p.out` + arrival at `p.outTarget` (sit down on the sideline). No new events.
+- **The head turn** toward a ball in flight is a lerped render-only vector;
+  `p.facing` belongs to the sim and decides catches, so it is never touched.
+- **Grass wear** is an offscreen 2 px-per-yard canvas stamped where feet fall
+  each frame and drawn back scaled up under the chalk. It clears when the world
+  identity changes, and only the main scene gets it.
+- `prefers-reduced-motion` scales `MOTION`, which damps the bob, the foot lift
+  and the dust — never the poses.
+
 ## Files
 
 | File | Role |
