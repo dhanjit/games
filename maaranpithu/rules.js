@@ -344,8 +344,10 @@ function threat(w, p) {
 function thinkBots(w) {
   const b = w.ball;
   const alive = alivePlayers(w);
+  // nearest *bot* to a loose ball goes for it; the human competes on their own, so
+  // a human who stands still never leaves the ball lying there
   let nearest = null, nd = Infinity;
-  if (b.state === 'loose') for (const p of alive) { const d = dist(p, b); if (d < nd) { nd = d; nearest = p; } }
+  if (b.state === 'loose') for (const p of alive) { if (!p.bot) continue; const d = dist(p, b); if (d < nd) { nd = d; nearest = p; } }
   for (const p of alive) {
     if (!p.bot) continue;
     const bot = p.bot, P = PERSONAS[p.persona];

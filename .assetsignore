@@ -9,3 +9,6 @@ node_modules
 *.bak
 wrangler.jsonc
 .assetsignore
+
+# balance harness, not a page
+**/sim/
