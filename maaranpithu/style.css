@@ -49,3 +49,6 @@ h2 { font-size: clamp(28px, 7vw, 44px); margin: 0; color: var(--chalk); }
 .how-row { display: flex; gap: 12px; align-items: center; }
 .key { background: rgba(255,255,255,.12); padding: 2px 8px; border-radius: 6px; color: var(--chalk); font-weight: 700; min-width: 120px; text-align: center; }
 .footnote { color: var(--muted); font-size: 13px; max-width: 340px; margin: 6px 0 0; }
+
+.best-line { color: var(--accent); font-weight: 700; margin: 4px 0 0; min-height: 1.2em; }
+#overSub b { color: var(--accent); }
