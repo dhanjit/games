@@ -37,7 +37,7 @@ let meta = loadMeta();
 
 // ── input ────────────────────────────────────────────────────────────────────
 const keys = new Set();
-const mouse = { x: T.fieldW / 2, y: T.fieldH / 2, throwEdge: false, slideEdge: false };
+const mouse = { x: T.fieldW / 2, y: T.fieldH / 2, throwEdge: false, slideEdge: false, held: false };
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   const k = e.key.toLowerCase();
@@ -57,7 +57,7 @@ window.addEventListener('keydown', () => sfx.unlock(), { once: true });
 const touch = { stick: null, stickVec: { x: 0, y: 0 }, action: null, used: false };
 const STICK_R = 48, SWIPE_PX = 28, TAP_MS = 260;
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.pointerType === 'mouse') { mouse.x = wx(e.clientX); mouse.y = wy(e.clientY); mouse.throwEdge = true; return; }
+  if (e.pointerType === 'mouse') { mouse.x = wx(e.clientX); mouse.y = wy(e.clientY); mouse.throwEdge = true; mouse.held = true; return; }
   touch.used = true;
   if (e.clientX < view.w / 2 && !touch.stick) { touch.stick = { id: e.pointerId, x: e.clientX, y: e.clientY }; touch.stickVec = { x: 0, y: 0 }; }
   else if (!touch.action) touch.action = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), swiped: false };
@@ -74,16 +74,17 @@ canvas.addEventListener('pointermove', (e) => {
   }
 });
 function endTouch(e) {
-  if (e.pointerType === 'mouse') return;
+  if (e.pointerType === 'mouse') { mouse.held = false; return; }
   if (touch.stick && e.pointerId === touch.stick.id) { touch.stick = null; touch.stickVec = { x: 0, y: 0 }; }
   else if (touch.action && e.pointerId === touch.action.id) {
     const a = touch.action; touch.action = null;
     if (!a.swiped && performance.now() - a.t < TAP_MS) { mouse.x = wx(a.x); mouse.y = wy(a.y); mouse.throwEdge = true; }
+    else if (!a.swiped) mouse.throwEdge = true;   // a long hold releases as a throw if you hold the ball
   }
 }
 canvas.addEventListener('pointerup', endTouch);
 canvas.addEventListener('pointercancel', endTouch);
-window.addEventListener('blur', () => { touch.stick = null; touch.action = null; touch.stickVec = { x: 0, y: 0 }; });
+window.addEventListener('blur', () => { touch.stick = null; touch.action = null; touch.stickVec = { x: 0, y: 0 }; mouse.held = false; });
 
 function humanInput() {
   let mx = 0, my = 0;
@@ -94,7 +95,10 @@ function humanInput() {
   if (touch.stick) { mx = touch.stickVec.x; my = touch.stickVec.y; }
   // a swipe slides in the swipe direction even when the stick is idle
   if (mouse.slideEdge && mouse.slideDir && Math.hypot(mx, my) < 0.05) { mx = mouse.slideDir.x * 0.05; my = mouse.slideDir.y * 0.05; }
-  const inp = { mx, my, aimX: mouse.x, aimY: mouse.y, throwEdge: mouse.throwEdge, slideEdge: mouse.slideEdge };
+  // brace: mouse button or C held; on touch, a right-half finger held past a tap (aim follows it)
+  let catchHold = mouse.held || keys.has('c');
+  if (touch.action && !touch.action.swiped && performance.now() - touch.action.t >= TAP_MS) { catchHold = true; mouse.x = wx(touch.action.x); mouse.y = wy(touch.action.y); }
+  const inp = { mx, my, aimX: mouse.x, aimY: mouse.y, throwEdge: mouse.throwEdge, slideEdge: mouse.slideEdge, catchHold };
   mouse.throwEdge = false; mouse.slideEdge = false; mouse.slideDir = null;
   return inp;
 }
@@ -253,6 +257,10 @@ function render() {
       ctx.strokeStyle = 'rgba(232,255,58,0.45)'; ctx.lineWidth = 0.18 * s; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(sx(b.x - b.dir.x * 1.2), sy(b.y - b.dir.y * 1.2) - lift); ctx.lineTo(sx(b.x), sy(b.y) - lift); ctx.stroke();
     }
+    if (b.state === 'flight' && incomingToMe()) {   // the catch tell
+      const k = 0.5 + 0.5 * Math.sin(performance.now() / 60);
+      ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.25 * k})`; ctx.beginPath(); ctx.arc(sx(b.x), sy(b.y) - lift, (0.6 + 0.2 * k) * s, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.fillStyle = '#e8ff3a'; ctx.beginPath(); ctx.arc(sx(b.x), sy(b.y) - lift, Math.max(3, 0.2 * s), 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#c9dd1c'; ctx.lineWidth = 1; ctx.stroke();
   }
@@ -288,6 +296,14 @@ function render() {
     ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.arc(st.x + touch.stickVec.x * STICK_R, st.y + touch.stickVec.y * STICK_R, 18, 0, Math.PI * 2); ctx.fill();
   }
   $('alive').textContent = `${world.alive} in`;
+}
+
+// is the ball in flight going to pass near the human?
+function incomingToMe() {
+  const b = world.ball, me = world.players[0];
+  if (me.out || b.thrower === 0) return false;
+  const rx = me.x - b.x, ry = me.y - b.y, along = rx * b.dir.x + ry * b.dir.y;
+  return along > 0 && along < T.ballRange - b.flown + 1 && Math.abs(rx * b.dir.y - ry * b.dir.x) < 2;
 }
 
 function drawRef(s) {
@@ -329,6 +345,11 @@ function drawKid(p, s) {
     ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2); ctx.stroke();
     const bx = x + p.facing.x * r * 1.4, by = y + p.facing.y * r * 1.4;
     ctx.fillStyle = '#e8ff3a'; ctx.beginPath(); ctx.arc(bx, by, Math.max(3, 0.2 * s), 0, Math.PI * 2); ctx.fill();
+  }
+  if (p.bracing) {   // catch cone, drawn for anyone bracing
+    const a0 = Math.atan2(p.facing.y, p.facing.x), c = T.catchCone * Math.PI / 180;
+    ctx.fillStyle = p.isHuman ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r * 3.2, a0 - c, a0 + c); ctx.closePath(); ctx.fill();
   }
   if (p.isHuman && !p.out) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * 1.25, 0, Math.PI * 2); ctx.stroke();
