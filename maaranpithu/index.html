@@ -23,17 +23,19 @@
       <span id="msg"></span>
     </div>
     <button id="muteBtn" class="icon-btn" aria-label="Toggle sound" aria-pressed="false">♪</button>
+    <button id="pauseBtn" class="icon-btn" aria-label="Pause" hidden>❚❚</button>
 
     <section id="titleScreen" class="overlay">
       <h1>Maaran Pithu</h1>
       <p class="tagline">One tennis ball. Twenty kids. Last one standing.</p>
       <button class="primary" id="playBtn">Play</button>
+      <button class="ghost" id="howtoBtn">How to play</button>
       <div class="how how-kb">
         <div class="how-row"><span class="key">WASD / arrows</span><span>run</span></div>
         <div class="how-row"><span class="key">mouse + click</span><span>aim and throw</span></div>
         <div class="how-row"><span class="key">hold click / C</span><span>brace to catch a ball coming at you — face it, stand still</span></div>
         <div class="how-row"><span class="key">space</span><span>slide-dodge</span></div>
-        <div class="how-row"><span class="key">R / M</span><span>restart / mute</span></div>
+        <div class="how-row"><span class="key">Esc / R / M</span><span>pause / restart / mute</span></div>
       </div>
       <div class="how how-touch">
         <div class="how-row"><span class="key">left thumb</span><span>drag to run</span></div>
@@ -41,7 +43,6 @@
         <div class="how-row"><span class="key">hold right</span><span>brace to catch a ball coming at you</span></div>
         <div class="how-row"><span class="key">swipe right</span><span>slide-dodge that way</span></div>
       </div>
-      <p class="footnote">Hit someone and they're out. Brace and catch, and the ball is yours. Throw from too close and the ref calls "no air gap". Hold it 3 seconds and the ref takes it. The field shrinks as kids go out.</p>
       <p class="best-line" id="best"></p>
     </section>
 
@@ -49,6 +50,46 @@
       <h2 id="overTitle">Out!</h2>
       <p id="overSub"></p>
       <button class="primary" id="againBtn">Play again</button>
+      <button class="ghost" id="overMenuBtn">Menu</button>
+    </section>
+
+    <section id="pauseScreen" class="overlay hidden" role="dialog" aria-modal="true" tabindex="-1">
+      <h2>Paused</h2>
+      <button class="primary" id="resumeBtn">Resume</button>
+      <div class="stack">
+        <button class="ghost" id="pauseHowtoBtn">How to play</button>
+        <button class="ghost" id="restartBtn">Restart</button>
+        <button class="ghost" id="quitBtn">Menu</button>
+      </div>
+    </section>
+
+    <section id="howtoScreen" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="howtoTitle" tabindex="-1">
+      <h2 id="howtoTitle">How to play</h2>
+      <div class="demos">
+        <figure class="demo">
+          <canvas id="demo-throw" aria-label="A kid throws the ball and hits another, who is out"></canvas>
+          <figcaption><b>Throw.</b> <span class="kb">Aim with the mouse, click to throw.</span><span class="tch">Tap where you want it to go.</span> Hit a kid and they're out.</figcaption>
+        </figure>
+        <figure class="demo">
+          <canvas id="demo-catch" aria-label="A kid braces, facing the ball, and catches it"></canvas>
+          <figcaption><b>Catch.</b> <span class="kb">Hold click or C</span><span class="tch">Hold a finger on the right</span> as the ball comes: you stop, face it, and it's yours.</figcaption>
+        </figure>
+        <figure class="demo">
+          <canvas id="demo-slide" aria-label="A kid slides sideways and the ball misses"></canvas>
+          <figcaption><b>Slide.</b> <span class="kb">Space</span><span class="tch">Swipe</span> slides you four yards. Time it as the ball arrives.</figcaption>
+        </figure>
+        <figure class="demo">
+          <canvas id="demo-airgap" aria-label="A throw from too close is waved off by the referee"></canvas>
+          <figcaption><b>No air gap.</b> Throw from inside three yards and the ref voids it: they get the ball, you're dazed.</figcaption>
+        </figure>
+      </div>
+      <ul class="rules">
+        <li>Whoever holds the ball throws it. Get hit and you're out. Last kid standing wins.</li>
+        <li>Holding the ball you can only shuffle. Hold it three seconds and the ref takes it.</li>
+        <li>The field shrinks as kids go out.</li>
+        <li>Score: your place, two per hit, three per catch.</li>
+      </ul>
+      <button class="primary" id="howtoBackBtn">Back</button>
     </section>
     <div id="rotate" aria-hidden="true">
       <div class="rotate-icon">⟲</div>

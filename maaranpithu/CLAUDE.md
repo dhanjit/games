@@ -31,8 +31,15 @@ Tracker: issue #40.
 ## Inputs
 
 Keyboard: WASD/arrows run, mouse aims, click throws, holding the button or C braces to
-catch (stand still, face the ball, ±75° cone), space slides, R restarts, M mutes. Touch: left half is a floating
+catch (stand still, face the ball, ±75° cone), space slides, Esc or P pauses, R restarts, M mutes. Touch: left half is a floating
 joystick, right half tap = throw toward the tap, hold = brace to catch, swipe = slide that way.
+
+## How-to demos
+
+The four demos on the how-to screen are real two-kid worlds from `rules.js`
+driven by a script (`DEMO_DEFS` in `game.js`), drawn with the same code as the
+round via `drawScene()`, which swaps the module draw targets. A demo therefore
+can't show a rule the sim doesn't have; when a rule changes, the demo follows.
 
 ## Theme
 

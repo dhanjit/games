@@ -7,12 +7,16 @@ import { sfx } from './audio.js';
 const HARNESS = location.search.includes('harness');
 const Q = new URLSearchParams(location.search);
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+const mainCtx = canvas.getContext('2d');
+// The draw helpers read these; drawScene() swaps them so the how-to demos render with the same code.
+let ctx = mainCtx, hero = 0;
 const $ = (id) => document.getElementById(id);
 const META_KEY = 'maaranpithu.meta';
 
-const view = { w: 0, h: 0, scale: 1, ox: 0, oy: 0 };
+const mainView = { w: 0, h: 0, scale: 1, ox: 0, oy: 0 };
+let view = mainView;
 function resize() {
+  const view = mainView, ctx = mainCtx;
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   view.w = window.innerWidth; view.h = window.innerHeight;
   canvas.width = Math.round(view.w * dpr); canvas.height = Math.round(view.h * dpr);
@@ -27,7 +31,7 @@ const sx = (x) => view.ox + x * view.scale;
 const sy = (y) => view.oy + y * view.scale;
 const wx = (px) => (px - view.ox) / view.scale;
 const wy = (py) => (py - view.oy) / view.scale;
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => { resize(); if (state === 'howto') layoutDemos(); });
 resize();
 
 // ── meta (best score) ────────────────────────────────────────────────────────
@@ -43,11 +47,14 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === ' ' && !e.repeat) mouse.slideEdge = true;
   keys.add(k);
-  if (k === 'r' && state !== 'title') startRound();
+  if (k === 'r' && (state === 'play' || state === 'paused' || state === 'over')) startRound();
   if (e.key === 'Enter' && state === 'title') startRound();
+  if (k === 'escape' || k === 'p') {
+    if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); else if (state === 'howto') closeHowto();
+  }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('blur', () => { keys.clear(); if (state === 'play' && !HARNESS) pauseGame(); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 window.addEventListener('keydown', () => sfx.unlock(), { once: true });
@@ -112,36 +119,74 @@ let msgUntil = 0;
 const NBOTS = Number(Q.get('bots')) || 19;
 const HUMAN_BIAS = Number(Q.get('bias')) || 1;
 
+const OVERLAYS = ['titleScreen', 'overScreen', 'pauseScreen', 'howtoScreen'];
+function showOverlay(id) { for (const o of OVERLAYS) $(o).classList.toggle('hidden', o !== id); $('pauseBtn').hidden = state !== 'play'; }
+let howtoReturn = 'title';
+
 function startRound() {
   world = createWorld({ nBots: NBOTS, humanBias: HUMAN_BIAS, seed: (Math.random() * 2 ** 32) >>> 0 });
-  fx = []; hitStop = 0; state = 'play';
-  $('titleScreen').classList.add('hidden'); $('overScreen').classList.add('hidden');
+  fx = []; hitStop = 0; state = 'play'; last = 0; acc = 0;
+  showOverlay(null);
   setMsg('Get the ball!', 2);
+}
+function pauseGame() {
+  if (state !== 'play') return;
+  state = 'paused'; keys.clear(); mouse.held = false; touch.stick = null; touch.action = null; touch.stickVec = { x: 0, y: 0 };
+  showOverlay('pauseScreen');
+}
+function resumeGame() { if (state !== 'paused') return; state = 'play'; last = 0; acc = 0; showOverlay(null); }
+function quitToMenu() { state = 'title'; world = null; fx = []; $('alive').textContent = ''; $('msg').textContent = ''; $('best').textContent = meta.bestScore ? `Best ${meta.bestScore}` : ''; showOverlay('titleScreen'); }
+function openHowto() {
+  if (state === 'play') { pauseGame(); }
+  howtoReturn = state === 'paused' ? 'paused' : 'title';
+  state = 'howto'; showOverlay('howtoScreen'); layoutDemos(); for (const d of demos) resetDemo(d);
+}
+function closeHowto() {
+  if (state !== 'howto') return;
+  state = howtoReturn; showOverlay(state === 'paused' ? 'pauseScreen' : 'titleScreen');
 }
 function setMsg(s, secs) { $('msg').textContent = s; msgUntil = performance.now() + secs * 1000; }
 $('playBtn').addEventListener('click', startRound);
 $('againBtn').addEventListener('click', startRound);
+$('howtoBtn').addEventListener('click', openHowto);
+$('howtoBackBtn').addEventListener('click', closeHowto);
+$('pauseBtn').addEventListener('click', pauseGame);
+$('resumeBtn').addEventListener('click', resumeGame);
+$('pauseHowtoBtn').addEventListener('click', openHowto);
+$('restartBtn').addEventListener('click', startRound);
+$('quitBtn').addEventListener('click', quitToMenu);
+$('overMenuBtn').addEventListener('click', quitToMenu);
 
+// visual effect for an event, or null. Shared by the round and the how-to demos.
+function fxFor(e, w) {
+  const p = e.id !== null && e.id !== undefined ? w.players[e.id] : null;
+  switch (e.type) {
+    case 'hit': return { type: 'pop', x: e.x, y: e.y, t: 0, ttl: 0.45 };
+    case 'caught': return { type: 'flash', x: e.x, y: e.y, t: 0, ttl: 0.4 };
+    case 'airgap': return { type: 'whistle', x: e.x, y: e.y, t: 0, ttl: 0.6 };
+    case 'throw': return { type: 'puff', x: e.x, y: e.y, t: 0, ttl: 0.3 };
+    case 'slide': return { type: 'streak', x: e.x, y: e.y, dx: p.slideDir.x, dy: p.slideDir.y, t: 0, ttl: 1.4 };
+  }
+  return null;
+}
 function onEvents(evts) {
   for (const e of evts) {
     const p = e.id !== null && e.id !== undefined ? world.players[e.id] : null;
     const by = e.by !== null && e.by !== undefined ? world.players[e.by] : null;
+    const f = fxFor(e, world); if (f) fx.push(f);
     switch (e.type) {
       case 'hit':
-        fx.push({ type: 'pop', x: e.x, y: e.y, t: 0, ttl: 0.45 });
         sfx.hit(); if (p.isHuman) sfx.out();
         hitStop = Math.max(hitStop, p.isHuman || by?.isHuman ? 0.09 : 0.03);
         setMsg(`${p.name} out${by ? ' — ' + by.name : ''}!`, 2.2);
         if (p.isHuman) endRound(false);
         break;
       case 'caught':
-        fx.push({ type: 'flash', x: e.x, y: e.y, t: 0, ttl: 0.4 });
         sfx.catch();
         hitStop = Math.max(hitStop, p.isHuman ? 0.12 : 0.04);
         if (p.isHuman) setMsg('Caught!', 1.5); else if (by?.isHuman) setMsg(`${p.name} caught it!`, 1.5);
         break;
       case 'airgap':
-        fx.push({ type: 'whistle', x: e.x, y: e.y, t: 0, ttl: 0.6 });
         sfx.whistle();
         if (p?.isHuman) setMsg('No air gap! Ball goes to them.', 2);
         break;
@@ -150,11 +195,9 @@ function onEvents(evts) {
         if (p?.isHuman) setMsg('Holding! Ref takes the ball.', 2);
         break;
       case 'throw':
-        fx.push({ type: 'puff', x: e.x, y: e.y, t: 0, ttl: 0.3 });
         if (p.isHuman || dist2(p, world.players[0]) < 400) sfx.throw();
         break;
       case 'slide':
-        fx.push({ type: 'streak', x: e.x, y: e.y, dx: p.slideDir.x, dy: p.slideDir.y, t: 0, ttl: 1.4 });
         if (p.isHuman) sfx.slide();
         break;
       case 'win':
@@ -213,14 +256,47 @@ function tick(now) {
     }
     for (const f of fx) f.t += ft; fx = fx.filter(f => f.t < f.ttl);
   }
+  if (state === 'howto') { for (const d of demos) stepDemo(d, ft); }
   render();
   if (performance.now() > msgUntil) $('msg').textContent = '';
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = 0; acc = 0; } });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (state === 'play' && !HARNESS) pauseGame(); }
+  else { last = 0; acc = 0; }
+});
 requestAnimationFrame(frame);
 
 // ── render ───────────────────────────────────────────────────────────────────
 function render() {
+  drawScene({ ctx: mainCtx, view: mainView, world, fx, hero: 0 });
+  if (state === 'howto') for (const d of demos) drawScene(d);
+  if (!world) return;
+  const b = world.ball, s = view.scale;
+  // aim line and holding-limit ring when you hold the ball
+  const me = world.players[0];
+  if (state === 'play' && b.state === 'held' && b.holder === 0) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(sx(me.x), sy(me.y)); ctx.lineTo(sx(mouse.x), sy(mouse.y)); ctx.stroke(); ctx.setLineDash([]);
+    const k = b.heldFor / T.holdLimit;
+    ctx.strokeStyle = k > 0.66 ? '#ff5050' : 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx(me.x), sy(me.y), 1.9 * s, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - k)); ctx.stroke();
+  }
+  if (touch.stick) {
+    const st = touch.stick;
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(st.x, st.y, STICK_R, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.arc(st.x + touch.stickVec.x * STICK_R, st.y + touch.stickVec.y * STICK_R, 18, 0, Math.PI * 2); ctx.fill();
+  }
+  $('alive').textContent = `${world.alive} in`;
+}
+
+// Draw one scene (the round, or a how-to demo) into its canvas. Swaps the module
+// draw targets for the duration so every helper below works unchanged.
+function drawScene(scene) {
+  const saved = { ctx, view, world, fx, hero };
+  ({ ctx, view, world, fx, hero } = scene);
+  try { drawField(); } finally { ({ ctx, view, world, fx, hero } = saved); }
+}
+function drawField() {
   const W = view.w, H = view.h, s = view.scale;
   ctx.fillStyle = '#2f7d32'; ctx.fillRect(0, 0, W, H);
   const stripe = 4 * s;
@@ -257,7 +333,7 @@ function render() {
       ctx.strokeStyle = 'rgba(232,255,58,0.45)'; ctx.lineWidth = 0.18 * s; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(sx(b.x - b.dir.x * 1.2), sy(b.y - b.dir.y * 1.2) - lift); ctx.lineTo(sx(b.x), sy(b.y) - lift); ctx.stroke();
     }
-    if (b.state === 'flight' && incomingToMe()) {   // the catch tell
+    if (b.state === 'flight' && incomingTo(world.players[hero])) {   // the catch tell
       const k = 0.5 + 0.5 * Math.sin(performance.now() / 60);
       ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.25 * k})`; ctx.beginPath(); ctx.arc(sx(b.x), sy(b.y) - lift, (0.6 + 0.2 * k) * s, 0, Math.PI * 2); ctx.fill();
     }
@@ -280,28 +356,12 @@ function render() {
       ctx.fillText('✕', sx(f.x), sy(f.y) - (0.5 + k * 1.5) * s);
     }
   }
-  // aim line when you hold the ball; catch hint when a ball is coming at you
-  const me = world.players[0];
-  if (state === 'play' && b.state === 'held' && b.holder === 0) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(sx(me.x), sy(me.y)); ctx.lineTo(sx(mouse.x), sy(mouse.y)); ctx.stroke(); ctx.setLineDash([]);
-    // holding-limit ring drains
-    const k = b.heldFor / T.holdLimit;
-    ctx.strokeStyle = k > 0.66 ? '#ff5050' : 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(sx(me.x), sy(me.y), 1.9 * s, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - k)); ctx.stroke();
-  }
-  if (touch.stick) {
-    const st = touch.stick;
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(st.x, st.y, STICK_R, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.arc(st.x + touch.stickVec.x * STICK_R, st.y + touch.stickVec.y * STICK_R, 18, 0, Math.PI * 2); ctx.fill();
-  }
-  $('alive').textContent = `${world.alive} in`;
 }
 
-// is the ball in flight going to pass near the human?
-function incomingToMe() {
-  const b = world.ball, me = world.players[0];
-  if (me.out || b.thrower === 0) return false;
+// is the ball in flight going to pass near this player?
+function incomingTo(me) {
+  const b = world.ball;
+  if (!me || me.out || b.thrower === me.id) return false;
   const rx = me.x - b.x, ry = me.y - b.y, along = rx * b.dir.x + ry * b.dir.y;
   return along > 0 && along < T.ballRange - b.flown + 1 && Math.abs(rx * b.dir.y - ry * b.dir.x) < 2;
 }
@@ -348,10 +408,10 @@ function drawKid(p, s) {
   }
   if (p.bracing) {   // catch cone, drawn for anyone bracing
     const a0 = Math.atan2(p.facing.y, p.facing.x), c = T.catchCone * Math.PI / 180;
-    ctx.fillStyle = p.isHuman ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)';
+    ctx.fillStyle = p.id === hero ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)';
     ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r * 3.2, a0 - c, a0 + c); ctx.closePath(); ctx.fill();
   }
-  if (p.isHuman && !p.out) {
+  if (p.id === hero && !p.out) {   // the ring marks you
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * 1.25, 0, Math.PI * 2); ctx.stroke();
     if (p.slideCd > 0) { // slide cooldown arc
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 2;
@@ -362,4 +422,63 @@ function drawKid(p, s) {
   ctx.fillStyle = '#fffdf5'; ctx.font = `${Math.max(9, 0.55 * s)}px Trebuchet MS, sans-serif`; ctx.textAlign = 'center';
   ctx.fillText(p.name, x, y + r * 2.1);
   ctx.globalAlpha = 1;
+}
+
+// ── how-to-play demos ────────────────────────────────────────────────────────
+// Each demo is a real two-kid world from rules.js driven by a script, drawn with
+// the same code as the round, looping every few seconds at half speed. A demo
+// can't show a rule the sim doesn't have.
+const DEMO_SPEED = 0.55, DEMO_WIN = { w: 12, h: 8, cx: 26, cy: 20 };
+const crossed = (t, tp, at) => tp < at && t >= at;
+const DEMO_DEFS = [
+  { id: 'throw', loop: 2.6, hero: 0, ay: 20, by: 20,
+    script: (w, t, tp, d) => ({ 0: { aimX: w.players[1].x, aimY: w.players[1].y, throwEdge: crossed(t, tp, 0.8) } }) },
+  { id: 'catch', loop: 2.8, hero: 1, ay: 20, by: 20,
+    script: (w, t, tp, d) => ({ 0: { aimX: w.players[1].x, aimY: w.players[1].y, throwEdge: crossed(t, tp, 0.8) },
+                                 1: { catchHold: t > 0.35, aimX: w.players[0].x, aimY: w.players[0].y } }) },
+  { id: 'slide', loop: 3.0, hero: 1, ay: 21, by: 21,
+    script: (w, t, tp, d) => {
+      const b = w.ball, me = w.players[1];
+      const go = b.state === 'flight' && !d.slid && Math.hypot(b.x - me.x, b.y - me.y) < 4.5;
+      if (go) d.slid = true;
+      return { 0: { aimX: 30, aimY: 21, throwEdge: crossed(t, tp, 0.8) }, 1: go ? { my: -1, slideEdge: true } : {} };
+    } },
+  { id: 'airgap', loop: 2.6, hero: 0, ax: 24, bx: 26.6, ay: 20.5, by: 20.5, refY: 18.6,
+    script: (w, t, tp, d) => ({ 0: { aimX: w.players[1].x, aimY: w.players[1].y, throwEdge: crossed(t, tp, 0.8) } }) },
+];
+const demos = DEMO_DEFS.map((def) => {
+  const canvas = document.getElementById('demo-' + def.id);
+  return { def, canvas, ctx: canvas.getContext('2d'), view: { w: 0, h: 0, scale: 1, ox: 0, oy: 0 }, world: null, fx: [], hero: def.hero, t: 0, acc: 0, slid: false };
+});
+function resetDemo(d) {
+  const def = d.def, w = createWorld({ humans: 2, nBots: 0, seed: 1 });
+  const [a, b] = w.players;
+  a.name = 'Riju'; a.color = '#f4a261'; b.name = 'Momi'; b.color = '#2a9d8f';
+  a.x = def.ax ?? 22; a.y = def.ay; b.x = def.bx ?? 30; b.y = def.by;
+  a.facing = { x: 1, y: 0 }; b.facing = { x: -1, y: 0 };
+  w.ball.x = a.x; w.ball.y = a.y;               // picked up on the first step
+  if (def.refY !== undefined) w.ref.y = def.refY;
+  d.world = w; d.fx = []; d.t = 0; d.acc = 0; d.slid = false;
+}
+function stepDemo(d, ft) {
+  if (!d.world) resetDemo(d);
+  d.acc += ft * DEMO_SPEED;
+  while (d.acc >= DT) {
+    const tp = d.t; d.t += DT;
+    if (d.t >= d.def.loop) { resetDemo(d); break; }
+    const evts = step(d.world, DT, d.def.script(d.world, d.t, tp, d));
+    for (const e of evts) { const f = fxFor(e, d.world); if (f) d.fx.push(f); }
+    d.acc -= DT;
+  }
+  for (const f of d.fx) f.t += ft * DEMO_SPEED; d.fx = d.fx.filter(f => f.t < f.ttl);
+}
+function layoutDemos() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  for (const d of demos) {
+    const cssW = d.canvas.clientWidth || 280, cssH = Math.round(cssW * DEMO_WIN.h / DEMO_WIN.w);
+    d.canvas.width = Math.round(cssW * dpr); d.canvas.height = Math.round(cssH * dpr);
+    d.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const v = d.view; v.w = cssW; v.h = cssH; v.scale = cssW / DEMO_WIN.w;
+    v.ox = -(DEMO_WIN.cx - DEMO_WIN.w / 2) * v.scale; v.oy = -(DEMO_WIN.cy - DEMO_WIN.h / 2) * v.scale;
+  }
 }
