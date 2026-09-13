@@ -11,8 +11,9 @@
  * inputs.
  *
  * API:  createWorld(opts) → world;  step(world, dt, inputsById) → world.events
- * inputs: { mx, my (−1..1), aimX, aimY (yards), throwEdge, slideEdge }
- * throwEdge throws when holding and attempts a catch when a ball is in flight.
+ * inputs: { mx, my (−1..1), aimX, aimY (yards), throwEdge, slideEdge, catchHold }
+ * throwEdge throws when holding. catchHold (held) braces: you stand still and a ball
+ * arriving inside the catch cone of your aim/facing is caught instead of hitting.
  */
 
 export const T = {
@@ -23,7 +24,7 @@ export const T = {
   moveSpeed: 6,        // yd/s sprint
   holdSpeed: 1.5,      // yd/s shuffle while holding the ball
   slideDist: 4, slideTime: 0.35, slideCooldown: 1.2,
-  catchWindow: 0.15,   // s before impact in which a throw-press catches
+  catchCone: 75,       // degrees either side of facing/aim in which a braced player catches
   airGap: 3,           // yd the ball must fly before a hit counts
   airGapStun: 0.5,     // s the thrower is frozen after a voided throw
   holdLimit: 3,        // s holding before the referee takes the ball
@@ -92,7 +93,7 @@ export function createWorld(opts = {}) {
       isHuman: i < humans, x: 0, y: 0, vx: 0, vy: 0, r: T.playerR,
       out: false, outTarget: null, hits: 0, catches: 0, placement: 0, score: 0,
       facing: { x: 1, y: 0 }, aim: null, wantThrow: false, wantSlide: false,
-      slideT: 0, slideCd: 0, slideDir: { x: 1, y: 0 }, stunT: 0, catchAt: -1,
+      slideT: 0, slideCd: 0, slideDir: { x: 1, y: 0 }, stunT: 0, bracing: false,
       persona, bot: persona ? { mode: 'idle', target: null, plan: null, planAt: 0, seenThrow: -1, wander: { x: 0, y: 0 }, wanderAt: 0 } : null,
     });
   }
@@ -130,6 +131,9 @@ export function step(w, dt, inputsById = {}) {
     const inp = p.isHuman ? (inputsById[p.id] || {}) : botInput(w, p);
     if (inp.aimX !== undefined) p.aim = { x: inp.aimX, y: inp.aimY };
     if (inp.throwEdge) p.wantThrow = true;
+    // bracing: only while a ball is in flight from someone else, never while holding or sliding
+    p.bracing = !!inp.catchHold && b.state === 'flight' && b.thrower !== p.id && p.slideT <= 0 && p.stunT <= 0;
+    if (p.bracing && p.aim) { const ax = p.aim.x - p.x, ay = p.aim.y - p.y, al = Math.hypot(ax, ay); if (al > 0.2) p.facing = { x: ax / al, y: ay / al }; }
     if (inp.slideEdge) p.wantSlide = true;
     p.slideCd = Math.max(0, p.slideCd - dt);
     p.stunT = Math.max(0, p.stunT - dt);
@@ -147,7 +151,7 @@ export function step(w, dt, inputsById = {}) {
     }
     p.wantSlide = false;
 
-    if (p.stunT > 0) { p.vx = p.vy = 0; }
+    if (p.stunT > 0 || p.bracing) { p.vx = p.vy = 0; }
     else if (p.slideT > 0) {
       const sp = T.slideDist / T.slideTime;
       p.vx = p.slideDir.x * sp; p.vy = p.slideDir.y * sp; p.slideT -= dt;
@@ -157,8 +161,6 @@ export function step(w, dt, inputsById = {}) {
     }
     p.x += p.vx * dt; p.y += p.vy * dt;
 
-    // catch attempt: a throw-press while a ball is in flight
-    if (p.wantThrow && b.state === 'flight' && b.thrower !== p.id) p.catchAt = w.t;
   }
   separate(w);
   shrinkBounds(w, dt);
@@ -221,7 +223,7 @@ export function scoreOf(w, p) {
 function hold(w, p, how) {
   const b = w.ball;
   b.state = 'held'; b.holder = p.id; b.thrower = null; b.heldFor = 0; b.vx = b.vy = 0;
-  p.catchAt = -1;
+  p.bracing = false;
   emit(w, how, { id: p.id });
 }
 
@@ -258,7 +260,7 @@ function contact(w, p) {
     hold(w, p, 'pickup');
     return;
   }
-  if (p.catchAt >= 0 && w.t - p.catchAt <= T.catchWindow) {
+  if (p.bracing && facingBall(p, b)) {
     p.catches++; w.stats.catches++;
     hold(w, p, 'catch');
     emit(w, 'caught', { id: p.id, by: thrower ? thrower.id : null, x: b.x, y: b.y });
@@ -274,6 +276,12 @@ function contact(w, p) {
   refSay(w, `${p.name}, out!`);
   emit(w, 'hit', { id: p.id, by: thrower ? thrower.id : null, x: b.x, y: b.y, dist: b.flown });
   retargetBounds(w);
+}
+
+// is the ball arriving from inside the catch cone of where p faces?
+function facingBall(p, b) {
+  const cos = -(b.dir.x * p.facing.x + b.dir.y * p.facing.y);
+  return cos >= Math.cos(T.catchCone * Math.PI / 180);
 }
 
 function refTakes(w, h) {
@@ -404,7 +412,7 @@ function botInput(w, p) {
     if (bot.plan === 'catch') {
       // face the ball, stand, press in the window
       p.facing = { x: -b.dir.x, y: -b.dir.y };
-      return { mx: 0, my: 0, throwEdge: th.eta <= T.catchWindow * 0.8 && p.catchAt < 0 };
+      return { mx: 0, my: 0, catchHold: true };
     }
     // dodge: slide perpendicular to the ball's path, away from its line
     const rx = p.x - b.x, ry = p.y - b.y;

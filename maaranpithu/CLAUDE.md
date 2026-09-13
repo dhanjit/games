@@ -30,9 +30,9 @@ Tracker: issue #40.
 
 ## Inputs
 
-Keyboard: WASD/arrows run, mouse aims, click throws (or catches when a ball is
-incoming), space slides, R restarts, M mutes. Touch: left half is a floating
-joystick, right half tap = throw/catch toward the tap, swipe = slide that way.
+Keyboard: WASD/arrows run, mouse aims, click throws, holding the button or C braces to
+catch (stand still, face the ball, ±75° cone), space slides, R restarts, M mutes. Touch: left half is a floating
+joystick, right half tap = throw toward the tap, hold = brace to catch, swipe = slide that way.
 
 ## Theme
 
