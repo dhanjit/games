@@ -161,3 +161,86 @@ test('an exhausted hand is pinned and cannot slide at all', () => {
   advance(w, T.slideTime, { 0: { hold: true } });
   assert.strictEqual(w.players[0].hand.p, 0, 'a pinned hand must not move');
 });
+
+test('sliding with nobody threatening arms nothing and just burns nerve', () => {
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0 });
+  const evs = advance(w, T.slideTime + 0.1, { 0: { hold: true } });
+  assert.ok(!typesOf(evs).includes('baitArm'));
+  assert.strictEqual(w.bait, null);
+  assert.strictEqual(w.down, 0, 'nobody may go down without an armed bait');
+  assert.ok(w.players[0].hand.nerve < T.nerveMax);
+});
+
+test('sliding while a fist is loaded arms a bait', () => {
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0 });
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true } });
+  const evs = advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true } });
+  assert.ok(typesOf(evs).includes('baitArm'));
+  assert.ok(w.bait);
+});
+
+test('releasing once the hand has gone aborts instead of dropping', () => {
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0 });
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true } });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true } });
+  const evs = advance(w, 1 / 60, { 0: { hold: true }, 1: { hold: false } });
+  assert.ok(typesOf(evs).includes('abort'));
+  assert.ok(!typesOf(evs).includes('drop'));
+  assert.strictEqual(w.players[1].fist.state, 'abort');
+});
+
+test('in a duel, the lone caught fist goes down when the window closes', () => {
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0 });
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true } });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true } });
+  const evs = advance(w, T.baitWindow + 0.05, { 0: { hold: true }, 1: { hold: false } });
+  const resolved = evs.find(e => e.type === 'baitResolve');
+  assert.ok(resolved, 'the window must resolve');
+  assert.strictEqual(resolved.loser, 1);
+  assert.strictEqual(w.down, 1);
+  assert.ok(typesOf(evs).includes('goesDown'));
+});
+
+test('the last to resolve goes down — a fast fouler walks, a slow aborter pays', () => {
+  const w = createWorld({ humans: 3, nBots: 0, seed: 1, down: 0 });
+  // Both 1 and 2 load. 1 is already dropping when the hand goes (fouls early);
+  // 2 dithers and aborts late.
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true }, 2: { hold: true } });
+  w.players[1].fist.state = 'drop'; w.players[1].fist.t = 0;      // committed
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 2: { hold: true } });
+  advance(w, 0.25, { 0: { hold: true }, 2: { hold: true } });      // 2 dithers
+  const evs = advance(w, T.baitWindow, { 0: { hold: true }, 2: { hold: false } });
+  const resolved = evs.find(e => e.type === 'baitResolve');
+  assert.ok(resolved);
+  assert.strictEqual(resolved.loser, 2, 'the later resolver goes down');
+  assert.strictEqual(w.down, 2);
+});
+
+test('a fist that never wound ranks below everyone and goes down', () => {
+  const w = createWorld({ humans: 3, nBots: 0, seed: 1, down: 0 });
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true } });   // only 1 threatens
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true } });
+  const evs = advance(w, T.baitWindow + 0.05, { 0: { hold: true }, 1: { hold: false } });
+  const resolved = evs.find(e => e.type === 'baitResolve');
+  assert.strictEqual(resolved.loser, 2, 'the passive kid outranks an aborter for last place');
+  assert.strictEqual(resolved.kind, 'passive');
+});
+
+test('a foul with no bait open puts that fist straight down', () => {
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0, hp: 99 });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true } });   // clear, no threat, no bait
+  assert.strictEqual(w.bait, null);
+  w.players[1].fist.state = 'drop'; w.players[1].fist.t = 0;
+  advance(w, T.dropTime + 0.02, { 0: { hold: true } });
+  assert.strictEqual(w.down, 1);
+});
+
+test('losing the last HP ends the duel', () => {
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0, hp: 1 });
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true } });
+  const evs = advance(w, T.dropTime + 0.02, { 1: { hold: false } });
+  assert.ok(typesOf(evs).includes('out'));
+  assert.ok(typesOf(evs).includes('over'));
+  assert.strictEqual(w.over, true);
+  assert.strictEqual(w.winner, 1);
+});

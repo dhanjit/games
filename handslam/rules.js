@@ -71,6 +71,68 @@ const THREAT = new Set(['wind', 'loaded', 'drop']);
 /** The hand is "there" when the strike spot still holds the back of it. */
 function handIsThere(w) { return zoneOf(w.players[w.down].hand.p) === 'hand'; }
 
+function tryArm(w) {
+  if (w.bait) return;
+  const threat = w.players.some(p => p.id !== w.down && !p.out && THREAT.has(p.fist.state));
+  if (!threat) return;
+  w.bait = { openedAt: w.t, closeAt: w.t + T.baitWindow, entries: [] };
+  emit(w, 'baitArm', { at: w.t });
+}
+
+function addEntry(w, p, kind) {
+  if (!w.bait) { goDown(w, p, kind); return; }          // a lone foul, no window
+  if (w.bait.entries.some(e => e.id === p.id)) return;  // one entry per fist
+  w.bait.entries.push({ id: p.id, t: w.t, kind });
+}
+
+/** Seats further clockwise from the current defender rank later on a tie. */
+function seatDist(w, id) { return (id - w.down + w.n) % w.n; }
+
+function resolveBait(w) {
+  const b = w.bait;
+  w.bait = null;
+  for (const p of w.players) {
+    if (p.id === w.down || p.out) continue;
+    if (b.entries.some(e => e.id === p.id)) continue;
+    if (p.fist.state === 'recover') continue;            // spent its turn honestly
+    b.entries.push(p.fist.state === 'ready'
+      ? { id: p.id, t: b.closeAt + 1e-6, kind: 'passive' }
+      : { id: p.id, t: b.closeAt, kind: 'froze' });
+  }
+  if (!b.entries.length) { emit(w, 'baitResolve', { entries: [], loser: null, kind: null }); return; }
+  b.entries.sort((x, y) => (y.t - x.t) || (seatDist(w, y.id) - seatDist(w, x.id)));
+  const loser = b.entries[0];
+  emit(w, 'baitResolve', { entries: b.entries.slice(), loser: loser.id, kind: loser.kind });
+  goDown(w, w.players[loser.id], loser.kind);
+}
+
+function goDown(w, p, kind) {
+  if (p.id === w.down || p.out) return;
+  const from = w.down;
+  const prev = w.players[from];
+  prev.hand.state = 'flat'; prev.hand.p = 0;
+  w.down = p.id;
+  p.fist.state = 'recover'; p.fist.t = 0;      // you do not strike on arrival
+  p.hand.state = 'flat'; p.hand.p = 0;
+  p.hand.pinned = false;
+  p.hand.nerve = T.nerveMax;                   // M1: a fresh turn starts calm
+  w.bait = null;
+  emit(w, 'goesDown', { id: p.id, from, kind });
+}
+
+function knockOut(w, d, by) {
+  d.out = true;
+  emit(w, 'out', { id: d.id });
+  const alive = w.players.filter(x => !x.out);
+  if (alive.length <= 1) {
+    w.over = true;
+    w.winner = alive.length ? alive[0].id : null;
+    emit(w, 'over', { winner: w.winner });
+  } else {
+    goDown(w, by, 'knockout');
+  }
+}
+
 function land(w, p) {
   const d = w.players[w.down];
   const zone = zoneOf(d.hand.p);
@@ -78,8 +140,10 @@ function land(w, p) {
   if (zone === 'hand') {
     d.hp -= T.thumpDamage;
     emit(w, 'thump', { id: p.id, target: d.id, hp: d.hp });
+    if (d.hp <= 0) knockOut(w, d, p);
   } else {
-    emit(w, zone, { id: p.id, target: d.id });   // 'wrist' | 'desk' — both fouls
+    emit(w, zone, { id: p.id, target: d.id });
+    addEntry(w, p, zone);
   }
 }
 
@@ -95,7 +159,14 @@ function stepFist(w, p, inp, dt) {
       break;
     case 'loaded':
       if (f.t < T.loadMin || inp.hold) break;
-      if (handIsThere(w)) { f.state = 'drop'; f.t = 0; emit(w, 'drop', { id: p.id }); }
+      if (handIsThere(w)) {
+        f.state = 'drop'; f.t = 0;
+        emit(w, 'drop', { id: p.id });
+      } else {
+        f.state = 'abort'; f.t = 0;
+        emit(w, 'abort', { id: p.id });
+        addEntry(w, p, 'abort');
+      }
       break;
     case 'drop':
       if (f.t >= T.dropTime) land(w, p);
@@ -137,6 +208,7 @@ export function createWorld(opts = {}) {
 
 function stepHand(w, p, inp, dt) {
   const h = p.hand;
+  const wasHand = zoneOf(h.p) === 'hand';
   switch (h.state) {
     case 'flat':
       h.nerve = Math.min(T.nerveMax, h.nerve + T.nerveRegen * dt);
@@ -163,6 +235,7 @@ function stepHand(w, p, inp, dt) {
       else if (inp.hold && !h.pinned) h.state = 'sliding';
       break;
   }
+  if (wasHand && zoneOf(h.p) !== 'hand') tryArm(w);
 }
 
 export function step(w, dt, inputsById = {}) {
@@ -177,5 +250,8 @@ export function step(w, dt, inputsById = {}) {
     if (p.out || p.id === w.down) continue;
     stepFist(w, p, inputsById[p.id] || {}, dt);
   }
+
+  // After the fists: an abort on the closing tick must still count.
+  if (w.bait && w.t >= w.bait.closeAt) resolveBait(w);
   return w.events;
 }
