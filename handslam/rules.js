@@ -46,10 +46,21 @@ export const T = {
 //
 // spookAt must exceed T.windTime + T.loadMin (the earliest legal drop, 0.22s)
 // or the defender always starts sliding before any drop is even legal, always
-// escapes, and the attacker always aborts — a duel that never ends. 0.30
-// leaves headroom above that 0.22 floor for the `noise` jitter.
+// escapes, and the attacker always aborts — a duel that never ends.
+//
+// That floor is necessary but nowhere near sufficient. Sweeping bot-only duels
+// (2026-09-15), 0.26 and 0.30 still never terminated; 0.34 ended 15% of the
+// time; 0.40 upward ended every one. 0.46 is chosen because it sits on the
+// attacker's *median* commit — windTime + the middle of loadStyle ≈ 0.47s — so
+// the defender wins when a fist holds its tension and loses when it strikes
+// early. That is the whole read, and it is why this number is not just "high
+// enough to work".
+//
+// Nerve never runs out in bot-vs-bot play at this setting (`pinned` fires 0.0
+// times per match). The meter currently only bites a human who over-flinches;
+// M3 should decide whether that is acceptable or whether nerve needs teeth.
 export const PERSONAS = {
-  kid: { spookAt: 0.30, abortReaction: 0.22, loadStyle: [0.15, 0.55], nerveFloor: 0.18, noise: 0.05 },
+  kid: { spookAt: 0.46, abortReaction: 0.22, loadStyle: [0.15, 0.55], nerveFloor: 0.18, noise: 0.05 },
 };
 const P = (p) => PERSONAS[p.persona] || PERSONAS.kid;
 
@@ -296,8 +307,11 @@ export function botInput(w, p) {
     // tracking has ended (age fell back to 0). Hold the same roll for as
     // long as some threat keeps the age above 0, even if which fist is
     // "most advanced" changes underneath it.
-    if (age <= 0) b.spookThreshold = null;
-    else if (b.spookThreshold == null) b.spookThreshold = cfg.spookAt * jitter();
+    // No threat, no reason to move — and return before the comparison below,
+    // because `0 >= null` coerces to `0 >= 0` and would slide the hand out at
+    // an empty desk, burning the whole nerve bar for nothing.
+    if (age <= 0) { b.spookThreshold = null; return { hold: false }; }
+    if (b.spookThreshold == null) b.spookThreshold = cfg.spookAt * jitter();
     if (h.pinned || h.nerve <= cfg.nerveFloor) return { hold: false };
     return { hold: age >= b.spookThreshold };
   }

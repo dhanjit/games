@@ -363,3 +363,14 @@ test('every persona names the five fields the bot reads', () => {
     }
   }
 });
+
+test('a bot that is down does not flinch at an empty desk', () => {
+  // Regression: `age >= b.spookThreshold` with a null threshold coerces to
+  // `0 >= 0`, which slid the hand out with nothing threatening it and drained
+  // the whole nerve bar.
+  const w = createWorld({ humans: 1, nBots: 1, seed: 4, down: 1, hp: 99 });
+  const evs = advance(w, 2, { 0: { hold: false } });   // the human never winds
+  assert.ok(!typesOf(evs).includes('slideStart'), 'nothing threatened it; it must not slide');
+  assert.strictEqual(w.players[1].hand.state, 'flat');
+  assert.strictEqual(w.players[1].hand.nerve, T.nerveMax);
+});

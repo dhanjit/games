@@ -208,21 +208,42 @@ aborts, and the match becomes an endless abort-and-swap with HP frozen. At the
 plan's first guess of 0.16 exactly none of 40 seeded bot duels ever ended —
 118 role-swaps each and not one thump.
 
-| `spookAt` | matches ending | median length | swaps/match |
-|---|---|---|---|
-| 0.16 | **0%** | never | 118 |
-| 0.22 (the floor) | 85% | 78.5 s | 71 |
-| 0.26 | 100% | 28.6 s | 23 |
-| **0.30** (chosen) | 100% | 18.6 s | 11 |
-| 0.40 | 100% | 10.2 s | 4 |
+Every future persona must clear that 0.22 floor — it is a property of the rules,
+not a taste setting, and it is asserted in a comment above `PERSONAS`.
 
-0.30 keeps headroom above the 0.22 floor for the `noise` jitter. Every future
-persona must clear that floor too — it is a property of the rules, not a taste
-setting, and it is asserted in a comment above `PERSONAS`.
+**The floor is necessary and nowhere near sufficient.** A first sweep suggested
+0.30 was plenty. It was not: that sweep was measuring a bot with two bugs in it
+(a threat age that *fell* when a fist committed, and a null-threshold comparison
+that made an idle defender flinch at an empty desk until its nerve ran out).
+Matches were ending because the bot exhausted its own nerve bar and then stood
+there taking free hits. With both fixed, the real numbers over 40 seeded duels:
 
-This is DECISIONS #7 working exactly as intended, one milestone earlier than
-expected: a number that read as obviously fine was structurally broken, and only
-running it showed that.
+| `spookAt` | matches ending | median length | thumps | swaps | `pinned` |
+|---|---|---|---|---|---|
+| 0.26 | **0%** | never | 0.0 | 109 | 0 |
+| 0.30 | **0%** | never | 0.0 | 105 | 0 |
+| 0.34 | 15% | 98 s | 2.0 | 96 | 0 |
+| 0.40 | 100% | 33.5 s | 4.2 | 22 | 0 |
+| **0.46** (chosen) | 100% | 18.1 s | 4.0 | 9 | 0 |
+| 0.70 | 100% | 5.4 s | 3.3 | 0.4 | 0 |
+
+0.46 is chosen for a reason beyond "it terminates": it sits on the attacker's
+*median* commit — `windTime` plus the middle of `loadStyle`, ≈ 0.47 s — so the
+defender wins the exchange when a fist holds its tension and loses when it
+strikes early. That is the read the game is made of.
+
+**`pinned` is 0.0 at every setting**, which is its own finding: nerve never runs
+out in bot-vs-bot play, so the meter currently only bites a human who
+over-flinches. M3 decides whether that is acceptable or whether nerve needs
+teeth.
+
+This is DECISIONS #7 working as intended, a milestone earlier than expected —
+and a sharper version of it than #7 states. A number that read as obviously fine
+was structurally broken; and then a number the sim had *apparently validated*
+turned out to be an artifact of bugs in the thing doing the validating. The rule
+"sim it before, sim it after" needs a rider: **a sweep is only worth what the
+model under it is worth.** When a bug is fixed, every number measured against
+the old behaviour has to be re-measured, not carried forward.
 
 ## Controls
 
