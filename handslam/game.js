@@ -141,12 +141,15 @@ function drawFist(p) {
   const s = seatGeom(p.seat);
   const f = p.fist;
   // A winding fist draws back and rises; a dropping one falls onto the spot.
+  // A recovering fist is spent and out of play — it must read as level with
+  // (never above) a resting `ready` fist, or a just-landed fist looks more
+  // threatening than an armed one, inverting the one cue this game is about.
   let lift = 0, tense = 0;
   if (f.state === 'wind') { tense = f.t / T.windTime; lift = 22 * tense; }
   else if (f.state === 'loaded') { tense = 1; lift = 22; }
   else if (f.state === 'drop') { tense = 1; lift = 22 * (1 - f.t / T.dropTime); }
   else if (f.state === 'abort') { lift = 22 * (1 - f.t / T.abortTime); }
-  else if (f.state === 'recover') { lift = 4; }
+  const spent = f.state === 'recover';
 
   const groundX = s.spotX + Math.cos(s.a) * lift * 0.6;
   const groundY = s.spotY + Math.sin(s.a) * lift * 0.6;
@@ -166,7 +169,9 @@ function drawFist(p) {
   ctx.strokeStyle = '#cf9a63'; ctx.lineWidth = 14; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(s.edgeX, s.edgeY); ctx.lineTo(fx, fy); ctx.stroke();
 
-  ctx.fillStyle = tense > 0 ? `rgb(${230 + 25 * tense}, ${150 - 40 * tense}, ${110 - 40 * tense})` : '#e6a870';
+  ctx.fillStyle = spent ? '#8c8478'                                              // spent — muted, reads as out of play
+    : tense > 0 ? `rgb(${230 + 25 * tense}, ${150 - 40 * tense}, ${110 - 40 * tense})`
+    : '#e6a870';
   ctx.beginPath(); ctx.arc(fx, fy, 16, 0, Math.PI * 2); ctx.fill();
 
   // the load ring: how long this fist has been holding its tension
@@ -221,10 +226,16 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => { if (e.code === 'Space') release(); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// Alt-tab or an app switch (the phone target) while the button is held never
+// delivers keyup/pointerup — without this, `held` sticks true and the hand
+// slides out and drains the whole nerve bar while nobody is looking.
+window.addEventListener('blur', release);
+document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
+
 // ── the loop: fixed 1/120 s steps, whatever the display does ─────────────────
 const DT = 1 / 120;
 const MAX_CATCHUP = 0.25;          // never simulate more than this after a stall
-let acc = 0, last = 0, frameMs = 0;
+let acc = 0, last = 0, frameMs = 0, rafHandle = 0;
 const overEl = document.getElementById('over');
 const overText = document.getElementById('over-text');
 
@@ -241,7 +252,12 @@ function frame(now) {
   }
   render();
   frameMs = performance.now() - t0;
-  requestAnimationFrame(frame);
+  // The harness pumps this manually (see below), and each call still ends
+  // here and schedules a real rAF callback so the loop still works if driven
+  // live. Cancel whatever is still pending first, so manual pumping can
+  // never accumulate more than one real rAF in flight at a time.
+  if (rafHandle) cancelAnimationFrame(rafHandle);
+  rafHandle = requestAnimationFrame(frame);
 }
 
 function onEvent(e) {
@@ -263,7 +279,7 @@ document.getElementById('again').addEventListener('click', restart);
 
 resize();
 render();
-requestAnimationFrame(frame);
+rafHandle = requestAnimationFrame(frame);
 
 if (HARNESS) {
   // `frame` is exposed so a test harness can pump the real loop. Headless and
