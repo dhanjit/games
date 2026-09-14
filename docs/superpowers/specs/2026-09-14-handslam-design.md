@@ -200,6 +200,30 @@ A bot never reads a state the player cannot see — no peeking at whether a huma
 is about to release. Wind length, nerve bars and the hand's position are the
 only inputs, because those are exactly what is drawn on screen.
 
+**A hard constraint on `spookAt`, found by the sim on 2026-09-14.** The earliest
+a fist may legally drop is `windTime + loadMin` — 0.22 s of threat age. A
+defender whose `spookAt` sits below that starts sliding before any drop is even
+possible, so it **can never be hit**: it escapes every time, every attacker
+aborts, and the match becomes an endless abort-and-swap with HP frozen. At the
+plan's first guess of 0.16 exactly none of 40 seeded bot duels ever ended —
+118 role-swaps each and not one thump.
+
+| `spookAt` | matches ending | median length | swaps/match |
+|---|---|---|---|
+| 0.16 | **0%** | never | 118 |
+| 0.22 (the floor) | 85% | 78.5 s | 71 |
+| 0.26 | 100% | 28.6 s | 23 |
+| **0.30** (chosen) | 100% | 18.6 s | 11 |
+| 0.40 | 100% | 10.2 s | 4 |
+
+0.30 keeps headroom above the 0.22 floor for the `noise` jitter. Every future
+persona must clear that floor too — it is a property of the rules, not a taste
+setting, and it is asserted in a comment above `PERSONAS`.
+
+This is DECISIONS #7 working exactly as intended, one milestone earlier than
+expected: a number that read as obviously fine was structurally broken, and only
+running it showed that.
+
 ## Controls
 
 One button, context-dependent, identical in both roles.
