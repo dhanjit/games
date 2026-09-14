@@ -244,3 +244,35 @@ test('losing the last HP ends the duel', () => {
   assert.strictEqual(w.over, true);
   assert.strictEqual(w.winner, 1);
 });
+
+test('a bait waits for a fist mid-drop instead of freezing it, and resolves once', () => {
+  const w = createWorld({ humans: 3, nBots: 0, seed: 1, down: 0, hp: 99 });
+  // Fist 1 loads and holds — the threat that arms the bait when the hand
+  // clears — and never releases, so at resolution it can only ever
+  // contribute a synthesized 'froze' entry.
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true } });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true } });
+  assert.ok(w.bait, 'bait must be open');
+
+  // Force fist 2 into a drop that is still mid-flight when the window's
+  // nominal close time arrives — standing in for "released while the hand
+  // was momentarily back in the hand zone" (ordinary held input reaches this
+  // too, since dropTime is well under baitWindow; forcing the state directly
+  // just pins the exact timing this regression needs).
+  const untilClose = w.bait.closeAt - w.t;
+  advance(w, untilClose - T.dropTime / 2, { 0: { hold: true }, 1: { hold: true } });
+  w.players[2].fist.state = 'drop';
+  w.players[2].fist.t = 0;
+  assert.ok(w.t < w.bait.closeAt, 'the window must not have closed yet');
+
+  const evs = advance(w, T.dropTime + 0.05, { 0: { hold: true }, 1: { hold: true } });
+
+  const resolved = evs.find(e => e.type === 'baitResolve');
+  assert.ok(resolved, 'the window must resolve once the committed drop lands');
+  const entry2 = resolved.entries.find(e => e.id === 2);
+  assert.ok(entry2, 'fist 2 must have an entry');
+  assert.ok(entry2.kind === 'wrist' || entry2.kind === 'desk',
+    `a fist that actually landed must not be synthesized as frozen, got ${entry2.kind}`);
+  assert.strictEqual(typesOf(evs).filter(t => t === 'goesDown').length, 1,
+    'the bait must send exactly one fist down');
+});

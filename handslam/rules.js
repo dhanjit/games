@@ -88,6 +88,12 @@ function addEntry(w, p, kind) {
 /** Seats further clockwise from the current defender rank later on a tie. */
 function seatDist(w, id) { return (id - w.down + w.n) % w.n; }
 
+/** True while a live fist is still committed to a drop — the bait must wait
+ * to see where it lands before anyone is sent down for it. */
+function anyFistCommitted(w) {
+  return w.players.some(p => p.id !== w.down && !p.out && p.fist.state === 'drop');
+}
+
 function resolveBait(w) {
   const b = w.bait;
   w.bait = null;
@@ -251,7 +257,10 @@ export function step(w, dt, inputsById = {}) {
     stepFist(w, p, inputsById[p.id] || {}, dt);
   }
 
-  // After the fists: an abort on the closing tick must still count.
-  if (w.bait && w.t >= w.bait.closeAt) resolveBait(w);
+  // After the fists: an abort on the closing tick must still count. A fist
+  // still mid-drop keeps the window open past closeAt — resolving early would
+  // synthesize a 'froze' entry for it, and its real landing would then hit
+  // addEntry's no-bait fallback and go down a second time for the same bait.
+  if (w.bait && w.t >= w.bait.closeAt && !anyFistCommitted(w)) resolveBait(w);
   return w.events;
 }
