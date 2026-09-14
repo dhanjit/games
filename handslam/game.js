@@ -78,27 +78,56 @@ function bakeDesk() {
   for (let i = 0; i < w.n; i++) {
     const s = seatGeom(i);
     g.beginPath(); g.arc(s.spotX, s.spotY, 15, 0, Math.PI * 2);
-    g.setLineDash([4, 4]); g.lineWidth = 1.5;
-    g.strokeStyle = 'rgba(243,239,230,0.28)'; g.stroke();
+    g.setLineDash([4, 4]); g.lineWidth = 2;
+    g.strokeStyle = 'rgba(243,239,230,0.6)'; g.stroke();
     g.setLineDash([]);
   }
   return c;
 }
 
 // ── the moving parts ─────────────────────────────────────────────────────────
+// The hand ellipse's half-axes along/across the retreat axis. retreatPx is
+// derived from the rule (not guessed): it's exactly how far the hand's near
+// edge must travel to clear T.handGrace, so the picture stays in lockstep
+// with zoneOf(p.hand.p) at every p, not just at the endpoints. Retuning
+// handGrace in rules.js moves this geometry with it.
+const HAND_RX = 17, HAND_RY = 13;
+const retreatPx = HAND_RX / T.handGrace;   // ≈ 37.8px
+const wristLen = retreatPx - HAND_RX;      // ≈ 20.8px
+
 function drawHand(p) {
   const s = seatGeom(p.seat);
-  // p.hand.p slides the hand from its strike spot back toward its own edge.
-  const hx = s.spotX + (s.edgeX - s.spotX) * p.hand.p;
-  const hy = s.spotY + (s.edgeY - s.spotY) * p.hand.p;
+
+  // unit vector along the retreat axis, from the spot toward this seat's edge
+  const ax = s.edgeX - s.spotX, ay = s.edgeY - s.spotY;
+  const alen = Math.hypot(ax, ay) || 1;
+  const ux = ax / alen, uy = ay / alen;
+
+  // p.hand.p slides the hand from the spot toward the edge, capped at
+  // retreatPx — not all the way to the edge.
+  const d = p.hand.p * retreatPx;
+  const hx = s.spotX + ux * d, hy = s.spotY + uy * d;
 
   ctx.lineCap = 'round';
-  ctx.strokeStyle = '#d8a06a';               // the forearm and wrist
+  ctx.strokeStyle = '#d8a06a';               // the forearm
   ctx.lineWidth = 16;
   ctx.beginPath(); ctx.moveTo(s.edgeX, s.edgeY); ctx.lineTo(hx, hy); ctx.stroke();
 
-  ctx.fillStyle = p.hand.pinned ? '#c2603f' : '#eab98a';   // the back of the hand
-  ctx.beginPath(); ctx.ellipse(hx, hy, 17, 13, s.a, 0, Math.PI * 2); ctx.fill();
+  // the wrist band: a fixed wristLen segment trailing the hand's near edge.
+  // Drawn only while zoneOf agrees it's there, so it covers the spot exactly
+  // when handGrace < p < 1 and never bleeds into the 'hand' or 'desk' zones.
+  if (zoneOf(p.hand.p) === 'wrist') {
+    const nx = s.spotX + ux * (d - HAND_RX), ny = s.spotY + uy * (d - HAND_RX);
+    const fx = s.spotX + ux * (d - retreatPx), fy = s.spotY + uy * (d - retreatPx);
+    ctx.strokeStyle = '#8a6b52';             // visibly distinct from forearm and hand
+    ctx.lineWidth = 18;
+    ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(nx, ny); ctx.lineTo(fx, fy); ctx.stroke();
+    ctx.lineCap = 'round';
+  }
+
+  ctx.fillStyle = p.hand.pinned ? '#c2603f' : '#eab98a';   // the back of the hand — flat, no shadow
+  ctx.beginPath(); ctx.ellipse(hx, hy, HAND_RX, HAND_RY, s.a, 0, Math.PI * 2); ctx.fill();
 
   // nerve bar, under the hand's own edge
   const bw = 54, bh = 6;
@@ -119,8 +148,20 @@ function drawFist(p) {
   else if (f.state === 'abort') { lift = 22 * (1 - f.t / T.abortTime); }
   else if (f.state === 'recover') { lift = 4; }
 
-  const fx = s.spotX + Math.cos(s.a) * lift * 0.6;
-  const fy = s.spotY + Math.sin(s.a) * lift * 0.6 - lift;
+  const groundX = s.spotX + Math.cos(s.a) * lift * 0.6;
+  const groundY = s.spotY + Math.sin(s.a) * lift * 0.6;
+  const fx = groundX, fy = groundY - lift;
+
+  // a soft cast shadow on the desk, only while the fist is actually off it —
+  // this is what reads as "hovering" at a glance; the flat hand never gets one.
+  if (lift > 0.5) {
+    const shadowT = Math.min(1, lift / 22);
+    ctx.save();
+    ctx.globalAlpha = 0.32 * shadowT;
+    ctx.fillStyle = '#000000';
+    ctx.beginPath(); ctx.ellipse(groundX + 3, groundY + 4, 14, 10, s.a, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
 
   ctx.strokeStyle = '#cf9a63'; ctx.lineWidth = 14; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(s.edgeX, s.edgeY); ctx.lineTo(fx, fy); ctx.stroke();
@@ -149,6 +190,10 @@ function drawHud() {
 }
 
 export function render() {
+  if (!view.w || !view.h) {
+    resize();                            // layout may have settled since load
+    if (!view.w || !view.h) return;      // still nothing to draw on — bail clean
+  }
   if (!deskLayer) deskLayer = bakeDesk();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(deskLayer, 0, 0);
