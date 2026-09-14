@@ -75,7 +75,7 @@ Two guards keep it honest, and both exist because they were bugs first:
 |---|---|
 | `rules.js` | **Pure sim, no DOM.** `T`, `PERSONAS`, `createWorld(opts)` → `step(world, dt, inputsById)` → events. Every balance number is here. |
 | `game.js` | Canvas render, fixed-timestep loop (1/120 s), the one-button input, HUD. Reads the world; mutates it only through `step()`. |
-| `test/rules.test.mjs` | `node --test "handslam/test/*.test.mjs"` — 32 tests. |
+| `test/rules.test.mjs` | `node --test "handslam/test/*.test.mjs"` — 34 tests. |
 
 `test/` and `sim/` are excluded from the deployed Worker via the root
 `.assetsignore` — they are tooling, not pages.
