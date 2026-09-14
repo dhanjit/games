@@ -205,7 +205,69 @@ export function render() {
 }
 
 window.addEventListener('resize', () => { resize(); render(); });
+
+// ── input: one button, both roles ────────────────────────────────────────────
+let held = false;
+const press = () => { held = true; };
+const release = () => { held = false; };
+
+canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); press(); });
+window.addEventListener('pointerup', release);
+window.addEventListener('pointercancel', release);
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); press(); }
+  if (e.key === 'r' || e.key === 'R') restart();
+});
+window.addEventListener('keyup', (e) => { if (e.code === 'Space') release(); });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ── the loop: fixed 1/120 s steps, whatever the display does ─────────────────
+const DT = 1 / 120;
+const MAX_CATCHUP = 0.25;          // never simulate more than this after a stall
+let acc = 0, last = 0, frameMs = 0;
+const overEl = document.getElementById('over');
+const overText = document.getElementById('over-text');
+
+function frame(now) {
+  const t0 = now;
+  if (!last) last = now;
+  acc += Math.min((now - last) / 1000, MAX_CATCHUP);
+  last = now;
+
+  const inputs = { 0: { hold: held } };
+  while (acc >= DT) {
+    for (const e of step(w, DT, inputs)) onEvent(e);
+    acc -= DT;
+  }
+  render();
+  frameMs = performance.now() - t0;
+  requestAnimationFrame(frame);
+}
+
+function onEvent(e) {
+  if (e.type === 'thump' && e.target === 0 && navigator.vibrate) navigator.vibrate(30);
+  if (e.type === 'over') {
+    overText.textContent = e.winner === 0 ? 'Your hand survived.' : 'Hand down. You lost.';
+    overEl.hidden = false;
+  }
+}
+
+function restart() {
+  w = createWorld({ humans: 1, nBots: 1, seed: (Date.now() & 0xffff) || 1 });
+  held = false; acc = 0; last = 0;
+  overEl.hidden = true;
+  deskLayer = null;
+  render();
+}
+document.getElementById('again').addEventListener('click', restart);
+
 resize();
 render();
+requestAnimationFrame(frame);
 
-if (HARNESS) window.__hs = { world: () => w, render, seatGeom, view: () => view };
+if (HARNESS) {
+  window.__hs = {
+    world: () => w, render, seatGeom, view: () => view, restart,
+    press, release, frameMs: () => frameMs,
+  };
+}
