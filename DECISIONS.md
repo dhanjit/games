@@ -226,3 +226,46 @@ simulator itself is disposable; the habit is not.
 **Revisit when:** the engine grows a mechanic a script can't mirror cheaply —
 real-time input, hidden information the bot can't see. Then the answer is a
 better harness, not skipping the step.
+
+*The real-time half of that condition fired on 2026-09-13 and the prediction was
+wrong — see **#8**. The rule above stands; only this clause was amended.*
+
+## 8 — Real-time didn't need a better harness. The file boundary was the whole trick.
+
+*2026-09-14.* **#7** ended by predicting that a mechanic a script can't mirror
+cheaply — naming real-time input first — would need *a better harness, not
+skipping the step*. Maaran Pithu was that case: twenty kids, a ball in flight,
+continuous input, sixty frames a second. The harness that worked was the same
+shape as the turn-based one — load `rules.js` in Node, play a few hundred
+bot-only rounds, print the numbers — and it took an afternoon.
+
+It earned its keep immediately. The game's entire premise is that distance is
+the skill: five yards is unavoidable, fifteen is a duel, twenty-five falls
+short. The first playable build landed **15-yard throws 16% of the time**. Bots
+dodged perfectly and no evening of solo play would have separated that from
+"I'm bad at this". Fourteen variants later, one lever explained nearly all of
+it — ball speed, 20 to 24 yd/s — taking that band to 51%. Four changes that read
+as obviously right (reaction delays, throw delays, gap margins) moved it by a
+point or two each.
+
+The same run settled a question in the other direction. Round length would not
+move: five levers — shrink rate, minimum field, throw delays, hold speed, ball
+friction — all landed between 63 and 67 seconds. Pace is player count times hit
+rate, and the design spec's 90-to-150-second target was a guess. It was revised
+rather than chased, which is the cheaper mistake to make once you can measure.
+
+**Decision:** real-time is not the thing that decides whether a game can be
+simulated. What decides it is whether the rules live in a file with no DOM, no
+canvas, and no timers, where the human is just another player whose inputs
+arrive from outside. Keep that boundary and the harness stays a script.
+
+**Implication:** a new game here gets its rules in a `rules.js`-shaped file from
+the first commit, not as a refactor later. Ball height, gravity and bounce were
+added to Maaran Pithu afterwards and the harness needed no change at all —
+that's the boundary paying rent.
+
+**Revisit when:** a mechanic depends on what the player *sees* rather than what
+they press — hidden information, a camera that occludes, an audio-only tell. A
+bot reading the world state directly can't stand in for a human reading a
+screen. Moving Maaran Pithu to a first- or third-person camera is exactly that
+test, and it should be treated as an open question, not a solved one.
