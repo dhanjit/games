@@ -38,7 +38,6 @@ export const T = {
 
   thumpDamage: 1,
   startHp: 3,
-  botThinkDt: 0,      // bots decide every step in M1; raised if profiling asks
 };
 
 // Bot personalities. Every field is a timing the harness can move; none of them
@@ -59,6 +58,11 @@ export const T = {
 // Nerve never runs out in bot-vs-bot play at this setting (`pinned` fires 0.0
 // times per match). The meter currently only bites a human who over-flinches;
 // M3 should decide whether that is acceptable or whether nerve needs teeth.
+//
+// nerveFloor has a structural floor of its own: it must exceed T.slideCost
+// (0.12) or a bot commits to a slide it cannot pay for, pins itself
+// mid-decision, and stops moving for the rest of the match. 0.18 clears it
+// today, but only because the number happens to be bigger — nothing checks it.
 export const PERSONAS = {
   kid: { spookAt: 0.46, abortReaction: 0.22, loadStyle: [0.15, 0.55], nerveFloor: 0.18, noise: 0.05 },
 };
@@ -164,6 +168,13 @@ function goDown(w, p, kind) {
   p.hand.state = 'flat'; p.hand.p = 0;
   p.hand.pinned = false;
   p.hand.nerve = T.nerveMax;                   // M1: a fresh turn starts calm
+  // A defender's fist is frozen in 'recover' for as long as they hold the
+  // desk, however long that is — botInput's attacker branch never runs for
+  // them meanwhile. Left alone, a stale strikeAt from before they arrived
+  // would already be in the past once they leave 'recover', so they'd wind
+  // the instant they're eligible instead of taking their usual 0.3–1.4s to
+  // decide. Reset to the same values createWorld hands out fresh.
+  if (p.bot) Object.assign(p.bot, { strikeAt: -1, release: -1, reacted: false, spookThreshold: null });
   w.bait = null;
   emit(w, 'goesDown', { id: p.id, from, kind });
 }
@@ -234,14 +245,17 @@ export function createWorld(opts = {}) {
   const nBots = opts.nBots ?? 1;
   const n = humans + nBots;
   const w = {
-    t: 0, seed, rng: makeRng(seed), n,
+    t: 0,
+    seed,   // not read back by the sim itself — kept so a session can be reproduced from a bug report
+    rng: makeRng(seed), n,
     players: [], events: [], down: opts.down ?? 0,
     bait: null, over: false, winner: null,
     lastBaitEntryIds: new Set(),  // ids the most recently resolved bait accounted for
   };
   for (let i = 0; i < n; i++) {
     w.players.push({
-      id: i, seat: i,
+      id: i,
+      seat: i,   // render/layout identity — game.js positions by this, not id; the two just happen to coincide today
       name: i < humans ? 'You' : BOT_NAMES[(i - humans) % BOT_NAMES.length],
       isHuman: i < humans,
       hp: opts.hp ?? T.startHp,

@@ -203,10 +203,12 @@ test('in a duel, the lone caught fist goes down when the window closes', () => {
 
 test('the last to resolve goes down — a fast fouler walks, a slow aborter pays', () => {
   const w = createWorld({ humans: 3, nBots: 0, seed: 1, down: 0 });
-  // Both 1 and 2 load. 1 is already dropping when the hand goes (fouls early);
-  // 2 dithers and aborts late.
+  // Both 1 and 2 load. 1 releases immediately, while the hand is still on
+  // the spot, so it commits to a drop naturally (fouls early); 2 keeps
+  // holding, dithers, and aborts late once the hand has gone.
   advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true }, 2: { hold: true } });
-  w.players[1].fist.state = 'drop'; w.players[1].fist.t = 0;      // committed
+  advance(w, 1 / 60, { 1: { hold: false }, 2: { hold: true } });   // 1 commits to drop
+  assert.strictEqual(w.players[1].fist.state, 'drop', 'fist 1 must have committed to a drop');
   advance(w, T.slideTime + 0.02, { 0: { hold: true }, 2: { hold: true } });
   advance(w, 0.25, { 0: { hold: true }, 2: { hold: true } });      // 2 dithers
   const evs = advance(w, T.baitWindow, { 0: { hold: true }, 2: { hold: false } });
@@ -291,6 +293,7 @@ test('a hard cap resolves the bait even if a fist stays committed forever', () =
   // crosses dropTime on its own — standing in for the overlapping chain of
   // commits that anyFistCommitted's doc comment says could otherwise hold
   // the window open forever.
+  // Unreachable in M1 itself — only one attacker fist exists here; this stands in for the multi-fist overlap M2's six seats will allow, which is what the hard cap insures against.
   w.players[1].fist.state = 'drop'; w.players[1].fist.t = 0;
   const evs = [];
   while (w.t < closeAt + T.dropTime + 0.02) {
@@ -399,6 +402,18 @@ test('every persona names the five fields the bot reads', () => {
     for (const k of ['spookAt', 'abortReaction', 'loadStyle', 'nerveFloor', 'noise']) {
       assert.ok(k in p, `persona ${name} is missing ${k}`);
     }
+  }
+});
+
+test('every persona clears the spookAt floor — its defender must be hittable', () => {
+  // spookAt must exceed windTime + loadMin (the earliest legal drop) or that
+  // persona's defender starts sliding before any drop is even legal, always
+  // escapes, and the duel never ends. Covers PERSONAS generically so this
+  // still holds once M4 adds five more of them, not just `kid`.
+  const floor = T.windTime + T.loadMin;
+  for (const [name, p] of Object.entries(PERSONAS)) {
+    assert.ok(p.spookAt > floor,
+      `persona ${name} has spookAt ${p.spookAt}, which does not clear ${floor} — its defender could never be hit`);
   }
 });
 

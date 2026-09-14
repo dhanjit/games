@@ -118,7 +118,7 @@ One button, and its meaning depends on your role and on the world:
 | **when up** | wind, then hold `loaded` | **drop** if the hand is still on the spot, **abort** if it has gone |
 | **when down** | slide the hand back | let it slide out again |
 
-Space or pointer-down anywhere; `Esc`/`P` pause, `R` restart. There is no aiming,
+Space or pointer-down anywhere; `R` restart. There is no aiming,
 so there is nothing to drag and no second control. A human therefore never fouls
 by choosing to — they foul because they committed a fraction too early, which is
 exactly the mistake the real game punishes.
