@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createWorld, step, zoneOf, T } from '../rules.js';
+import { createWorld, step, zoneOf, T, PERSONAS } from '../rules.js';
 
 test('createWorld builds two kids, one of them down', () => {
   const w = createWorld({ humans: 1, nBots: 1, seed: 1 });
@@ -275,4 +275,42 @@ test('a bait waits for a fist mid-drop instead of freezing it, and resolves once
     `a fist that actually landed must not be synthesized as frozen, got ${entry2.kind}`);
   assert.strictEqual(typesOf(evs).filter(t => t === 'goesDown').length, 1,
     'the bait must send exactly one fist down');
+});
+
+test('a bot up against a passive human eventually lands a thump', () => {
+  const w = createWorld({ humans: 1, nBots: 1, seed: 3, down: 0, hp: 99 });
+  const evs = advance(w, 12, { 0: { hold: false } });   // human never slides
+  assert.ok(typesOf(evs).includes('thump'), 'an unresisting hand must get hit');
+});
+
+test('a bot that is down slides when a fist winds at it', () => {
+  const w = createWorld({ humans: 1, nBots: 1, seed: 3, down: 1, hp: 99 });
+  const evs = advance(w, 3, { 0: { hold: true } });     // human holds a wind
+  assert.ok(typesOf(evs).includes('slideStart'), 'a bot must react to a wind');
+});
+
+test('a bot-only duel runs to a finish with no human input at all', () => {
+  const w = createWorld({ humans: 0, nBots: 2, seed: 5, down: 0 });
+  let guard = 0;
+  while (!w.over && guard++ < 120 * 600) step(w, 1 / 120, {});
+  assert.strictEqual(w.over, true, 'a bot duel must terminate');
+  assert.ok(w.winner === 0 || w.winner === 1);
+});
+
+test('bot duels are deterministic for a given seed', () => {
+  const run = (seed) => {
+    const w = createWorld({ humans: 0, nBots: 2, seed, down: 0 });
+    let guard = 0;
+    while (!w.over && guard++ < 120 * 600) step(w, 1 / 120, {});
+    return `${w.winner}:${w.t.toFixed(4)}`;
+  };
+  assert.strictEqual(run(11), run(11));
+});
+
+test('every persona names the five fields the bot reads', () => {
+  for (const [name, p] of Object.entries(PERSONAS)) {
+    for (const k of ['spookAt', 'abortReaction', 'loadStyle', 'nerveFloor', 'noise']) {
+      assert.ok(k in p, `persona ${name} is missing ${k}`);
+    }
+  }
 });

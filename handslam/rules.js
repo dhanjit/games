@@ -41,6 +41,18 @@ export const T = {
   botThinkDt: 0,      // bots decide every step in M1; raised if profiling asks
 };
 
+// Bot personalities. Every field is a timing the harness can move; none of them
+// reads a state a human cannot see on screen.
+//
+// spookAt must exceed T.windTime + T.loadMin (the earliest legal drop, 0.22s)
+// or the defender always starts sliding before any drop is even legal, always
+// escapes, and the attacker always aborts — a duel that never ends. 0.30
+// leaves headroom above that 0.22 floor for the `noise` jitter.
+export const PERSONAS = {
+  kid: { spookAt: 0.30, abortReaction: 0.22, loadStyle: [0.15, 0.55], nerveFloor: 0.18, noise: 0.05 },
+};
+const P = (p) => PERSONAS[p.persona] || PERSONAS.kid;
+
 const BOT_NAMES = ['Bunty', 'Arjun', 'Meera', 'Vikram', 'Nitin', 'Sana'];
 
 // ── deterministic RNG (mulberry32) ───────────────────────────────────────────
@@ -244,17 +256,63 @@ function stepHand(w, p, inp, dt) {
   if (wasHand && zoneOf(h.p) !== 'hand') tryArm(w);
 }
 
+/** How long the most advanced enemy fist has been threatening, in seconds. */
+function maxThreatAge(w, exceptId) {
+  let best = 0;
+  for (const p of w.players) {
+    if (p.id === exceptId || p.out || p.id === w.down) continue;
+    if (p.fist.state === 'wind') best = Math.max(best, p.fist.t);
+    else if (p.fist.state === 'loaded' || p.fist.state === 'drop') best = Math.max(best, T.windTime + p.fist.t);
+  }
+  return best;
+}
+
+export function botInput(w, p) {
+  const cfg = P(p);
+  const jitter = () => 1 + (w.rng() - 0.5) * 2 * cfg.noise;
+
+  if (p.id === w.down) {
+    const h = p.hand;
+    if (h.pinned || h.nerve <= cfg.nerveFloor) return { hold: false };
+    return { hold: maxThreatAge(w, p.id) >= cfg.spookAt * jitter() };
+  }
+
+  const f = p.fist, b = p.bot;
+  if (f.state === 'ready') {
+    b.reacted = false;
+    if (b.strikeAt < 0) b.strikeAt = w.t + w.rng.range(0.3, 1.4);
+    if (w.t >= b.strikeAt) {
+      b.strikeAt = -1;
+      b.release = w.t + T.windTime + w.rng.range(cfg.loadStyle[0], cfg.loadStyle[1]);
+      return { hold: true };
+    }
+    return { hold: false };
+  }
+  if (f.state === 'wind' || f.state === 'loaded') {
+    // The hand starting to go is the starting gun. Reaction time is the test.
+    if (!handIsThere(w) && !b.reacted) {
+      b.reacted = true;
+      b.release = Math.min(b.release, w.t + cfg.abortReaction * jitter());
+    }
+    return { hold: w.t < b.release };
+  }
+  b.reacted = false;
+  return { hold: false };
+}
+
 export function step(w, dt, inputsById = {}) {
   w.events.length = 0;
   if (w.over) return w.events;
   w.t += dt;
 
+  const inputOf = (p) => (p.isHuman ? (inputsById[p.id] || {}) : botInput(w, p));
+
   const d = w.players[w.down];
-  stepHand(w, d, inputsById[d.id] || {}, dt);
+  stepHand(w, d, inputOf(d), dt);
 
   for (const p of w.players) {
     if (p.out || p.id === w.down) continue;
-    stepFist(w, p, inputsById[p.id] || {}, dt);
+    stepFist(w, p, inputOf(p), dt);
   }
 
   // After the fists: an abort on the closing tick must still count. A fist
