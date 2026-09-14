@@ -326,6 +326,44 @@ test('addEntry\'s no-bait fallback does not punish a fist the last resolved bait
   assert.strictEqual(w.down, 0, 'the down player must not change for an already-accounted-for foul');
 });
 
+test('a stale bait-entry immunity does not swallow a genuine later foul from the same fist', () => {
+  // Regression: lastBaitEntryIds used to record every entrant of a resolved
+  // bait, clearing only when the *next* bait armed. A fist that entered one
+  // bait, survived it, then genuinely fouled much later with no bait open in
+  // between was silently immune the whole time — the foul event fired but
+  // w.down never changed.
+  const w = createWorld({ humans: 3, nBots: 0, seed: 1, down: 0, hp: 99 });
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true }, 2: { hold: true } });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true }, 2: { hold: true } });
+  assert.ok(w.bait, 'bait must be open');
+  const closeAt = w.bait.closeAt;
+
+  // Both release while the hand is away — both abort, both enter the bait as
+  // real (non-synthesized) entries, and both are back to 'ready' long before
+  // the window closes.
+  advance(w, 1 / 60, { 0: { hold: true }, 1: { hold: false }, 2: { hold: false } });
+
+  const closeEvs = advance(w, closeAt - w.t + 0.05, { 0: { hold: false } });
+  const resolved = closeEvs.find(e => e.type === 'baitResolve');
+  assert.ok(resolved && resolved.entries.length === 2, 'both 1 and 2 must be entrants in this bait');
+  const loser = w.down, other = loser === 1 ? 2 : 1;
+
+  // Two seconds pass with nothing threatening — no new bait arms, so nothing
+  // ever clears lastBaitEntryIds in between.
+  advance(w, 2, { [loser]: { hold: false }, [other]: { hold: false } });
+  assert.strictEqual(w.bait, null, 'no new bait should have armed with nothing threatening');
+
+  // `other` now genuinely fouls the new defender with no bait open — same
+  // shape as the no-bait foul test above, just after an unrelated bait
+  // (which `other` also entered) has already come and gone.
+  advance(w, T.slideTime + 0.02, { [loser]: { hold: true } });   // clear, no threat, no bait
+  assert.strictEqual(w.bait, null);
+  w.players[other].fist.state = 'drop'; w.players[other].fist.t = 0;
+  const evs = advance(w, T.dropTime + 0.02, { [loser]: { hold: true } });
+  assert.ok(typesOf(evs).includes('desk'), `expected a desk foul, got ${typesOf(evs)}`);
+  assert.strictEqual(w.down, other, 'the genuine foul must send the fouling fist down, not be swallowed by stale immunity');
+});
+
 test('a bot up against a passive human eventually lands a thump', () => {
   const w = createWorld({ humans: 1, nBots: 1, seed: 3, down: 0, hp: 99 });
   const evs = advance(w, 12, { 0: { hold: false } });   // human never slides

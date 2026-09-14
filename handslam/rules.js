@@ -109,7 +109,7 @@ function addEntry(w, p, kind) {
     // the bait that just closed (its drop was mid-flight when the hard cap
     // in step() forced resolution early). That fist already has an entry;
     // landing for real must not send it down a second time for the same foul.
-    if (w.lastBaitEntryIds.has(p.id)) return;
+    if (w.lastBaitEntryIds.has(p.id)) { w.lastBaitEntryIds.delete(p.id); return; }
     goDown(w, p, kind);
     return;
   }
@@ -137,7 +137,16 @@ function resolveBait(w) {
       ? { id: p.id, t: b.closeAt + 1e-6, kind: 'passive' }
       : { id: p.id, t: b.closeAt, kind: 'froze' });
   }
-  w.lastBaitEntryIds = new Set(b.entries.map(e => e.id));
+  // Immunity for addEntry's no-bait fallback below must only cover a fist
+  // still physically mid-drop right now — its landing is the tail of THIS
+  // bait arriving late, not a new foul. Everyone else's entry (or lack of
+  // one) is already final: they cannot land late, so carrying their id
+  // forward would immunise them against a genuinely new foul with no bait
+  // open, indefinitely, since nothing clears this set until the next bait
+  // arms.
+  w.lastBaitEntryIds = new Set(
+    w.players.filter(p => p.fist.state === 'drop').map(p => p.id)
+  );
   if (!b.entries.length) { emit(w, 'baitResolve', { entries: [], loser: null, kind: null }); return; }
   b.entries.sort((x, y) => (y.t - x.t) || (seatDist(w, y.id) - seatDist(w, x.id)));
   const loser = b.entries[0];
