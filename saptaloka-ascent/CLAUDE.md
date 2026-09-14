@@ -8,7 +8,9 @@ the root `CLAUDE.md`; this game is fully self-contained in this folder.
 > Relationship: this is the **Saptaloka universe in 2.5D**, NOT the same code as
 > `saptaloka/`. Don't cross-import. The shared things are *conceptual* (lokas,
 > prāṇa/tejas/karma/bhakti, false summits, mokṣa) and the *palette* (the dark
-> indigo + gold CSS vars). The swipe game is shipped (Play TWA) and untouched.
+> indigo + gold CSS vars). The swipe game has Play-TWA artifacts but is **not
+> published** on any store or portal yet, and it is being tuned under its own
+> issues — don't edit it from here.
 
 ## Architecture in 30 seconds
 
