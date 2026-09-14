@@ -88,11 +88,20 @@ function tryArm(w) {
   const threat = w.players.some(p => p.id !== w.down && !p.out && THREAT.has(p.fist.state));
   if (!threat) return;
   w.bait = { openedAt: w.t, closeAt: w.t + T.baitWindow, entries: [] };
+  w.lastBaitEntryIds = new Set();   // this bait's own entries start clean
   emit(w, 'baitArm', { at: w.t });
 }
 
 function addEntry(w, p, kind) {
-  if (!w.bait) { goDown(w, p, kind); return; }          // a lone foul, no window
+  if (!w.bait) {
+    // A lone foul, no window — unless this fist was already accounted for by
+    // the bait that just closed (its drop was mid-flight when the hard cap
+    // in step() forced resolution early). That fist already has an entry;
+    // landing for real must not send it down a second time for the same foul.
+    if (w.lastBaitEntryIds.has(p.id)) return;
+    goDown(w, p, kind);
+    return;
+  }
   if (w.bait.entries.some(e => e.id === p.id)) return;  // one entry per fist
   w.bait.entries.push({ id: p.id, t: w.t, kind });
 }
@@ -117,6 +126,7 @@ function resolveBait(w) {
       ? { id: p.id, t: b.closeAt + 1e-6, kind: 'passive' }
       : { id: p.id, t: b.closeAt, kind: 'froze' });
   }
+  w.lastBaitEntryIds = new Set(b.entries.map(e => e.id));
   if (!b.entries.length) { emit(w, 'baitResolve', { entries: [], loser: null, kind: null }); return; }
   b.entries.sort((x, y) => (y.t - x.t) || (seatDist(w, y.id) - seatDist(w, x.id)));
   const loser = b.entries[0];
@@ -170,7 +180,7 @@ function stepFist(w, p, inp, dt) {
   f.t += dt;
   switch (f.state) {
     case 'ready':
-      if (inp.hold) { f.state = 'wind'; f.t = 0; emit(w, 'wind', { id: p.id }); }
+      if (inp.hold) { f.state = 'wind'; f.t = 0; f.threatAt = w.t; emit(w, 'wind', { id: p.id }); }
       break;
     case 'wind':
       if (f.t >= T.windTime) { f.state = 'loaded'; f.t = 0; emit(w, 'load', { id: p.id }); }
@@ -207,6 +217,7 @@ export function createWorld(opts = {}) {
     t: 0, seed, rng: makeRng(seed), n,
     players: [], events: [], down: opts.down ?? 0,
     bait: null, over: false, winner: null,
+    lastBaitEntryIds: new Set(),  // ids the most recently resolved bait accounted for
   };
   for (let i = 0; i < n; i++) {
     w.players.push({
@@ -215,10 +226,10 @@ export function createWorld(opts = {}) {
       isHuman: i < humans,
       hp: opts.hp ?? T.startHp,
       out: false,
-      fist: { state: 'ready', t: 0 },
+      fist: { state: 'ready', t: 0, threatAt: 0 },
       hand: { p: 0, state: 'flat', nerve: T.nerveMax, pinned: false },
       persona: i < humans ? null : (opts.persona ?? 'kid'),
-      bot: i < humans ? null : { strikeAt: -1, release: -1, reacted: false },
+      bot: i < humans ? null : { strikeAt: -1, release: -1, reacted: false, spookThreshold: null },
     });
   }
   return w;
@@ -256,13 +267,17 @@ function stepHand(w, p, inp, dt) {
   if (wasHand && zoneOf(h.p) !== 'hand') tryArm(w);
 }
 
-/** How long the most advanced enemy fist has been threatening, in seconds. */
+/** How long the most advanced enemy fist has been threatening, in seconds.
+ * Measured from when each fist entered 'wind' (fist.threatAt), not from its
+ * own state timer — fist.t resets on every transition, including the
+ * loaded → drop one, so it collapses right as the fist gets most dangerous.
+ * Age must only ever grow while a fist remains a threat; the drop itself
+ * gives the defender no fresh read. */
 function maxThreatAge(w, exceptId) {
   let best = 0;
   for (const p of w.players) {
     if (p.id === exceptId || p.out || p.id === w.down) continue;
-    if (p.fist.state === 'wind') best = Math.max(best, p.fist.t);
-    else if (p.fist.state === 'loaded' || p.fist.state === 'drop') best = Math.max(best, T.windTime + p.fist.t);
+    if (THREAT.has(p.fist.state)) best = Math.max(best, w.t - p.fist.threatAt);
   }
   return best;
 }
@@ -273,8 +288,18 @@ export function botInput(w, p) {
 
   if (p.id === w.down) {
     const h = p.hand;
+    const b = p.bot;
+    const age = maxThreatAge(w, p.id);
+    // Roll the spook threshold once per threat, not once per tick — a
+    // per-tick reroll flickers the hand near the edge. Reroll only when a
+    // new threat appears: there was none a moment ago, or the one we were
+    // tracking has ended (age fell back to 0). Hold the same roll for as
+    // long as some threat keeps the age above 0, even if which fist is
+    // "most advanced" changes underneath it.
+    if (age <= 0) b.spookThreshold = null;
+    else if (b.spookThreshold == null) b.spookThreshold = cfg.spookAt * jitter();
     if (h.pinned || h.nerve <= cfg.nerveFloor) return { hold: false };
-    return { hold: maxThreatAge(w, p.id) >= cfg.spookAt * jitter() };
+    return { hold: age >= b.spookThreshold };
   }
 
   const f = p.fist, b = p.bot;
@@ -319,6 +344,15 @@ export function step(w, dt, inputsById = {}) {
   // still mid-drop keeps the window open past closeAt — resolving early would
   // synthesize a 'froze' entry for it, and its real landing would then hit
   // addEntry's no-bait fallback and go down a second time for the same bait.
-  if (w.bait && w.t >= w.bait.closeAt && !anyFistCommitted(w)) resolveBait(w);
+  // That wait is capped at one more dropTime: a fist already committed when
+  // the window closed can only still be falling for at most dropTime longer,
+  // so waiting past closeAt + dropTime can never be necessary — and capping
+  // it means an overlapping chain of commits can never hold the bait open
+  // forever. A fist still falling when the cap fires gets a synthesized entry
+  // now and lands for real later; lastBaitEntryIds (set in resolveBait) is
+  // what stops addEntry's no-bait fallback from punishing that landing twice.
+  if (w.bait && w.t >= w.bait.closeAt) {
+    if (!anyFistCommitted(w) || w.t >= w.bait.closeAt + T.dropTime) resolveBait(w);
+  }
   return w.events;
 }

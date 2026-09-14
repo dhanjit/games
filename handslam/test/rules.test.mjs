@@ -277,6 +277,55 @@ test('a bait waits for a fist mid-drop instead of freezing it, and resolves once
     'the bait must send exactly one fist down');
 });
 
+test('a hard cap resolves the bait even if a fist stays committed forever', () => {
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0, hp: 99 });
+  const holdBoth = { 0: { hold: true }, 1: { hold: true } };
+  const DT = 1 / 120;
+
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true } });
+  advance(w, T.slideTime + 0.02, holdBoth);
+  assert.ok(w.bait, 'bait must be open');
+  const closeAt = w.bait.closeAt;
+
+  // Force the fist into a drop and keep resetting its timer so it never
+  // crosses dropTime on its own — standing in for the overlapping chain of
+  // commits that anyFistCommitted's doc comment says could otherwise hold
+  // the window open forever.
+  w.players[1].fist.state = 'drop'; w.players[1].fist.t = 0;
+  const evs = [];
+  while (w.t < closeAt + T.dropTime + 0.02) {
+    evs.push(...step(w, DT, holdBoth));
+    if (w.players[1].fist.state === 'drop' && w.players[1].fist.t > T.dropTime / 2) {
+      w.players[1].fist.t = 0;
+    }
+  }
+
+  const resolved = evs.find(e => e.type === 'baitResolve');
+  assert.ok(resolved, 'the hard cap must force resolution even though the fist is still committed');
+  assert.ok(resolved.t >= closeAt + T.dropTime - 1e-9, 'must not resolve before the cap while still committed');
+  assert.ok(resolved.t < closeAt + T.dropTime + DT, 'must resolve right at the cap, not indefinitely later');
+  assert.strictEqual(evs.filter(e => e.type === 'goesDown').length, 1, 'exactly one fist goes down from the bait');
+  assert.strictEqual(w.down, 1);
+});
+
+test('addEntry\'s no-bait fallback does not punish a fist the last resolved bait already accounted for', () => {
+  // The hard cap can synthesize an entry for a fist that is still genuinely
+  // falling, then let that same drop land for real once w.bait is back to
+  // null. lastBaitEntryIds is what addEntry's no-bait fallback checks to
+  // recognize that landing instead of sending the fist down a second time —
+  // exercised directly here since provoking it from natural play requires
+  // the fist to still be mid-drop at the exact moment a bait resolves, which
+  // is precisely the forced-resolution case the test above already drives.
+  const w = createWorld({ humans: 2, nBots: 0, seed: 1, down: 0, hp: 99 });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true } });   // hand away, no threat, no bait
+  assert.strictEqual(w.bait, null);
+  w.lastBaitEntryIds = new Set([1]);                       // fist 1 was in the bait that just closed
+  w.players[1].fist.state = 'drop'; w.players[1].fist.t = 0;
+  const evs = advance(w, T.dropTime + 0.02, { 0: { hold: true } });
+  assert.ok(!typesOf(evs).includes('goesDown'), 'a fist the last bait already entered must not go down again');
+  assert.strictEqual(w.down, 0, 'the down player must not change for an already-accounted-for foul');
+});
+
 test('a bot up against a passive human eventually lands a thump', () => {
   const w = createWorld({ humans: 1, nBots: 1, seed: 3, down: 0, hp: 99 });
   const evs = advance(w, 12, { 0: { hold: false } });   // human never slides
