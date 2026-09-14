@@ -66,6 +66,47 @@ export function zoneOf(p) {
 
 function emit(w, type, data) { w.events.push({ type, t: w.t, ...data }); }
 
+const THREAT = new Set(['wind', 'loaded', 'drop']);
+
+/** The hand is "there" when the strike spot still holds the back of it. */
+function handIsThere(w) { return zoneOf(w.players[w.down].hand.p) === 'hand'; }
+
+function land(w, p) {
+  const d = w.players[w.down];
+  const zone = zoneOf(d.hand.p);
+  p.fist.state = 'recover'; p.fist.t = 0;
+  if (zone === 'hand') {
+    d.hp -= T.thumpDamage;
+    emit(w, 'thump', { id: p.id, target: d.id, hp: d.hp });
+  }
+}
+
+function stepFist(w, p, inp, dt) {
+  const f = p.fist;
+  f.t += dt;
+  switch (f.state) {
+    case 'ready':
+      if (inp.hold) { f.state = 'wind'; f.t = 0; emit(w, 'wind', { id: p.id }); }
+      break;
+    case 'wind':
+      if (f.t >= T.windTime) { f.state = 'loaded'; f.t = 0; emit(w, 'load', { id: p.id }); }
+      break;
+    case 'loaded':
+      if (f.t < T.loadMin || inp.hold) break;
+      if (handIsThere(w)) { f.state = 'drop'; f.t = 0; emit(w, 'drop', { id: p.id }); }
+      break;
+    case 'drop':
+      if (f.t >= T.dropTime) land(w, p);
+      break;
+    case 'abort':
+      if (f.t >= T.abortTime) { f.state = 'ready'; f.t = 0; }
+      break;
+    case 'recover':
+      if (f.t >= T.recoverTime) { f.state = 'ready'; f.t = 0; }
+      break;
+  }
+}
+
 export function createWorld(opts = {}) {
   const seed = opts.seed ?? 1;
   const humans = opts.humans ?? 1;
@@ -96,5 +137,12 @@ export function step(w, dt, inputsById = {}) {
   w.events.length = 0;
   if (w.over) return w.events;
   w.t += dt;
+
+  // Fists resolve after the hand has moved this tick, so a landing drop sees
+  // the hand's current position. The hand arrives in Task 3.
+  for (const p of w.players) {
+    if (p.out || p.id === w.down) continue;
+    stepFist(w, p, inputsById[p.id] || {}, dt);
+  }
   return w.events;
 }
