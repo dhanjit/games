@@ -266,8 +266,11 @@ render();
 requestAnimationFrame(frame);
 
 if (HARNESS) {
+  // `frame` is exposed so a test harness can pump the real loop. Headless and
+  // offscreen browsers park requestAnimationFrame at 0 Hz, so without this the
+  // loop is the one part of the game that cannot be driven under test.
   window.__hs = {
     world: () => w, render, seatGeom, view: () => view, restart,
-    press, release, frameMs: () => frameMs,
+    press, release, frameMs: () => frameMs, frame,
   };
 }
