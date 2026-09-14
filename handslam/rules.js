@@ -78,6 +78,8 @@ function land(w, p) {
   if (zone === 'hand') {
     d.hp -= T.thumpDamage;
     emit(w, 'thump', { id: p.id, target: d.id, hp: d.hp });
+  } else {
+    emit(w, zone, { id: p.id, target: d.id });   // 'wrist' | 'desk' — both fouls
   }
 }
 
@@ -133,13 +135,44 @@ export function createWorld(opts = {}) {
   return w;
 }
 
+function stepHand(w, p, inp, dt) {
+  const h = p.hand;
+  switch (h.state) {
+    case 'flat':
+      h.nerve = Math.min(T.nerveMax, h.nerve + T.nerveRegen * dt);
+      if (h.pinned && h.nerve >= T.nerveUnpin) h.pinned = false;
+      if (inp.hold && !h.pinned) {
+        h.nerve -= T.slideCost;
+        if (h.nerve <= 0) { h.nerve = 0; h.pinned = true; emit(w, 'pinned', { id: p.id }); }
+        else { h.state = 'sliding'; emit(w, 'slideStart', { id: p.id }); }
+      }
+      break;
+    case 'sliding':
+      h.p = Math.min(1, h.p + dt / T.slideTime);
+      if (!inp.hold) h.state = 'returning';
+      else if (h.p >= 1) h.state = 'clear';
+      break;
+    case 'clear':
+      h.nerve = Math.max(0, h.nerve - T.nerveDrain * dt);
+      if (h.nerve <= 0) { h.pinned = true; h.state = 'returning'; emit(w, 'pinned', { id: p.id }); }
+      else if (!inp.hold) h.state = 'returning';
+      break;
+    case 'returning':
+      h.p = Math.max(0, h.p - dt / T.returnTime);
+      if (h.p <= 0) { h.p = 0; h.state = 'flat'; }
+      else if (inp.hold && !h.pinned) h.state = 'sliding';
+      break;
+  }
+}
+
 export function step(w, dt, inputsById = {}) {
   w.events.length = 0;
   if (w.over) return w.events;
   w.t += dt;
 
-  // Fists resolve after the hand has moved this tick, so a landing drop sees
-  // the hand's current position. The hand arrives in Task 3.
+  const d = w.players[w.down];
+  stepHand(w, d, inputsById[d.id] || {}, dt);
+
   for (const p of w.players) {
     if (p.out || p.id === w.down) continue;
     stepFist(w, p, inputsById[p.id] || {}, dt);
