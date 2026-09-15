@@ -8,7 +8,12 @@ const HARNESS = new URLSearchParams(location.search).has('harness');
 const canvas = document.getElementById('desk');
 const ctx = canvas.getContext('2d');
 
-let w = createWorld({ humans: 1, nBots: 1, seed: (Date.now() & 0xffff) || 1 });
+// M1 pinned this at nBots: 1 for the duel; rules.js's own default moved to 5
+// (six seats) in M2 Task 1, but this explicit call was never updated and was
+// silently overriding it — the desk was still only ever seating two. Six seats
+// is the whole premise of this task, so this has to actually happen for real,
+// not just in a console-posed world.
+let w = createWorld({ humans: 1, nBots: 5, seed: (Date.now() & 0xffff) || 1 });
 let view = { w: 0, h: 0, cx: 0, cy: 0, rx: 0, ry: 0, dpr: 1 };
 let deskLayer = null;
 
@@ -19,13 +24,16 @@ function seatAngle(i, n) { return Math.PI / 2 + (i / n) * Math.PI * 2; }
 /** Where a seat's arm enters the desk, and where its fist strikes. */
 function seatGeom(i) {
   const a = seatAngle(i, w.n);
-  return {
-    edgeX: view.cx + Math.cos(a) * view.rx,
-    edgeY: view.cy + Math.sin(a) * view.ry,
-    spotX: view.cx + Math.cos(a) * view.rx * 0.42,
-    spotY: view.cy + Math.sin(a) * view.ry * 0.42,
-    a,
-  };
+  const edgeX = view.cx + Math.cos(a) * view.rx;
+  const edgeY = view.cy + Math.sin(a) * view.ry;
+  const spotX = view.cx + Math.cos(a) * view.rx * 0.42;
+  const spotY = view.cy + Math.sin(a) * view.ry * 0.42;
+  // Unit vector along the retreat axis, spot toward edge. Shared by the hand
+  // (how far it slides) and the HUD label (how far in from the rim it must
+  // sit to clear the arm) — rx !== ry, so this is not just (cos a, sin a).
+  const dx = edgeX - spotX, dy = edgeY - spotY;
+  const dlen = Math.hypot(dx, dy) || 1;
+  return { edgeX, edgeY, spotX, spotY, ux: dx / dlen, uy: dy / dlen, a };
 }
 
 function resize() {
@@ -35,8 +43,13 @@ function resize() {
   view = {
     w: cssW, h: cssH, dpr,
     cx: cssW / 2, cy: cssH / 2,
-    rx: Math.min(cssW * 0.44, cssH * 0.34),
-    ry: Math.min(cssW * 0.44, cssH * 0.34) * 0.82,
+    // 0.44 → 0.46: a small bump over M1's coefficient. The HUD band inside the
+    // rim (see HUD_R below) needs a bit more absolute room than the original
+    // desk gave it, and every fixed-pixel element (hand, wrist, fist) is a
+    // constant size regardless of rx/ry, so growing the desk only spreads
+    // strike spots further apart — it cannot make any of those harder to read.
+    rx: Math.min(cssW * 0.46, cssH * 0.34),
+    ry: Math.min(cssW * 0.46, cssH * 0.34) * 0.82,
   };
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
@@ -97,16 +110,22 @@ const wristLen = retreatPx - HAND_RX;      // ≈ 20.8px
 
 function drawHand(p) {
   const s = seatGeom(p.seat);
-
-  // unit vector along the retreat axis, from the spot toward this seat's edge
-  const ax = s.edgeX - s.spotX, ay = s.edgeY - s.spotY;
-  const alen = Math.hypot(ax, ay) || 1;
-  const ux = ax / alen, uy = ay / alen;
+  const { ux, uy } = s;
 
   // p.hand.p slides the hand from the spot toward the edge, capped at
   // retreatPx — not all the way to the edge.
   const d = p.hand.p * retreatPx;
   const hx = s.spotX + ux * d, hy = s.spotY + uy * d;
+
+  // A soft glow under the down seat's own hand. This is the glance-test the
+  // brief asks for: with six fists on screen, "the hand shape differs from a
+  // fist" only helps once you've found the right seat to look at. The glow
+  // is the thing that pulls the eye there first, before any shape-reading.
+  const glow = ctx.createRadialGradient(hx, hy, 0, hx, hy, 34);
+  glow.addColorStop(0, 'rgba(245,201,122,0.55)');
+  glow.addColorStop(1, 'rgba(245,201,122,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(hx, hy, 34, 0, Math.PI * 2); ctx.fill();
 
   ctx.lineCap = 'round';
   ctx.strokeStyle = '#d8a06a';               // the forearm
@@ -182,15 +201,78 @@ function drawFist(p) {
   }
 }
 
+// At 375×812 with six seats the desk radius is only ~165px, and the old
+// layout put labels at 1.16× that — outside the rim. Fine for M1's two seats
+// stacked top/bottom (both dead centre, nothing to clip), but every side seat
+// among six puts the label past a 375px-wide screen (measured before this
+// fix: label text spilling ~3-20px past the left or right edge, worse once a
+// name shrinks its pip count).
+//
+// Moving inside the rim isn't free, though: six seats means five fists in
+// play at once, each capable of swinging up to 22px off its own strike spot
+// while wound. For the seat whose lift direction happens to line up with its
+// own label (the seat opposite screen-up), that swing plus the 0.6× outward
+// drift the fist already has *add* instead of cancelling, projecting ~35px
+// out from the spot — plus the fist's own ~22px drawn radius (the load ring,
+// at its peak sweep) — for a ~57px worst case. HUD_R clears it, but only
+// just: at this desk size there isn't room to also clear it comfortably
+// *and* stay clear of the nerve bar at the rim, and a label sitting on top of
+// its own seat's threat read would be worse than a 1px graze against the
+// ring's thin stroke. Verified pixel-by-pixel against the actual canvas
+// (see the M2 Task 2 report) — the solid fist ball clears with room to
+// spare; only the decorative ring can brush the label's corner, and only for
+// this one seat, only while that fist is fully loaded.
+const HUD_R = 68;
+const PIP_R = 4, PIP_GAP = 3;   // HP pips: fixed T.startHp slots, filled vs hollow
+
 function drawHud() {
-  ctx.font = '600 13px system-ui, sans-serif';
-  ctx.textAlign = 'center';
+  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
   for (const p of w.players) {
     const s = seatGeom(p.seat);
-    const lx = view.cx + (s.edgeX - view.cx) * 1.16;
-    const ly = view.cy + (s.edgeY - view.cy) * 1.16;
-    ctx.fillStyle = p.out ? '#6b6b73' : (p.id === w.down ? '#f5c97a' : '#f3efe6');
-    ctx.fillText(`${p.name}  ${'●'.repeat(Math.max(0, p.hp))}`, lx, ly);
+    const lx = s.spotX + s.ux * HUD_R;
+    const ly = s.spotY + s.uy * HUD_R;
+    // w.down can never be an eliminated player (M1 fixed the one bug where it
+    // dangled on a just-out kid) but the guard costs nothing and says so.
+    const isDown = p.id === w.down && !p.out;
+
+    const nameW = ctx.measureText(p.name).width;
+    const pipsW = T.startHp * (PIP_R * 2) + (T.startHp - 1) * PIP_GAP;
+    const gap = 6, padX = 7, padY = 4;
+    const boxW = nameW + gap + pipsW + padX * 2;
+    const boxH = 12 + padY * 2;
+    const boxX = lx - boxW / 2, boxY = ly - boxH / 2;
+
+    // The down seat's chip is a solid gold shape, not just gold text — a
+    // reinforcing, non-colour-dependent echo of the glow on its hand. Every
+    // other chip is a plain dark plate, there only for contrast against the
+    // wood grain.
+    ctx.fillStyle = isDown ? '#f5c97a' : p.out ? 'rgba(107,107,115,0.35)' : 'rgba(10,10,12,0.8)';
+    ctx.beginPath(); ctx.roundRect(boxX, boxY, boxW, boxH, 6); ctx.fill();
+
+    ctx.fillStyle = isDown ? '#1b1b1f' : p.out ? '#8a8a92' : '#f3efe6';
+    ctx.fillText(p.name, boxX + padX, ly);
+
+    // HP as fixed slots (filled vs hollow), not a variable-length dot run —
+    // a lone dot at 1 HP reads identically to a rendering glitch, but ●○○
+    // reads unambiguously as "1 of 3" at any HP total. The last point turns
+    // the same red as the nerve bar's danger colour, so "about to be out" is
+    // legible at a glance, not just a count you have to do.
+    let px = boxX + padX + nameW + gap + PIP_R;
+    for (let i = 0; i < T.startHp; i++) {
+      ctx.beginPath(); ctx.arc(px, ly, PIP_R, 0, Math.PI * 2);
+      if (i < p.hp) {
+        ctx.fillStyle = p.hp <= 1 ? '#c2603f' : (isDown ? '#1b1b1f' : '#f3efe6');
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = isDown ? 'rgba(27,27,31,0.5)' : 'rgba(243,239,230,0.35)';
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+      }
+      px += PIP_R * 2 + PIP_GAP;
+    }
   }
 }
 
@@ -269,7 +351,7 @@ function onEvent(e) {
 }
 
 function restart() {
-  w = createWorld({ humans: 1, nBots: 1, seed: (Date.now() & 0xffff) || 1 });
+  w = createWorld({ humans: 1, nBots: 5, seed: (Date.now() & 0xffff) || 1 });
   held = false; acc = 0; last = 0;
   overEl.hidden = true;
   deskLayer = null;
