@@ -461,7 +461,15 @@ test('entries are ordered latest-first, so the loser is the last to resolve', ()
   for (let i = 1; i < res.entries.length; i++) {
     assert.ok(res.entries[i - 1].t >= res.entries[i].t, 'entries must be sorted latest-first');
   }
-  assert.strictEqual(res.loser, res.entries[0].id);
+  // res.loser === res.entries[0].id alone would be tautological — resolveBait
+  // computes `loser` as entries[0] and emits both in the same object, so that
+  // equality can never fail regardless of what the code does. Recompute the
+  // expected loser independently of array position instead: whoever holds
+  // the entry, found by id, with the latest timestamp of the bunch.
+  const maxT = Math.max(...res.entries.map(e => e.t));
+  const loserEntry = res.entries.find(e => e.id === res.loser);
+  assert.ok(loserEntry, 'the loser must have its own entry in this bait');
+  assert.strictEqual(loserEntry.t, maxT, 'the loser must be whichever entry has the latest timestamp');
 });
 
 test('an eliminated kid takes no part — no entry, no strike, never sent down', () => {

@@ -291,8 +291,10 @@ function drawHud() {
     const s = seatGeom(p.seat);
     const lx = s.spotX + s.ux * hudR;
     const ly = s.spotY + s.uy * hudR;
-    // w.down can never be an eliminated player (M1 fixed the one bug where it
-    // dangled on a just-out kid) but the guard costs nothing and says so.
+    // w.down can never be an eliminated player — this branch's Task 1 fixed
+    // the bug where it dangled on a just-out kid (rules.js's knockOut, around
+    // line 190); M1 shipped with that bug latent. The guard here costs
+    // nothing and says so.
     const isDown = p.id === w.down && !p.out;
 
     const nameW = ctx.measureText(p.name).width;

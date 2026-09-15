@@ -128,12 +128,30 @@ guard; the script is a scratch throwaway per DECISIONS #7, not committed —
 | wins by seat (0–5) | 5 / 8 / 14 / 15 / 7 / 11 |
 
 Identical to the pre-M2 baseline recorded on issue #66 (same seeds, same
-counts) — M2 changed rendering and the default seat count, not simulation
-behaviour, and re-measuring is what confirms that actually held rather than
-just assuming it. `passive` is still the dominant way a match resolves, and
-seat 0 — always the human, always starting down — still wins least of the six.
-Both are already on #66 as open balance questions for M3, not something this
-task changed.
+counts), except p90 — 44.2s here vs 45.2s baseline, a percentile-formula
+artefact rather than a behaviour change. M2 changed rendering and the
+default seat count, not simulation behaviour, and re-measuring is what
+confirms that actually held rather than just assuming it. `passive` is still
+the dominant way a match resolves, and seat 0 — always the human, always
+starting down — still wins least of the six. Both are already on #66 as open
+balance questions for M3, not something this task changed.
+
+### Open question: a punch already falling can catch a fresh defender cold
+
+Six seats made something reachable that one attacker never could: a fist
+already mid-`drop` lands on whichever defender `goDown`/`knockOut` just
+installed in that same tick. `step()`'s attacker loop re-reads `w.down` on
+every iteration, so a freshly-installed defender arrives at `hand.p = 0` and
+can eat an in-flight punch with literally zero chance to slide — the rule is
+exactly as written and approved, but a defender who has held the desk for
+all of one tick has had no time to read anything, let alone react to it.
+
+Measured over 200 seeded six-bot matches: 38 of 3235 thumps (1.2%) landed at
+zero reaction time, and 299 (9.2%) landed within `T.recoverTime` of the
+defender arriving. Not a bug to fix silently — the rule stands as written —
+but a fairness question that only exists once more than one attacker fist
+can be in flight at once, and it was unmeasured until now. Open for M3,
+alongside the seat-0 and passive-dominance questions above.
 
 ## Inputs
 
