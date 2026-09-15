@@ -107,6 +107,19 @@ function bakeDesk() {
 const HAND_RX = 17, HAND_RY = 13;
 const retreatPx = HAND_RX / T.handGrace;   // ≈ 37.8px
 const wristLen = retreatPx - HAND_RX;      // ≈ 20.8px
+// The band's far end sits at (d - retreatPx), which is exactly the strike
+// spot when p = 1 — but the band only draws for p < 1, so at, say, p = 0.99
+// the mathematical far endpoint lands under 1px shy of the spot. That's not
+// enough margin for a butt-cap stroke's own antialiasing, which softens its
+// last ~1px: pixel-sampled, the spot itself blends back toward the desk
+// colour underneath even though zoneOf(p) still says wrist (found verifying
+// Task 2). Overshooting the far end by a constant fixes every p in the open
+// wrist interval at once, not just the sampled one — the margin past the
+// spot is retreatPx*(1-p) + WRIST_OVERSHOOT, so it never shrinks to zero as
+// p → 1. Padding where the stroke's tip reaches is safe: the `if` below still
+// gates *whether* the band draws at all, so it still can't bleed into 'hand'
+// or 'desk'.
+const WRIST_OVERSHOOT = 1.5;
 
 function drawHand(p) {
   const s = seatGeom(p.seat);
@@ -137,7 +150,7 @@ function drawHand(p) {
   // when handGrace < p < 1 and never bleeds into the 'hand' or 'desk' zones.
   if (zoneOf(p.hand.p) === 'wrist') {
     const nx = s.spotX + ux * (d - HAND_RX), ny = s.spotY + uy * (d - HAND_RX);
-    const fx = s.spotX + ux * (d - retreatPx), fy = s.spotY + uy * (d - retreatPx);
+    const fx = s.spotX + ux * (d - retreatPx - WRIST_OVERSHOOT), fy = s.spotY + uy * (d - retreatPx - WRIST_OVERSHOOT);
     ctx.strokeStyle = '#8a6b52';             // visibly distinct from forearm and hand
     ctx.lineWidth = 18;
     ctx.lineCap = 'butt';
@@ -199,6 +212,20 @@ function drawFist(p) {
     ctx.beginPath(); ctx.arc(fx, fy, 22, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
     ctx.strokeStyle = '#f5c97a'; ctx.lineWidth = 3; ctx.stroke();
   }
+}
+
+/** An eliminated kid: no arm drawn at all — render() simply never calls
+ * drawFist for them, which already reads as "withdrawn." What it doesn't
+ * cover is the strike-spot ring, baked once onto the static desk layer with
+ * no idea who is still in the match; left alone it would still glow as if
+ * live. Dimming it here, per frame, is the difference between "gone" and
+ * "empty and waiting" at a glance — the dim HUD label alone (M2 Task 2)
+ * wasn't enough on its own, per the brief's own console pose-and-look check. */
+function drawOutSeat(p) {
+  const s = seatGeom(p.seat);
+  ctx.beginPath(); ctx.arc(s.spotX, s.spotY, 17, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(23,23,27,0.6)';
+  ctx.fill();
 }
 
 // At 375×812 with six seats the desk radius is only ~165px, and the old
@@ -287,7 +314,10 @@ export function render() {
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
 
   drawHand(w.players[w.down]);
-  for (const p of w.players) { if (p.id !== w.down && !p.out) drawFist(p); }
+  for (const p of w.players) {
+    if (p.id === w.down) continue;
+    if (p.out) drawOutSeat(p); else drawFist(p);
+  }
   drawHud();
 }
 
@@ -295,13 +325,21 @@ window.addEventListener('resize', () => { resize(); render(); });
 
 // ── input: one button, both roles ────────────────────────────────────────────
 let held = false;
-const press = () => { held = true; };
+// Browsers block navigator.vibrate until the page has seen a real user
+// gesture — a tap, a key, a click — and log a console error on every call
+// before that. You start the match already `down`, so a bot can land a
+// thump on you before you've touched anything at all; onEvent's vibrate
+// call is gated on this flag, set only by a genuine input, never by a
+// harness pose.
+let gestured = false;
+const press = () => { held = true; gestured = true; };
 const release = () => { held = false; };
 
 canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); press(); });
 window.addEventListener('pointerup', release);
 window.addEventListener('pointercancel', release);
 window.addEventListener('keydown', (e) => {
+  gestured = true;
   if (e.code === 'Space') { e.preventDefault(); press(); }
   if (e.key === 'r' || e.key === 'R') restart();
 });
@@ -343,9 +381,17 @@ function frame(now) {
 }
 
 function onEvent(e) {
-  if (e.type === 'thump' && e.target === 0 && navigator.vibrate) navigator.vibrate(30);
+  if (e.type === 'thump' && e.target === 0 && gestured && navigator.vibrate) navigator.vibrate(30);
   if (e.type === 'over') {
-    overText.textContent = e.winner === 0 ? 'Your hand survived.' : 'Hand down. You lost.';
+    // Six players, one winner who is not necessarily you and not necessarily
+    // the kid who was down last — name them by name either way. If you were
+    // knocked out, w.over can only become true later, once every other seat
+    // but one has also gone out (that's what "last kid with HP wins" means),
+    // so by the time this fires you've had the whole rest of the match to
+    // watch, not just a single "you lost" with no name attached to it.
+    overText.textContent = e.winner === 0
+      ? 'Your hand survived. You won.'
+      : `${w.players[e.winner].name}'s hand survived. You were knocked out.`;
     overEl.hidden = false;
   }
 }
@@ -357,7 +403,7 @@ function restart() {
   deskLayer = null;
   render();
 }
-document.getElementById('again').addEventListener('click', restart);
+document.getElementById('again').addEventListener('click', () => { gestured = true; restart(); });
 
 resize();
 render();

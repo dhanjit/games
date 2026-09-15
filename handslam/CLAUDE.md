@@ -7,8 +7,10 @@ bottom of the fist. Knuckles only, no rings. Last hand standing wins.
 Design spec: `docs/superpowers/specs/2026-09-14-handslam-design.md`.
 Tracker: issue #63. M1: #64.
 
-**Status: M1 — a 1v1 duel against one bot.** Six seats, the character roster and
-the balance harness are M2–M4; audio, PWA and the hub card are M5.
+**Status: M2 — a six-seat match: elimination you can see, a winner named
+properly, and the six-seat numbers measured.** `sim/run.mjs` and the first
+balance pass are M3; the character roster and signature moves are M4; audio,
+PWA and the hub card are M5.
 
 ## The one rule everything hangs off
 
@@ -75,7 +77,7 @@ Two guards keep it honest, and both exist because they were bugs first:
 |---|---|
 | `rules.js` | **Pure sim, no DOM.** `T`, `PERSONAS`, `createWorld(opts)` → `step(world, dt, inputsById)` → events. Every balance number is here. |
 | `game.js` | Canvas render, fixed-timestep loop (1/120 s), the one-button input, HUD. Reads the world; mutates it only through `step()`. |
-| `test/rules.test.mjs` | `node --test "handslam/test/*.test.mjs"` — 34 tests. |
+| `test/rules.test.mjs` | `node --test "handslam/test/*.test.mjs"` — 40 tests. |
 
 `test/` and `sim/` are excluded from the deployed Worker via the root
 `.assetsignore` — they are tooling, not pages.
@@ -108,6 +110,30 @@ mc.port2.postMessage(0);
 
 Keep one continuous pump with a single advancing clock. Restarting the clock per
 frame breaks `frame()`'s accumulator and the sim barely advances.
+
+## The six-seat match, measured (M2)
+
+`node --test` proves elimination and bait correctness; match *shape* — how
+long a match runs, how it tends to end — is only provable by playing matches,
+not by asserting on one. 60 seeded bot-only six-seat matches
+(`createWorld({ humans: 0, nBots: 6, seed: 500 + r })`, `1/120` steps, a 300s
+guard; the script is a scratch throwaway per DECISIONS #7, not committed —
+`sim/run.mjs` as a real harness is M3):
+
+| | value |
+|---|---|
+| ending | 100% (60/60) |
+| length | median 30.6s · p10 19.8s · p90 44.2s |
+| `goesDown` kind | passive 331 · abort 276 · knockout 240 · froze 144 · wrist 103 · desk 96 |
+| wins by seat (0–5) | 5 / 8 / 14 / 15 / 7 / 11 |
+
+Identical to the pre-M2 baseline recorded on issue #66 (same seeds, same
+counts) — M2 changed rendering and the default seat count, not simulation
+behaviour, and re-measuring is what confirms that actually held rather than
+just assuming it. `passive` is still the dominant way a match resolves, and
+seat 0 — always the human, always starting down — still wins least of the six.
+Both are already on #66 as open balance questions for M3, not something this
+task changed.
 
 ## Inputs
 
