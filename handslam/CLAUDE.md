@@ -34,6 +34,25 @@ earlier version slid the hand all the way to the player's edge, which left the
 strike spot bare while the sim still said `wrist` — the drawing contradicted the
 rules, and a player cannot learn a rule the picture denies.
 
+Since #69 those bands are drawn as real anatomy, in a frame where +x runs from
+the strike spot out toward that seat's own desk edge and the hand retreats along
++x: the **back of the hand** spans `[d-HAND_RX, d+HAND_RX]` and owns the `hand`
+zone; the **splayed fingers** trail on inboard and own the `wrist` zone; at p=1
+even the fingertips have cleared and the spot is bare wood. The fingers are a
+distinctly darker skin tone than the back of the hand for exactly this reason —
+the three zones must be three different colours where the spot is sampled. The
+retreat direction is not free: the hand must slide *toward* the player, or at
+p=1 the forearm itself lies across the spot and `desk` can never be bare.
+
+Three pads keep antialiasing off the sample point, each gated on the zone the
+rule is currently in so none can bleed into a zone it does not own —
+`WRIST_OVERSHOOT` (fingertips past the spot inside `wrist`), `ZONE_PAD` (knuckle
+line either way), `TIP_CLEAR` (fingertips pulled back outside `wrist`). **Verify
+by sweeping p, not by sampling a handful of values**: a 34%-alpha knuckle crease
+drifting over the spot between p=0.38 and p=0.45 passed the seven-value check and
+failed a 201-step sweep. Every piece of hand detail now breaks around the centre
+line the spot tracks down.
+
 ## The bait — the rule the game is named for
 
 The hand clearing the spot **arms** a bait, but only if at least one fist is in
@@ -92,10 +111,18 @@ node --test "handslam/test/*.test.mjs"
 fails on Windows Node 24 — it resolves the directory as a module and reports a
 confusing `MODULE_NOT_FOUND` rather than running anything.
 
-The canvas has no unit test; it is verified in a real browser at 375×812. Serve
-with `python -m http.server 8080` from the repo root and open
+The canvas has no unit test; it is verified in a real browser at 375×812 and
+320×568. Serve with `python -m http.server 8080` from the repo root and open
 `/handslam/?harness`, which exposes
-`window.__hs = { world, render, seatGeom, view, restart, press, release, frameMs, frame }`.
+`window.__hs = { world, render, seatGeom, view, restart, press, release, frameMs,
+frame, hudRadius, retreatPx, HAND_RX, freeze }`.
+
+`freeze()` stops the loop rescheduling itself so a posed world can be
+photographed. It exists because **some browser panes do not park rAF at 0 Hz** —
+where the loop is live, a console pose drifts several sim steps before a
+screenshot lands on it, and you photograph a state you did not set. After
+freezing, keep the compositor fed with your own `(function p(){ __hs.render();
+requestAnimationFrame(p); })()` or the screenshot can time out.
 
 **Driving the loop under test:** offscreen and headless browsers park
 `requestAnimationFrame` at 0 Hz, so the loop will not run on its own and
@@ -166,6 +193,27 @@ Space or pointer-down anywhere; `R` restart. There is no aiming,
 so there is nothing to drag and no second control. A human therefore never fouls
 by choosing to — they foul because they committed a fraction too early, which is
 exactly the mistake the real game punishes.
+
+## The view
+
+Flat top-down, no perspective anywhere (#69). The desk is a **rectangle**, drawn
+with no vertical squash — M1/M2 drew an ellipse (`ry = 0.82·rx`), which read as a
+round table in perspective while everything else was flat, and a player noticed
+within seconds. `seatGeom(i)` places each seat as `{ side, t }` on that rectangle's
+perimeter and returns `{ edgeX, edgeY, spotX, spotY, ux, uy, a, axisLen, side }`;
+`ux, uy` points from the strike spot out toward that seat's own edge.
+
+The desk's long axis follows the screen, so the seating follows the orientation:
+portrait gets two kids down each long side and one at each short end, landscape
+flips it. **Seat 0 — the human — is always on the bottom edge.** Any seat count
+other than six falls back to even angular spacing cast as a ray onto the rectangle.
+
+Everything static — floor, neighbouring desks, litter, desk, grain, graffiti,
+chalk, strike rings, vignette — is baked once into the `bakeDesk()` offscreen
+layer and blitted per frame. Only the six arms and the HUD redraw; measured
+median 0.2 ms / max 3.6 ms per frame against an 8 ms budget. Anything new that
+does not move belongs in the bake, and must go through `clearOfSpots()` so it
+cannot land on a strike spot and change the wood colour the zone test samples.
 
 ## Theme
 
