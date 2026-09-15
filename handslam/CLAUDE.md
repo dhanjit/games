@@ -1,8 +1,8 @@
 # handslam — Claude notes
 
 A classroom bench game. Kids round a desk, seen from directly above. One is
-**down** — hand flat on the desk, palm down. The rest are **up**, fists
-permanently cocked over their own fixed strike spots, hammering down with the
+**down** — hand flat **in the middle of the desk**, palm down. The rest are
+**up**, fists permanently cocked over that one hand, hammering down with the
 bottom of the fist. Knuckles only, no rings. Last hand standing wins.
 Design spec: `docs/superpowers/specs/2026-09-14-handslam-design.md`.
 Tracker: issue #63. M1: #64.
@@ -115,7 +115,7 @@ The canvas has no unit test; it is verified in a real browser at 375×812 and
 320×568. Serve with `python -m http.server 8080` from the repo root and open
 `/handslam/?harness`, which exposes
 `window.__hs = { world, render, seatGeom, view, restart, press, release, frameMs,
-frame, hudRadius, retreatPx, HAND_RX, freeze }`.
+frame, hudRadius, ringRadius, FIST_R, retreatPx, HAND_RX, freeze }`.
 
 `freeze()` stops the loop rescheduling itself so a posed world can be
 photographed. It exists because **some browser panes do not park rAF at 0 Hz** —
@@ -203,21 +203,43 @@ within seconds. `seatGeom(i)` places each seat as `{ side, t }` on that rectangl
 perimeter and returns `{ edgeX, edgeY, spotX, spotY, ux, uy, a, axisLen, side }`;
 `ux, uy` points from the strike spot out toward that seat's own edge.
 
+**There is one strike spot, and it is the centre of the desk** — `spotX, spotY`
+is the same point for every seat. That is the rule ("the one who gets hit places
+his hand at the centre of the table") and it is what the sim always modelled:
+one `zoneOf(w.players[w.down].hand.p)` for every landing. An earlier renderer
+invented a spot per seat near that kid's own edge, with a chalk ring on each; a
+player spotted it immediately. Consequences: the defender's forearm spans the
+whole desk, `ux, uy` is **no longer axis-aligned** (a kid part-way down a long
+side reaches in diagonally), and `axisLen` is the real centre-to-edge reach —
+not a fixed inset. The HUD chip is therefore measured **in from `edgeX, edgeY`**,
+not out from the spot, or all six chips would stack round the middle.
+
+The five up fists rest on a ring round that spot, each on its own seat's
+bearing, and a dropping fist travels all the way in and lands **on** the spot.
+`ringRadius()` derives that radius rather than hardcoding one for six: the
+largest of (a) `FIST_R / sin(Δθ/2)` at the narrowest gap between neighbouring
+bearings, so no two fists touch, (b) clearance for the hand's fingertips, which
+trail `retreatPx - TIP_CLEAR` back across the spot at `p = 0`, and (c) clearance
+for the nerve ring — capped so a fist can never leave the desk. On every size
+tested (375×812, 320×568, landscape) the nerve-ring term binds, at 69.15px.
+
 The desk's long axis follows the screen, so the seating follows the orientation:
 portrait gets two kids down each long side and one at each short end, landscape
 flips it. **Seat 0 — the human — is always on the bottom edge.** Any seat count
 other than six falls back to even angular spacing cast as a ray onto the rectangle.
 
 Everything static — floor, neighbouring desks, litter, desk, grain, graffiti,
-chalk, strike rings, vignette — is baked once into the `bakeDesk()` offscreen
-layer and blitted per frame. Only the six arms and the HUD redraw; measured
-median 0.2 ms / max 3.6 ms per frame against an 8 ms budget. Anything new that
-does not move belongs in the bake, and must go through `clearOfSpots()` so it
-cannot land on a strike spot and change the wood colour the zone test samples.
+chalk, the one strike ring, vignette — is baked once into the `bakeDesk()`
+offscreen layer and blitted per frame. Only the six arms and the HUD redraw;
+measured median 0.2 ms / max 3.0 ms per frame against an 8 ms budget. Anything
+new that does not move belongs in the bake, and must go through
+`clearOfSpots()` so it cannot land on the strike spot and change the wood colour
+the zone test samples.
 
 ## Theme
 
 An empty classroom in the middle of the day — free period, no teacher. Wooden
-desk, chalk strike rings, shirt-sleeved arms reaching in from off-screen. The
-kids *are* their hands, which is also why six will fit on a phone. Nothing
+desk, one chalk strike ring in the middle, shirt-sleeved arms reaching in from
+off-screen. The kids *are* their hands, which is also why six will fit on a
+phone. Nothing
 shared with the other games in this catalogue.

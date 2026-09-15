@@ -18,7 +18,7 @@ const canvas = document.getElementById('desk');
 const ctx = canvas.getContext('2d');
 
 let w = createWorld({ humans: 1, nBots: 5, seed: (Date.now() & 0xffff) || 1 });
-let view = { w: 0, h: 0, cx: 0, cy: 0, dw: 0, dh: 0, inset: 0, dpr: 1 };
+let view = { w: 0, h: 0, cx: 0, cy: 0, dw: 0, dh: 0, dpr: 1 };
 let deskLayer = null;
 
 // ── palette ──────────────────────────────────────────────────────────────────
@@ -42,9 +42,17 @@ const C = {
 };
 
 // ── layout ───────────────────────────────────────────────────────────────────
-// A seat is a point on the desk's rectangular perimeter (where the arm comes
-// in over the edge) plus a strike spot a fixed distance inboard of it. `t` runs
-// along the side: 0→1 left-to-right on top/bottom, top-to-bottom on left/right.
+// A seat is a point on the desk's rectangular perimeter — where that kid's arm
+// comes in over the edge. `t` runs along the side: 0→1 left-to-right on
+// top/bottom, top-to-bottom on left/right.
+//
+// There is exactly ONE strike spot, at the centre of the desk, shared by every
+// seat: whoever is down puts their hand there and everyone else's fist hovers
+// over it. That is the rule the game is played by ("the one who gets hit places
+// his hand at the centre of the table"), and it is what the sim has always
+// modelled — one `zoneOf(w.players[w.down].hand.p)` for every landing, one hand,
+// one retreat scalar. An earlier renderer gave each seat its own spot near its
+// own edge, which the sim never said and no player would recognise.
 //
 // Portrait desk (taller than wide): the long sides are left and right, so they
 // take two kids each and the short ends one each. Landscape flips it. Seat 0 is
@@ -79,31 +87,30 @@ function seatSlot(i, n) {
   return { side: sin > 0 ? 'bottom' : 'top', t: (cos * ty + view.dw) / (2 * view.dw) };
 }
 
-/** Where a seat's arm crosses the desk edge, and where its fist strikes.
- * `ux, uy` is the unit vector from the strike spot out toward that edge —
- * axis-aligned now that the desk is a rectangle — and `a` is its angle, which
- * every limb rotates into. `axisLen` is the spot-to-edge distance the HUD
- * clamps against. Contract unchanged from M2: drawHand, drawFist and drawHud
- * all read these. */
+/** Where a seat's arm crosses the desk edge, and the axis it reaches in along.
+ * `spotX, spotY` is the one shared strike spot — the desk centre — for every
+ * seat. `ux, uy` is the unit vector from that spot out toward this seat's own
+ * edge, and `a` is its angle, which every limb rotates into; it is no longer
+ * axis-aligned, because a kid sitting part-way down a long side reaches in to
+ * the middle diagonally. `axisLen` is the spot-to-edge distance — now the real
+ * length of the reach across the desk. Contract unchanged from M2: drawHand,
+ * drawFist and drawHud all read these. */
 function seatGeom(i) {
   const { side, t } = seatSlot(i, w.n);
-  const { cx, cy, dw, dh, inset } = view;
-  let edgeX, edgeY, ux, uy;
-  if (side === 'bottom') { edgeX = cx - dw + t * 2 * dw; edgeY = cy + dh; ux = 0; uy = 1; }
-  else if (side === 'top') { edgeX = cx - dw + t * 2 * dw; edgeY = cy - dh; ux = 0; uy = -1; }
-  else if (side === 'left') { edgeX = cx - dw; edgeY = cy - dh + t * 2 * dh; ux = -1; uy = 0; }
-  else { edgeX = cx + dw; edgeY = cy - dh + t * 2 * dh; ux = 1; uy = 0; }
+  const { cx, cy, dw, dh } = view;
+  let edgeX, edgeY;
+  if (side === 'bottom') { edgeX = cx - dw + t * 2 * dw; edgeY = cy + dh; }
+  else if (side === 'top') { edgeX = cx - dw + t * 2 * dw; edgeY = cy - dh; }
+  else if (side === 'left') { edgeX = cx - dw; edgeY = cy - dh + t * 2 * dh; }
+  else { edgeX = cx + dw; edgeY = cy - dh + t * 2 * dh; }
+  const vx = edgeX - cx, vy = edgeY - cy;
+  const axisLen = Math.hypot(vx, vy) || 1;
   return {
-    edgeX, edgeY, ux, uy, side,
-    spotX: edgeX - ux * inset, spotY: edgeY - uy * inset,
-    a: Math.atan2(uy, ux), axisLen: inset,
+    edgeX, edgeY, ux: vx / axisLen, uy: vy / axisLen, side,
+    spotX: cx, spotY: cy,
+    a: Math.atan2(vy, vx), axisLen,
   };
 }
-
-// The strike spot must sit far enough inboard for the whole retreating hand to
-// stay on the desk: retreatPx of travel + the hand's own half-length + the HUD
-// chip's band at the cuff. 82 is that sum with a little air (see HUD_R below).
-const SEAT_INSET = 82;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -114,10 +121,7 @@ function resize() {
   // the side/end seat counts follow from that in seatSlot.
   const dw = Math.min(cssW * 0.43, cssH * 0.40, 230);
   const dh = Math.min(cssH * 0.345, dw * 1.52, 270);
-  view = {
-    w: cssW, h: cssH, dpr, cx: cssW / 2, cy: cssH / 2,
-    dw, dh, inset: Math.min(SEAT_INSET, dw * 0.62, dh * 0.62),
-  };
+  view = { w: cssW, h: cssH, dpr, cx: cssW / 2, cy: cssH / 2, dw, dh };
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -128,16 +132,12 @@ function resize() {
 // Everything here is blitted as one image every frame. Nothing in this section
 // may move: if it needs to change per frame it belongs below, not here.
 
-/** Is (x, y) far enough from every strike spot to be safe to draw on?
- * The contact-zone pixel test samples the defender's spot, so no dressing may
- * land under one — a graffiti stroke through a spot would change the 'desk'
- * colour the test reads. */
+/** Is (x, y) far enough from the strike spot to be safe to draw on?
+ * The contact-zone pixel test samples that one spot, so no dressing may land
+ * under it — a graffiti stroke through the spot would change the 'desk' colour
+ * the test reads. One spot now, not six, so this is one distance check. */
 function clearOfSpots(x, y, r) {
-  for (let i = 0; i < w.n; i++) {
-    const s = seatGeom(i);
-    if (Math.hypot(x - s.spotX, y - s.spotY) < r) return false;
-  }
-  return true;
+  return Math.hypot(x - view.cx, y - view.cy) >= r;
 }
 
 function bakeFloor(g, W, H, rnd) {
@@ -368,14 +368,12 @@ function bakeDeskSurface(g, rnd) {
   }
   g.restore();  // un-clip
 
-  // every seat's strike spot — a chalk ring the player learns to read
-  for (let i = 0; i < w.n; i++) {
-    const s = seatGeom(i);
-    g.beginPath(); g.arc(s.spotX, s.spotY, 23, 0, Math.PI * 2);
-    g.setLineDash([5, 5]); g.lineWidth = 2;
-    g.strokeStyle = 'rgba(243,239,230,0.42)'; g.stroke();
-    g.setLineDash([]);
-  }
+  // The strike spot — one chalk ring, in the middle of the desk, because there
+  // is one hand and it goes in the middle. Every kid's fist comes down here.
+  g.beginPath(); g.arc(cx, cy, 23, 0, Math.PI * 2);
+  g.setLineDash([5, 5]); g.lineWidth = 2;
+  g.strokeStyle = 'rgba(243,239,230,0.42)'; g.stroke();
+  g.setLineDash([]);
 }
 
 function bakeDesk() {
@@ -621,13 +619,68 @@ function fist(tense, col, edge, armed) {
   }
 }
 
+// ── the ring the waiting fists rest on ───────────────────────────────────────
+// Every kid holds their fist over the one hand, so all five hover around the one
+// spot rather than each sitting over a patch of their own. They rest on a small
+// ring centred on the spot, each on the bearing of its own seat.
+//
+// The radius is measured, not picked: it is the smallest that satisfies all
+// three things a fist must stay clear of, so it follows the seat count and the
+// drawn sizes instead of being a number tuned for six.
+//
+//   1. each other  — chord 2·R·sin(Δθ/2) ≥ 2·FIST_R at the narrowest gap
+//                    between neighbouring bearings (the seats sit at fixed
+//                    points on a rectangle, so the gaps are not exactly even)
+//   2. the hand    — the fist opposite the defender reaches inboard toward the
+//                    fingertips, which at p = 0 trail retreatPx - TIP_CLEAR
+//                    back across the spot
+//   3. the nerve ring — the defender's meter, drawn round the same spot
+//
+// Half-extents of the drawn fist in its own frame (+x outboard), stroke
+// included: the knuckle bumps bulge to -16.5 inboard, the folded thumb to 16.7
+// across, and a loaded fist is scaled up by a further 10%.
+const FIST_IN = 16.5, FIST_SIDE = 16.7, FIST_SCALE = 1.10;
+const FIST_R = Math.hypot(FIST_IN, FIST_SIDE) * FIST_SCALE;   // circumscribed
+const FIST_REACH_IN = FIST_IN * FIST_SCALE;    // how far it reaches back inboard
+const RING_AIR = 3;                            // daylight, so nothing just kisses
+const WIND_BACK = 12;                          // a winding fist draws off the ring
+
+let ringCache = { key: '', r: 0 };
+function ringRadius() {
+  const key = `${view.w}x${view.h}x${w.n}`;
+  if (ringCache.key !== key) ringCache = { key, r: computeRingRadius() };
+  return ringCache.r;
+}
+
+function computeRingRadius() {
+  const bearings = [];
+  let minAxis = Infinity;
+  for (let i = 0; i < w.n; i++) {
+    const s = seatGeom(i);
+    bearings.push((s.a + Math.PI * 2) % (Math.PI * 2));
+    minAxis = Math.min(minAxis, s.axisLen);
+  }
+  bearings.sort((a, b) => a - b);
+  let gap = Math.PI * 2;
+  for (let i = 0; i < bearings.length && bearings.length > 1; i++) {
+    const nxt = bearings[(i + 1) % bearings.length];
+    gap = Math.min(gap, (nxt - bearings[i] + Math.PI * 2) % (Math.PI * 2) || Math.PI * 2);
+  }
+  const sep = bearings.length > 1 ? FIST_R / Math.sin(gap / 2) : 0;
+  const clearHand = (retreatPx - TIP_CLEAR) + FIST_REACH_IN + RING_AIR;
+  const clearNerve = (NERVE_RING_R + 7) + FIST_REACH_IN + RING_AIR;
+  // …and never so far out that a fist leaves its own desk.
+  return Math.min(Math.max(sep, clearHand, clearNerve), minAxis - FIST_R - 6);
+}
+
 // ── the defender ─────────────────────────────────────────────────────────────
-/** Everything that says "THIS one is down", drawn on the desk before the arm.
- * Four reinforcing cues, because one was demonstrably not enough (#69): a pool
- * of light on their patch of desk, a solid chalk ring where the dashed rings
- * mark everyone else, gold reticle brackets round the spot — and, in the draw
- * order, the fact that this is the only arm lying flat on the wood while the
- * other five float above it with shadows under them. */
+/** Everything that says "a hand is down on this spot", drawn on the desk before
+ * the arm: a pool of light over the middle of the desk, a solid chalk ring over
+ * the baked dashed one, and gold reticle brackets. Which *kid* is down is then
+ * carried by the arm itself — the one forearm reaching all the way in from its
+ * own edge and lying flat on the wood, while the other five float above it with
+ * shadows under them — plus the gold HUD chip at that kid's cuff. Four
+ * reinforcing cues, because one was demonstrably not enough (#69). */
 function markDefender(s) {
   const gl = ctx.createRadialGradient(s.spotX, s.spotY, 0, s.spotX, s.spotY, 96);
   gl.addColorStop(0, 'rgba(255,230,185,0.05)');
@@ -660,6 +713,8 @@ function drawHand(p) {
   ctx.translate(s.spotX, s.spotY);
   ctx.rotate(s.a);                            // +x now points at this seat's edge
 
+  // The forearm now spans the whole desk — from this kid's edge in to the
+  // middle, which is the long reach it is in the real game.
   limb(d + HAND_RX - 5, s.axisLen, 10.2, 13.5, C.handArm, C.handEdge, C.sleeveDown);
   flatHand(d, zone);
 
@@ -695,29 +750,41 @@ function nerveRing(s, p) {
 function drawFist(p) {
   const s = seatGeom(p.seat);
   const f = p.fist;
-  // A winding fist draws back toward its owner and rises; a dropping one falls
-  // onto the spot. A recovering fist is spent and out of play — it must read as
+  // Two scalars carry the whole animation: `lift` is height off the desk, `rad`
+  // is distance out from the one strike spot. A winding fist rises and draws
+  // back off the ring toward its owner; a dropping one falls *and travels all
+  // the way in*, landing on the spot — you see the fist come down onto the hand
+  // instead of dropping in place where it was hovering. A recovering fist is
+  // spent and out of play: it slides back out to the ring and must read as
   // level with (never above) a resting `ready` fist, or a just-landed fist
   // looks more threatening than an armed one, inverting the one cue this game
   // is about.
-  // REST is the floor: an up kid holds their fist *off* the desk the whole
-  // time, which is the cue that the one hand lying flat on the wood is the
-  // defender. Only a fist that has just landed (recover) touches it, and it
-  // climbs back to rest over recoverTime.
+  // REST is the height floor: an up kid holds their fist *off* the desk the
+  // whole time, which is the cue that the one hand lying flat on the wood is
+  // the defender. Only a fist that has just landed (recover) touches it.
+  const ring = ringRadius();
   const REST = 0.42;
-  let lift = REST, tense = 0;
-  if (f.state === 'wind') { tense = f.t / T.windTime; lift = REST + (1 - REST) * tense; }
-  else if (f.state === 'loaded') { tense = 1; lift = 1; }
-  else if (f.state === 'drop') { tense = 1; lift = 1 - f.t / T.dropTime; }
-  else if (f.state === 'abort') { lift = REST + (1 - REST) * (1 - f.t / T.abortTime); }
-  else if (f.state === 'recover') { lift = REST * Math.min(1, f.t / T.recoverTime); }
+  let lift = REST, tense = 0, rad = ring;
+  if (f.state === 'wind') {
+    tense = Math.min(1, f.t / T.windTime);
+    lift = REST + (1 - REST) * tense;
+    rad = ring + WIND_BACK * tense;
+  } else if (f.state === 'loaded') {
+    tense = 1; lift = 1; rad = ring + WIND_BACK;
+  } else if (f.state === 'drop') {
+    const k = Math.min(1, f.t / T.dropTime);
+    tense = 1; lift = 1 - k; rad = (ring + WIND_BACK) * (1 - k);
+  } else if (f.state === 'abort') {
+    const k = Math.max(0, 1 - f.t / T.abortTime);
+    lift = REST + (1 - REST) * k; rad = ring + WIND_BACK * k;
+  } else if (f.state === 'recover') {
+    const k = Math.min(1, f.t / T.recoverTime);
+    lift = REST * k; rad = ring * k;
+  }
   const spent = f.state === 'recover';
 
-  const LIFT = 21;
-  // Drawn back along the seat's own axis, toward the kid it belongs to — the
-  // cock-back is the tell, so it has to point somewhere meaningful.
-  const fx = s.spotX + s.ux * LIFT * lift;
-  const fy = s.spotY + s.uy * LIFT * lift;
+  const fx = s.spotX + s.ux * rad;
+  const fy = s.spotY + s.uy * rad;
 
   // Height, in a view with no perspective, is carried by the shadow pulling
   // away underneath and the fist growing very slightly. The flat hand never
@@ -732,8 +799,11 @@ function drawFist(p) {
     ctx.restore();
   }
 
-  const ang = Math.atan2(s.edgeY - fy, s.edgeX - fx);
-  const len = Math.hypot(s.edgeX - fx, s.edgeY - fy);
+  // The fist rides its seat's own ray, so the arm behind it is that ray too:
+  // it runs from the fist out to that kid's place at the desk edge and on
+  // off-screen. `len` shrinks as the fist comes in, which is the reach.
+  const ang = s.a;
+  const len = Math.max(1, s.axisLen - rad);
   const col = spent ? C.spent
     : tense > 0 ? `rgb(${Math.round(156 + 64 * tense)},${Math.round(112 - 14 * tense)},${Math.round(80 - 12 * tense)})`
       : C.upSkin;
@@ -763,35 +833,40 @@ function drawFist(p) {
 }
 
 /** An eliminated kid: no arm drawn at all — render() simply never calls
- * drawFist for them, which already reads as "withdrawn." What it doesn't
- * cover is the strike-spot ring, baked once onto the static desk layer with
- * no idea who is still in the match; left alone it would still glow as if
- * live. Dimming it here, per frame, is the difference between "gone" and
- * "empty and waiting" at a glance. */
+ * drawFist for them, which already reads as "withdrawn." A gap in the ring of
+ * fists is easy to miss, though, so their place on it gets struck out: a dark
+ * disc and a cross exactly where their fist used to hover over the hand. The
+ * difference between "gone" and "about to hit me" at a glance. */
 function drawOutSeat(p) {
   const s = seatGeom(p.seat);
-  ctx.beginPath(); ctx.arc(s.spotX, s.spotY, 25, 0, Math.PI * 2);
+  const r = ringRadius();
+  const x = s.spotX + s.ux * r, y = s.spotY + s.uy * r;
+  ctx.beginPath(); ctx.arc(x, y, 21, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(14,14,17,0.62)'; ctx.fill();
   ctx.strokeStyle = 'rgba(160,156,148,0.40)'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(s.spotX - 8, s.spotY - 8); ctx.lineTo(s.spotX + 8, s.spotY + 8);
-  ctx.moveTo(s.spotX + 8, s.spotY - 8); ctx.lineTo(s.spotX - 8, s.spotY + 8);
+  ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7);
+  ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7);
   ctx.stroke();
 }
 
 // ── HUD ──────────────────────────────────────────────────────────────────────
-// A chip sits on each seat's cuff, between the strike spot and the desk edge.
-// It has to clear the retreating hand (retreatPx + HAND_RX ≈ 55px of travel)
-// without leaving the desk, and on a 320px screen the side seats' chips would
-// still run off the edge, so every box is finally clamped into the viewport.
-// hudRadius clamps against the same axisLen seatGeom returns rather than a
-// second, independently-drifting guess at the same number.
+// A chip sits on each seat's cuff — a fixed band inboard of that kid's own
+// place at the desk edge, which is the one part of the desk that is still
+// theirs alone now that the strike spot is shared. Measuring it out from the
+// spot instead would stack all six chips in a ring round the middle, on top of
+// the hand and the fists. On a 320px screen the side seats' chips would still
+// run off the edge, so every box is finally clamped into the viewport.
+// hudRadius returns the band, clamped against the same axisLen seatGeom
+// returns rather than a second, independently-drifting guess at the same
+// number, so a degenerate desk can never push a chip past the middle.
 const HUD_LABEL_H = 11, HUD_PAD_Y = 4;
 const HUD_BOX_H = HUD_LABEL_H + HUD_PAD_Y * 2;
+const HUD_EDGE_BAND = 15;
 function hudRadius() {
   let minAxis = Infinity;
   for (let i = 0; i < w.n; i++) minAxis = Math.min(minAxis, seatGeom(i).axisLen);
-  return Math.min(68, minAxis - HUD_BOX_H / 2 - 4);
+  return Math.min(HUD_EDGE_BAND, minAxis - HUD_BOX_H / 2 - 4);
 }
 const PIP_R = 3.4, PIP_GAP = 2.6;   // HP pips: fixed T.startHp slots, filled vs hollow
 
@@ -812,8 +887,8 @@ function drawHud() {
     const boxH = HUD_BOX_H;
     // clamped so no chip can leave the screen at any size — measured at 320px,
     // where the side seats' chips used to overrun the left and right edges
-    const boxX = Math.max(4, Math.min(view.w - boxW - 4, s.spotX + s.ux * hudR - boxW / 2));
-    const boxY = Math.max(4, Math.min(view.h - boxH - 4, s.spotY + s.uy * hudR - boxH / 2));
+    const boxX = Math.max(4, Math.min(view.w - boxW - 4, s.edgeX - s.ux * hudR - boxW / 2));
+    const boxY = Math.max(4, Math.min(view.h - boxH - 4, s.edgeY - s.uy * hudR - boxH / 2));
     const ly = boxY + boxH / 2;
 
     ctx.fillStyle = isDown ? C.gold : p.out ? 'rgba(96,96,104,0.35)' : 'rgba(10,10,12,0.82)';
@@ -1003,7 +1078,7 @@ if (HARNESS) {
   window.__hs = {
     world: () => w, render, seatGeom, view: () => view, restart,
     press: () => press(false), release, frameMs: () => frameMs, frame,
-    hudRadius, retreatPx, HAND_RX,
+    hudRadius, ringRadius, FIST_R, retreatPx, HAND_RX,
     // Freeze the live loop so a posed world can be photographed. The pane this
     // is verified in does *not* park rAF at 0 Hz, so a pose drifts by several
     // sim steps before a screenshot lands on it.
