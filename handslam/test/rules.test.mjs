@@ -427,3 +427,79 @@ test('a bot that is down does not flinch at an empty desk', () => {
   assert.strictEqual(w.players[1].hand.state, 'flat');
   assert.strictEqual(w.players[1].hand.nerve, T.nerveMax);
 });
+
+test('a world defaults to six kids, one of them down', () => {
+  const w = createWorld({ seed: 1 });
+  assert.strictEqual(w.players.length, 6);
+  assert.strictEqual(w.n, 6);
+  assert.strictEqual(w.players.filter(p => p.isHuman).length, 1);
+  assert.strictEqual(w.down, 0);
+});
+
+test('a bait with five attackers ranks every entry and sends down exactly one', () => {
+  const w = createWorld({ humans: 6, nBots: 0, seed: 1, down: 0, hp: 99 });
+  // 1 and 2 load and will abort; 3 loads and freezes; 4 and 5 never wind.
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true }, 2: { hold: true }, 3: { hold: true } });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true }, 2: { hold: true }, 3: { hold: true } });
+  advance(w, 0.06, { 0: { hold: true }, 1: { hold: false }, 2: { hold: true }, 3: { hold: true } });  // 1 aborts early
+  const evs = advance(w, T.baitWindow + T.dropTime + 0.1,
+    { 0: { hold: true }, 2: { hold: false }, 3: { hold: true } });                                     // 2 aborts later
+  const res = evs.find(e => e.type === 'baitResolve');
+  assert.ok(res, 'the bait must resolve');
+  assert.ok(res.entries.length >= 4, `expected most fists entered, got ${res.entries.length}`);
+  assert.strictEqual(evs.filter(e => e.type === 'goesDown').length, 1, 'exactly one kid goes down');
+  assert.strictEqual(w.down, res.loser);
+  assert.notStrictEqual(res.loser, 1, 'the earliest aborter must not be the one who pays');
+});
+
+test('entries are ordered latest-first, so the loser is the last to resolve', () => {
+  const w = createWorld({ humans: 6, nBots: 0, seed: 2, down: 0, hp: 99 });
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true }, 2: { hold: true } });
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true }, 2: { hold: true } });
+  const evs = advance(w, T.baitWindow + T.dropTime + 0.1, { 0: { hold: true }, 1: { hold: false }, 2: { hold: false } });
+  const res = evs.find(e => e.type === 'baitResolve');
+  for (let i = 1; i < res.entries.length; i++) {
+    assert.ok(res.entries[i - 1].t >= res.entries[i].t, 'entries must be sorted latest-first');
+  }
+  // res.loser === res.entries[0].id alone would be tautological — resolveBait
+  // computes `loser` as entries[0] and emits both in the same object, so that
+  // equality can never fail regardless of what the code does. Recompute the
+  // expected loser independently of array position instead: whoever holds
+  // the entry, found by id, with the latest timestamp of the bunch.
+  const maxT = Math.max(...res.entries.map(e => e.t));
+  const loserEntry = res.entries.find(e => e.id === res.loser);
+  assert.ok(loserEntry, 'the loser must have its own entry in this bait');
+  assert.strictEqual(loserEntry.t, maxT, 'the loser must be whichever entry has the latest timestamp');
+});
+
+test('an eliminated kid takes no part — no entry, no strike, never sent down', () => {
+  const w = createWorld({ humans: 6, nBots: 0, seed: 3, down: 0, hp: 99 });
+  w.players[4].out = true;
+  advance(w, T.windTime + T.loadMin + 0.01, { 1: { hold: true }, 4: { hold: true } });
+  assert.strictEqual(w.players[4].fist.state, 'ready', 'an out kid cannot wind');
+  advance(w, T.slideTime + 0.02, { 0: { hold: true }, 1: { hold: true } });
+  const evs = advance(w, T.baitWindow + T.dropTime + 0.1, { 0: { hold: true }, 1: { hold: false } });
+  const res = evs.find(e => e.type === 'baitResolve');
+  assert.ok(!res.entries.some(e => e.id === 4), 'an out kid must not get an entry');
+  assert.notStrictEqual(w.down, 4);
+});
+
+test('the palm never lands on an eliminated kid, even when seats are sparse', () => {
+  const w = createWorld({ humans: 0, nBots: 6, seed: 11, down: 0 });
+  let guard = 0;
+  while (!w.over && guard++ < 120 * 300) {
+    step(w, 1 / 120, {});
+    assert.ok(!w.players[w.down].out, `the kid who is down must be alive (t=${w.t.toFixed(2)})`);
+  }
+  assert.strictEqual(w.over, true);
+});
+
+test('a six-player bot match reaches exactly one winner', () => {
+  const w = createWorld({ humans: 0, nBots: 6, seed: 12, down: 0 });
+  let guard = 0;
+  while (!w.over && guard++ < 120 * 300) step(w, 1 / 120, {});
+  assert.strictEqual(w.over, true, 'a six-player match must terminate');
+  const alive = w.players.filter(p => !p.out);
+  assert.strictEqual(alive.length, 1);
+  assert.strictEqual(w.winner, alive[0].id);
+});

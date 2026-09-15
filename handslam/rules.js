@@ -184,8 +184,17 @@ function knockOut(w, d, by) {
   emit(w, 'out', { id: d.id });
   const alive = w.players.filter(x => !x.out);
   if (alive.length <= 1) {
+    // The match is over, but w.down must still resolve to a live player —
+    // otherwise it dangles on the kid just marked out. `by` just landed the
+    // final blow and was never marked out itself, so it is always the sole
+    // survivor here — alive.length can never actually be 0. Assert that
+    // explicitly rather than let a broken invariant slip through as
+    // w.winner = null: game.js would only discover it later, as a crash on
+    // w.players[null].name with no clue where the null came from.
+    if (!alive.length) throw new Error('knockOut: no player alive after elimination — by should always survive its own blow');
+    w.down = alive[0].id;
     w.over = true;
-    w.winner = alive.length ? alive[0].id : null;
+    w.winner = alive[0].id;
     emit(w, 'over', { winner: w.winner });
   } else {
     goDown(w, by, 'knockout');
@@ -242,7 +251,7 @@ function stepFist(w, p, inp, dt) {
 export function createWorld(opts = {}) {
   const seed = opts.seed ?? 1;
   const humans = opts.humans ?? 1;
-  const nBots = opts.nBots ?? 1;
+  const nBots = opts.nBots ?? 5;
   const n = humans + nBots;
   const w = {
     t: 0,

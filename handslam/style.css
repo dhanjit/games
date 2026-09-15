@@ -23,7 +23,11 @@ html, body {
   background: rgba(23,23,27,0.82); text-align: center;
 }
 #over[hidden] { display: none; }
-#over p { margin: 0; font-size: 20px; font-weight: 600; }
+/* M1's messages were short enough to never wrap. Naming a specific winner by
+ * name among six runs longer ("Vikram's hand survived. You were knocked
+ * out.") and a grid item sizes to its content by default — with no width
+ * limit that text pushed past the viewport edge instead of wrapping. */
+#over p { margin: 0; font-size: 20px; font-weight: 600; max-width: min(320px, 88vw); }
 #again {
   font: inherit; padding: 10px 22px; border-radius: 8px; cursor: pointer;
   background: #f5c97a; color: #1b1b1f; border: 0;
