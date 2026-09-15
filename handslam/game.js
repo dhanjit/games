@@ -33,7 +33,7 @@ function seatGeom(i) {
   // sit to clear the arm) — rx !== ry, so this is not just (cos a, sin a).
   const dx = edgeX - spotX, dy = edgeY - spotY;
   const dlen = Math.hypot(dx, dy) || 1;
-  return { edgeX, edgeY, spotX, spotY, ux: dx / dlen, uy: dy / dlen, a };
+  return { edgeX, edgeY, spotX, spotY, ux: dx / dlen, uy: dy / dlen, a, axisLen: dlen };
 }
 
 function resize() {
@@ -106,7 +106,9 @@ function bakeDesk() {
 // handGrace in rules.js moves this geometry with it.
 const HAND_RX = 17, HAND_RY = 13;
 const retreatPx = HAND_RX / T.handGrace;   // ≈ 37.8px
-const wristLen = retreatPx - HAND_RX;      // ≈ 20.8px
+// Hoisted (not just local to drawHand) so hudRadius() below can clamp against
+// the bar's own half-height instead of a second guess at the same number.
+const NERVE_BAR_W = 54, NERVE_BAR_H = 6;
 // The band's far end sits at (d - retreatPx), which is exactly the strike
 // spot when p = 1 — but the band only draws for p < 1, so at, say, p = 0.99
 // the mathematical far endpoint lands under 1px shy of the spot. That's not
@@ -145,9 +147,12 @@ function drawHand(p) {
   ctx.lineWidth = 16;
   ctx.beginPath(); ctx.moveTo(s.edgeX, s.edgeY); ctx.lineTo(hx, hy); ctx.stroke();
 
-  // the wrist band: a fixed wristLen segment trailing the hand's near edge.
-  // Drawn only while zoneOf agrees it's there, so it covers the spot exactly
-  // when handGrace < p < 1 and never bleeds into the 'hand' or 'desk' zones.
+  // the wrist band: near end at the hand's own trailing edge (d - HAND_RX),
+  // far end anchored at the spot and pushed WRIST_OVERSHOOT past it (see
+  // above) — both ends move with d, so the band slides with the hand at a
+  // constant length. Drawn only while zoneOf agrees it's there, so it covers
+  // the spot exactly when handGrace < p < 1 and never bleeds into the 'hand'
+  // or 'desk' zones.
   if (zoneOf(p.hand.p) === 'wrist') {
     const nx = s.spotX + ux * (d - HAND_RX), ny = s.spotY + uy * (d - HAND_RX);
     const fx = s.spotX + ux * (d - retreatPx - WRIST_OVERSHOOT), fy = s.spotY + uy * (d - retreatPx - WRIST_OVERSHOOT);
@@ -162,11 +167,10 @@ function drawHand(p) {
   ctx.beginPath(); ctx.ellipse(hx, hy, HAND_RX, HAND_RY, s.a, 0, Math.PI * 2); ctx.fill();
 
   // nerve bar, under the hand's own edge
-  const bw = 54, bh = 6;
-  const bx = s.edgeX - bw / 2, by = s.edgeY - bh / 2;
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(bx, by, bw, bh);
+  const bx = s.edgeX - NERVE_BAR_W / 2, by = s.edgeY - NERVE_BAR_H / 2;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(bx, by, NERVE_BAR_W, NERVE_BAR_H);
   ctx.fillStyle = p.hand.nerve < T.nerveUnpin ? '#c2603f' : '#7fd1a0';
-  ctx.fillRect(bx, by, bw * Math.max(0, p.hand.nerve / T.nerveMax), bh);
+  ctx.fillRect(bx, by, NERVE_BAR_W * Math.max(0, p.hand.nerve / T.nerveMax), NERVE_BAR_H);
 }
 
 function drawFist(p) {
@@ -241,7 +245,7 @@ function drawOutSeat(p) {
 // own label (the seat opposite screen-up), that swing plus the 0.6× outward
 // drift the fist already has *add* instead of cancelling, projecting ~35px
 // out from the spot — plus the fist's own ~22px drawn radius (the load ring,
-// at its peak sweep) — for a ~57px worst case. HUD_R clears it, but only
+// at its peak sweep) — for a ~57px worst case. 68px clears it, but only
 // just: at this desk size there isn't room to also clear it comfortably
 // *and* stay clear of the nerve bar at the rim, and a label sitting on top of
 // its own seat's threat read would be worse than a 1px graze against the
@@ -249,7 +253,32 @@ function drawOutSeat(p) {
 // (see the M2 Task 2 report) — the solid fist ball clears with room to
 // spare; only the decorative ring can brush the label's corner, and only for
 // this one seat, only while that fist is fully loaded.
-const HUD_R = 68;
+//
+// But 68 has no viewport term, while everything else a seat's label needs is
+// derived from view.rx/ry. A chip needs HUD_R plus half its own box height
+// (HUD_BOX_H/2) of clear spot-to-edge room — and, for the down seat, clear of
+// the nerve bar too, which is centred on the seat's edge point and reaches
+// NERVE_BAR_H/2 back toward the spot from there, so clearing the rim alone
+// isn't enough. The top/bottom seats (a with cos a == 0) have the least room
+// of any seat: seatGeom's own axisLen there works out to exactly
+// (1 - 0.42) * view.ry, the same 0.42 it places the spot at. Below about
+// 375px wide, 68 no longer fits inside that — measured on a 320×568 screen
+// (iPhone SE/5s, narrower than our 375px target and a real device): the
+// top/bottom chips overran the rim by ~8px, and the down seat's chip sat on
+// top of its own nerve bar, the one meter a player most needs to read.
+// hudRadius() clamps HUD_R to whatever the tightest seat can actually afford
+// this frame, computed via the same axisLen seatGeom already returns and the
+// same NERVE_BAR_H the bar itself draws with — not a second, independently-
+// drifting guess at either number.
+const HUD_LABEL_H = 12, HUD_PAD_Y = 4;
+const HUD_BOX_H = HUD_LABEL_H + HUD_PAD_Y * 2;   // must match drawHud's own boxH
+function hudRadius() {
+  let minAxis = Infinity;
+  for (let i = 0; i < w.n; i++) minAxis = Math.min(minAxis, seatGeom(i).axisLen);
+  // 2px clearance past the nerve bar's own near edge, on top of the box's own
+  // half-height — the down seat's chip must clear the bar, not just the rim.
+  return Math.min(68, minAxis - HUD_BOX_H / 2 - NERVE_BAR_H / 2 - 2);
+}
 const PIP_R = 4, PIP_GAP = 3;   // HP pips: fixed T.startHp slots, filled vs hollow
 
 function drawHud() {
@@ -257,19 +286,20 @@ function drawHud() {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
+  const hudR = hudRadius();
   for (const p of w.players) {
     const s = seatGeom(p.seat);
-    const lx = s.spotX + s.ux * HUD_R;
-    const ly = s.spotY + s.uy * HUD_R;
+    const lx = s.spotX + s.ux * hudR;
+    const ly = s.spotY + s.uy * hudR;
     // w.down can never be an eliminated player (M1 fixed the one bug where it
     // dangled on a just-out kid) but the guard costs nothing and says so.
     const isDown = p.id === w.down && !p.out;
 
     const nameW = ctx.measureText(p.name).width;
     const pipsW = T.startHp * (PIP_R * 2) + (T.startHp - 1) * PIP_GAP;
-    const gap = 6, padX = 7, padY = 4;
+    const gap = 6, padX = 7;
     const boxW = nameW + gap + pipsW + padX * 2;
-    const boxH = 12 + padY * 2;
+    const boxH = HUD_BOX_H;
     const boxX = lx - boxW / 2, boxY = ly - boxH / 2;
 
     // The down seat's chip is a solid gold shape, not just gold text — a
@@ -330,9 +360,11 @@ let held = false;
 // before that. You start the match already `down`, so a bot can land a
 // thump on you before you've touched anything at all; onEvent's vibrate
 // call is gated on this flag, set only by a genuine input, never by a
-// harness pose.
+// harness pose. `press`'s `real` param defaults true for the DOM listeners
+// below; the harness block further down passes false so a harness-driven
+// press can still drive `held` without re-enabling vibrate underneath it.
 let gestured = false;
-const press = () => { held = true; gestured = true; };
+const press = (real = true) => { held = true; if (real) gestured = true; };
 const release = () => { held = false; };
 
 canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); press(); });
@@ -413,8 +445,14 @@ if (HARNESS) {
   // `frame` is exposed so a test harness can pump the real loop. Headless and
   // offscreen browsers park requestAnimationFrame at 0 Hz, so without this the
   // loop is the one part of the game that cannot be driven under test.
+  // `press` here calls the real press(real=false): it still drives `held`
+  // exactly like a genuine tap, but a harness pose is not a user gesture, so
+  // it must not flip `gestured` and re-enable navigator.vibrate underneath a
+  // headless run. hudRadius is exposed alongside seatGeom so verification can
+  // read the actual clamped HUD radius rather than re-guessing the formula.
   window.__hs = {
     world: () => w, render, seatGeom, view: () => view, restart,
-    press, release, frameMs: () => frameMs, frame,
+    press: () => press(false), release, frameMs: () => frameMs, frame,
+    hudRadius,
   };
 }
