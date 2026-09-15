@@ -1,4 +1,8 @@
-:root { --wood: #8a5a2b; --wood-dark: #6d4520; --ink: #1b1b1f; --chalk: #f3efe6; }
+:root {
+  --wood: #835629; --wood-dark: #6a4420; --wood-edge: #4f3316; --floor: #3f463d;
+  --ink: #1b1b1f; --chalk: #f3efe6; --gold: #f5c97a;
+  --hand-skin: #f2c79b; --hand-finger: #c08a5e; --danger: #e2593c;
+}
 
 * { box-sizing: border-box; }
 
@@ -18,6 +22,89 @@ html, body {
 
 #desk { display: block; width: 100%; height: 100%; }
 
+.btn {
+  font: inherit; font-weight: 600; padding: 10px 22px; border-radius: 8px;
+  cursor: pointer; border: 0;
+}
+.btn-primary { background: var(--gold); color: var(--ink); }
+.btn-secondary {
+  background: rgba(243,239,230,0.12); color: var(--chalk);
+  box-shadow: inset 0 0 0 1.5px rgba(243,239,230,0.4);
+}
+
+/* ── title screen ─────────────────────────────────────────────────────────
+ * Every colour here is sampled from game.js's canvas palette (the `C` object)
+ * rather than invented fresh — same wood/gold/hand tones the desk itself is
+ * drawn in, so the title reads as the same room and not a bolted-on menu. */
+#title {
+  position: absolute; inset: 0; display: grid; place-content: center;
+  background: linear-gradient(175deg, rgba(27,27,31,0.97) 0%, rgba(74,48,22,0.93) 100%);
+  text-align: center; padding: 12px;
+}
+#title[hidden] { display: none; }
+
+.title-card {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  width: min(288px, 86vw);
+}
+
+.title-card h1 {
+  margin: 0; font-size: 30px; letter-spacing: 0.5px; color: var(--gold);
+  text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+}
+.tagline { margin: 0; font-size: 13px; color: var(--chalk); opacity: 0.85; }
+
+.section-label {
+  margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; opacity: 0.55;
+}
+
+.zones { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; }
+
+.fist-cue { display: flex; justify-content: center; }
+.fist-shape {
+  position: relative; width: 20px; height: 17px;
+  border-radius: 6px 6px 8px 8px; background: var(--ink);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,0.3);
+}
+.fist-shape::before {                 /* two knuckle highlights */
+  content: ""; position: absolute; top: 4px; left: 4px;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(255,255,255,0.16); box-shadow: 8px 0 0 rgba(255,255,255,0.16);
+}
+.fist-shape::after {                  /* the drop, straight down onto whichever zone */
+  content: ""; position: absolute; left: 50%; top: 100%; margin-top: 1px;
+  transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: var(--ink);
+}
+
+.zone-row { display: flex; gap: 6px; width: 100%; }
+.zone {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 2px; border-radius: 6px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.zone-name { opacity: 0.8; }
+.z-hand { background: var(--hand-skin); color: var(--ink); }
+.z-wrist { background: var(--hand-finger); color: var(--ink); }
+.z-desk { background: var(--wood); color: var(--chalk); }
+.outcome-thump { color: var(--danger); }
+.outcome-foul { opacity: 0.7; }
+
+.controls { border-collapse: collapse; font-size: 11.5px; width: 100%; }
+.controls th, .controls td { padding: 4px 6px; }
+.controls tr:first-child th {
+  font-weight: 700; opacity: 0.6; font-size: 10px; text-transform: uppercase;
+}
+.controls .role { text-align: left; font-weight: 700; }
+.controls .role.down { color: var(--gold); }
+.controls .role.up { color: var(--hand-skin); }
+.controls td { text-align: center; background: rgba(243,239,230,0.06); }
+.controls tr + tr td, .controls tr + tr th { border-top: 1px solid rgba(243,239,230,0.14); }
+
+#title .btn-primary { margin-top: 4px; font-size: 16px; padding: 11px 36px; }
+
+/* ── result overlay ────────────────────────────────────────────────────── */
 #over {
   position: absolute; inset: 0; display: grid; place-content: center; gap: 14px;
   background: rgba(23,23,27,0.82); text-align: center;
@@ -28,7 +115,4 @@ html, body {
  * out.") and a grid item sizes to its content by default — with no width
  * limit that text pushed past the viewport edge instead of wrapping. */
 #over p { margin: 0; font-size: 20px; font-weight: 600; max-width: min(320px, 88vw); }
-#again {
-  font: inherit; padding: 10px 22px; border-radius: 8px; cursor: pointer;
-  background: #f5c97a; color: #1b1b1f; border: 0;
-}
+.over-actions { display: flex; gap: 10px; justify-content: center; }
