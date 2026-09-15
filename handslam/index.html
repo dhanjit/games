@@ -9,7 +9,47 @@
 <body>
   <main id="stage">
     <canvas id="desk"></canvas>
-    <div id="over" hidden><p id="over-text"></p><button id="again">Again</button></div>
+    <div id="title">
+      <div class="title-card">
+        <h1>handslam</h1>
+        <p class="tagline">Free period. One desk. Knuckles only.</p>
+
+        <p class="section-label">contact zones</p>
+        <div class="zones">
+          <div class="fist-cue" aria-hidden="true"><div class="fist-shape"></div></div>
+          <div class="zone-row">
+            <div class="zone z-hand">
+              <span class="zone-name">hand</span>
+              <span class="zone-outcome outcome-thump">thump</span>
+            </div>
+            <div class="zone z-wrist">
+              <span class="zone-name">wrist</span>
+              <span class="zone-outcome outcome-foul">foul</span>
+            </div>
+            <div class="zone z-desk">
+              <span class="zone-name">desk</span>
+              <span class="zone-outcome outcome-foul">foul</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="section-label">one button</p>
+        <table class="controls">
+          <tr><th></th><th>hold</th><th>release</th></tr>
+          <tr><th class="role down">down</th><td>slide back</td><td>slide out</td></tr>
+          <tr><th class="role up">up</th><td>wind, hold</td><td>drop</td></tr>
+        </table>
+
+        <button id="play" class="btn btn-primary">Play</button>
+      </div>
+    </div>
+    <div id="over" hidden>
+      <p id="over-text"></p>
+      <div class="over-actions">
+        <button id="again" class="btn btn-primary">Again</button>
+        <button id="toTitle" class="btn btn-secondary">Rules</button>
+      </div>
+    </div>
   </main>
   <script type="module" src="./game.js"></script>
 </body>

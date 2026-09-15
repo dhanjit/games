@@ -879,7 +879,17 @@ let held = false;
 // below; the harness block further down passes false so a harness-driven
 // press can still drive `held` without re-enabling vibrate underneath it.
 let gestured = false;
-const press = (real = true) => { held = true; if (real) gestured = true; };
+// The match itself, gated behind the title screen (#69) — step() never runs
+// until this is true, so nothing on the title screen can wind a fist or
+// slide a hand no matter what the player holds down. press() is the single
+// choke point every input path routes through (canvas pointerdown, spacebar,
+// the harness' press(false)), so gating it here is enough on its own.
+let started = false;
+const press = (real = true) => {
+  if (!started) return;
+  held = true;
+  if (real) gestured = true;
+};
 const release = () => { held = false; };
 
 canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); press(); });
@@ -888,7 +898,7 @@ window.addEventListener('pointercancel', release);
 window.addEventListener('keydown', (e) => {
   gestured = true;
   if (e.code === 'Space') { e.preventDefault(); press(); }
-  if (e.key === 'r' || e.key === 'R') restart();
+  if ((e.key === 'r' || e.key === 'R') && started) restart();
 });
 window.addEventListener('keyup', (e) => { if (e.code === 'Space') release(); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -905,6 +915,7 @@ const MAX_CATCHUP = 0.25;          // never simulate more than this after a stal
 let acc = 0, last = 0, frameMs = 0, rafHandle = 0, frozen = false;
 const overEl = document.getElementById('over');
 const overText = document.getElementById('over-text');
+const titleEl = document.getElementById('title');
 
 function frame(now) {
   const t0 = now;
@@ -912,10 +923,14 @@ function frame(now) {
   acc += Math.min((now - last) / 1000, MAX_CATCHUP);
   last = now;
 
-  const inputs = { 0: { hold: held } };
-  while (acc >= DT) {
-    for (const e of step(w, DT, inputs)) onEvent(e);
-    acc -= DT;
+  if (started) {
+    const inputs = { 0: { hold: held } };
+    while (acc >= DT) {
+      for (const e of step(w, DT, inputs)) onEvent(e);
+      acc -= DT;
+    }
+  } else {
+    acc = 0;               // the title screen is up — nothing to catch up on
   }
   render();
   frameMs = performance.now() - t0;
@@ -948,6 +963,30 @@ function restart() {
 }
 document.getElementById('again').addEventListener('click', () => { gestured = true; restart(); });
 
+// Title screen (#69): Play arms `started` so frame() starts calling step();
+// the world it starts is whatever is already sitting in `w` (fresh on first
+// load, or whatever showTitle() last prepared) — Play itself never touches
+// the world, matching the "mutate only via step()" rule.
+function startMatch() {
+  started = true;
+  titleEl.hidden = true;
+  gestured = true;                // clicking Play is a genuine user gesture
+}
+
+// Rules button, from the result overlay: park a fresh world and go back to
+// the title so a player can re-read the rules before their next match.
+function showTitle() {
+  started = false;
+  held = false; acc = 0;
+  w = createWorld({ humans: 1, nBots: 5, seed: (Date.now() & 0xffff) || 1 });
+  deskLayer = null;
+  overEl.hidden = true;
+  titleEl.hidden = false;
+  render();
+}
+document.getElementById('play').addEventListener('click', startMatch);
+document.getElementById('toTitle').addEventListener('click', showTitle);
+
 resize();
 render();
 rafHandle = requestAnimationFrame(frame);
@@ -969,5 +1008,8 @@ if (HARNESS) {
     // is verified in does *not* park rAF at 0 Hz, so a pose drifts by several
     // sim steps before a screenshot lands on it.
     freeze: () => { if (rafHandle) cancelAnimationFrame(rafHandle); rafHandle = 0; frozen = true; },
+    // Title screen (#69): drive it directly under test without coordinate
+    // clicks, and check whether it's currently up.
+    startMatch, showTitle, titleShowing: () => !titleEl.hidden,
   };
 }
