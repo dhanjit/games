@@ -12,4 +12,5 @@ wrangler.jsonc
 
 # balance harness, not a page
 **/sim/
+**/test/
 maaranpithu/store/
