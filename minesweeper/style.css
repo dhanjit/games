@@ -1,0 +1,86 @@
+/* Sweep — surveyor's chart: dark slate fog, cream revealed paper, ink accents. */
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  background: #232a33;
+  color: #efe6d0;
+  font-family: Georgia, "Times New Roman", serif;
+  -webkit-font-smoothing: antialiased;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+#board {
+  position: fixed; inset: 0;
+  width: 100vw; height: 100vh;
+  display: block;
+  cursor: crosshair;
+}
+
+#hud {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  display: flex; align-items: center; gap: 14px;
+  pointer-events: none;
+  user-select: none;
+}
+#hud .stat {
+  display: flex; align-items: baseline; gap: 6px;
+  background: rgba(20, 25, 31, 0.82);
+  border: 1px solid rgba(239, 230, 208, 0.14);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+#hud .label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #9aa4ad; }
+#hud .spacer { flex: 1; }
+#hud button {
+  pointer-events: auto;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 230, 208, 0.2);
+  background: rgba(20, 25, 31, 0.82);
+  color: #efe6d0;
+  font-size: 18px;
+  font-family: inherit;
+  cursor: pointer;
+}
+#hud button:hover { border-color: rgba(239, 230, 208, 0.5); }
+
+.overlay {
+  position: fixed; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  background: rgba(15, 19, 24, 0.72);
+  padding: 20px;
+  z-index: 5;
+}
+.overlay.show { display: flex; }
+.panel {
+  background: #efe6d0;
+  color: #2b2620;
+  border-radius: 14px;
+  max-width: 420px;
+  width: 100%;
+  padding: 26px 28px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+.panel h2 { font-size: 24px; margin-bottom: 10px; }
+.panel p { margin: 8px 0; line-height: 1.45; }
+.panel .big { font-size: 30px; font-variant-numeric: tabular-nums; }
+.panel .dim { color: #6d6455; }
+.panel .small { font-size: 13px; }
+.panel ul { margin: 10px 0 10px 18px; line-height: 1.7; }
+.panel button.primary {
+  margin-top: 14px;
+  width: 100%;
+  padding: 12px;
+  font-size: 17px;
+  font-family: inherit;
+  border: none; border-radius: 10px;
+  background: #2b2620; color: #efe6d0;
+  cursor: pointer;
+}
+.panel button.primary:hover { background: #423a2f; }
