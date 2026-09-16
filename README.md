@@ -72,6 +72,13 @@ your lead; stumbles let the ray gain. Inspired by MayhemStudio's 2007 J2ME game
 of the same name. Best played on desktop or a phone held sideways. (1v1 vs a bot
 for now; online multiplayer is the planned next step.)
 
+**Sweep** (`minesweeper/`) is classic minesweeper on a board with no edges.
+The field is infinite in every direction — pan (drag / WASD) and zoom (wheel /
+pinch) to move your window onto it; clicking far away is a normal move. Your
+score is the number of cells you reveal; one mine ends the run, and your best
+run is kept. Right-click or long-press to flag. Offline PWA, works on phone
+and desktop.
+
 To add a game later, drop it in a new top-level folder and add a card to the
 hub's `index.html`.
 

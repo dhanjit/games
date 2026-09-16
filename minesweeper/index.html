@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#232a33" />
+  <title>Sweep — infinite minesweeper</title>
+  <meta name="description" content="Minesweeper with no edges. Sweep as much of the infinite field as you can — one mine ends the run." />
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+</head>
+<body>
+  <canvas id="board"></canvas>
+
+  <header id="hud">
+    <div class="stat"><span class="label">swept</span><span id="score">0</span></div>
+    <div class="stat"><span class="label">best</span><span id="best">0</span></div>
+    <div class="stat"><span class="label">flags</span><span id="flags">0</span></div>
+    <div class="spacer"></div>
+    <button id="btnOrigin" title="Return to origin (O)">◎</button>
+    <button id="btnHelp" title="How to play (H)">?</button>
+    <button id="btnNew" title="New field (R)">↻</button>
+  </header>
+
+  <div id="over" class="overlay">
+    <div class="panel">
+      <h2>The field takes you</h2>
+      <p class="big"><span id="finalScore">0</span> cells swept</p>
+      <p class="dim">best <span id="finalBest">0</span></p>
+      <p class="dim small">Pan around to see the mines you were walking among.</p>
+      <button id="btnAgain" class="primary">Sweep a new field</button>
+    </div>
+  </div>
+
+  <div id="help" class="overlay">
+    <div class="panel">
+      <h2>Sweep</h2>
+      <p>Minesweeper with <strong>no edges</strong>. The field goes on forever
+        in every direction; your score is how much of it you reveal.
+        <strong>One mine ends the run.</strong></p>
+      <ul>
+        <li><strong>Tap / click</strong> — reveal a cell</li>
+        <li><strong>Right-click / long-press</strong> — flag a mine</li>
+        <li><strong>Drag</strong> or <strong>WASD / arrows</strong> — pan</li>
+        <li><strong>Wheel / pinch / + −</strong> — zoom</li>
+        <li><strong>◎ / O</strong> — glide back to where you started</li>
+        <li><strong>R</strong> — new field · <strong>H</strong> — this help</li>
+      </ul>
+      <p class="dim small">Numbers count mines in the eight neighbours, as ever.
+        Far away is just more field — click anywhere.</p>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
