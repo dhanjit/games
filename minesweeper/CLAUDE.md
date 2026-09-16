@@ -7,7 +7,7 @@ ends the run; high score in `localStorage`. Single player, offline, PWA.
 
 | File | Role |
 |---|---|
-| `rules.js` | **Pure engine, no DOM.** `makeWorld` / `isMine` / `neighbourCount` / `reveal` / `toggleFlag`. Every tunable in `T`. |
+| `rules.js` | **Pure engine, no DOM.** `makeWorld` / `isMine` / `neighbourCount` / `reveal` / `toggleFlag` / `chord`. Every tunable in `T`. |
 | `game.js` | Canvas render, camera (pan/zoom), input (mouse + touch), HUD, overlays, run save/restore, SW registration. |
 | `sim/run.mjs` | Balance harness: `node sim/run.mjs [--runs N] [--density d | --sweep a,b,c] [--cap N] [--seed n]`. |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA. Bump `CACHE` in `sw.js` when a cached asset changes. Icons: `pwsh icons/make-icons.ps1`. |
@@ -113,6 +113,12 @@ components >20 cells reported as `unknown` rather than guessed at.
   slop mouse, 9 px touch — inside slop it's a tap) · wheel / pinch / `+`/`−`
   zoom about the cursor · WASD/arrows pan · `O` origin · `R` new field ·
   `H` help.
+- **Chord**: a tap on a revealed number whose neighbouring flags equal it
+  opens its remaining covered neighbours (`chord()` in `rules.js` — pure, so
+  the harness can use it). One gesture, not two-button: `doReveal` tries
+  `reveal()` first (covered cell) and falls through to `chord()` (revealed
+  number), so no new input state was added. Flags are trusted, classic rule:
+  a wrong flag makes the chord fatal exactly as clicking the mine would be.
 - One pointer state machine: `tap → pan | spent(long-press flag) | pinch`;
   a second pointer always promotes to pinch and cancels the long-press.
 
