@@ -2,7 +2,7 @@
  * All rules live in rules.js; this file reads the world and calls
  * reveal()/toggleFlag(). Theme: a surveyor's chart — dark fog of the
  * uncharted, cream paper where you've swept, ink digits, pennant flags. */
-import { makeWorld, reveal, toggleFlag, isMine, FLAG, BOOM, key } from './rules.js';
+import { makeWorld, reveal, toggleFlag, chord, isMine, FLAG, BOOM, key } from './rules.js';
 
 const HARNESS = new URLSearchParams(location.search).has('harness');
 
@@ -242,7 +242,8 @@ function onBoom() {
 
 function doReveal(x, y) {
   if (!world || world.dead) return;
-  const res = reveal(world, x, y);
+  // a tap on a satisfied revealed number chords; on a covered cell it reveals
+  const res = reveal(world, x, y) ?? chord(world, x, y);
   if (!res) return;
   if (res.type === 'boom') onBoom();
   else { updateHud(); scheduleSave(); }
