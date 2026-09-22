@@ -143,6 +143,39 @@ export function reveal(w, x, y) {
   return { type: 'reveal', cells: out, capped };
 }
 
+/* Chord: click a revealed number whose neighbouring flags equal it, and the
+ * remaining covered neighbours open in one stroke (the classic two-button
+ * chord). The flags are trusted — a wrong flag means one of those "safe"
+ * neighbours is a mine, and the chord ends the run exactly as clicking it
+ * would have. That risk is the classic rule and is what keeps flags honest.
+ * Returns null when the cell is not a satisfied number (flags ≠ count) or
+ * nothing is left to open; otherwise the same shapes reveal() returns. */
+export function chord(w, x, y) {
+  if (w.dead) return null;
+  const st = w.cells.get(key(x, y));
+  if (st === undefined || st === FLAG || st === BOOM || st === 0) return null;
+  let flags = 0;
+  const covered = [];
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const n = w.cells.get(key(x + dx, y + dy));
+      if (n === FLAG) flags++;
+      else if (n === undefined) covered.push([x + dx, y + dy]);
+    }
+  if (flags !== st || !covered.length) return null;
+  const out = [];
+  let capped = false;
+  for (const [cx, cy] of covered) {
+    const res = reveal(w, cx, cy);
+    if (!res) continue;
+    if (res.type === 'boom') return res; // a flag was wrong
+    out.push(...res.cells);
+    capped = capped || res.capped;
+  }
+  return out.length ? { type: 'reveal', cells: out, capped } : null;
+}
+
 export function toggleFlag(w, x, y) {
   if (w.dead) return null;
   const k = key(x, y);
