@@ -14,6 +14,12 @@
 <body>
   <canvas id="board"></canvas>
 
+  <!-- Shown only during the first-visit fly-in; CSS fades it with .opening. -->
+  <div id="tagline" aria-hidden="true">
+    <p class="line1">The field has no edges.</p>
+    <p class="line2">Sweep as far as you dare.</p>
+  </div>
+
   <header id="hud">
     <div class="stat"><span class="label">swept</span><span id="score">0</span></div>
     <div class="stat"><span class="label">best</span><span id="best">0</span></div>

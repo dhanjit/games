@@ -21,6 +21,16 @@ const C = {
 const ZOOM_MIN = 3, ZOOM_MAX = 64, DIGIT_MIN = 9, GRID_MIN = 12, ZOOM_START = 34;
 const cam = { x: 0.5, y: 0.5, scale: ZOOM_START, glide: null }; // x,y = world coords at canvas centre
 
+/* The opener. A first-time player sees a dark grid and has no way to know the
+ * board has no edges — the one thing that makes this not ordinary minesweeper
+ * is invisible in a still frame. So the first visit starts far out, where the
+ * field reads as endless, and flies in to playable zoom. It is the cheapest
+ * honest way to say "this goes on forever" without a word of copy.
+ * Shown once (localStorage), skipped by any input, and never on a restored run. */
+const SEEN_KEY = 'minesweeper.seen';
+const OPEN_FROM = ZOOM_MIN, OPEN_T = 2.4; // s
+let opener = null; // {t} while flying in
+
 // ── state ────────────────────────────────────────────────────────────────────
 const RUN_KEY = 'minesweeper.run', BEST_KEY = 'minesweeper.best';
 let world = null;
@@ -93,12 +103,13 @@ function render() {
   const sy = (y) => (y - cam.y) * s + H / 2;
   const rectCells = (x1 - x0 + 1) * (y1 - y0 + 1);
 
-  // fog grain + grid, only when cells are big enough to read
+  /* Fog grain at every zoom, as one pattern fill rather than a cell loop —
+   * zoomed out there are ~100k cells on screen and the loop was why the fog
+   * used to go flat below GRID_MIN. The tile is built once at TILE px/cell
+   * and rescaled per frame, so cost is O(1) and the checker stays aligned to
+   * the true grid. */
+  drawFog(sx, sy, x0, y0, s);
   if (s >= GRID_MIN) {
-    cx2d.fillStyle = C.fogB;
-    for (let y = y0; y <= y1; y++)
-      for (let x = x0; x <= x1; x++)
-        if ((x + y) & 1) cx2d.fillRect(sx(x), sy(y), s, s);
     cx2d.strokeStyle = C.fogLine;
     cx2d.lineWidth = 1;
     cx2d.beginPath();
@@ -160,6 +171,33 @@ function render() {
     const px = sx(world.origin.x + 0.5), py = sy(world.origin.y + 0.5);
     if (px < -20 || px > W + 20 || py < -20 || py > H + 20) drawOriginArrow(px, py);
   }
+}
+
+/* Two-cell checker tile, built once and reused as a scaled pattern. */
+const TILE = 16;
+const fogTile = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = TILE * 2;
+  const g = c.getContext('2d');
+  g.fillStyle = C.fogA; g.fillRect(0, 0, TILE * 2, TILE * 2);
+  g.fillStyle = C.fogB;
+  g.fillRect(TILE, 0, TILE, TILE);
+  g.fillRect(0, TILE, TILE, TILE);
+  return c;
+})();
+const fogPattern = cx2d.createPattern(fogTile, 'repeat');
+function drawFog(sx, sy, x0, y0, s) {
+  if (!fogPattern) return;
+  const k = s / TILE;
+  // anchor the pattern to the parity of the first visible cell so the checker
+  // never swims as the camera crosses a cell boundary
+  const ax = sx(x0 - (x0 & 1)), ay = sy(y0 - (y0 & 1));
+  cx2d.save();
+  cx2d.translate(ax, ay);
+  cx2d.scale(k, k);
+  cx2d.fillStyle = fogPattern;
+  cx2d.fillRect(-ax / k, -ay / k, W / k, H / k);
+  cx2d.restore();
 }
 
 function drawFlag(px, py, s) {
@@ -266,6 +304,12 @@ cv.addEventListener('pointerdown', (e) => {
   try { cv.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
   pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
   cam.glide = null;
+  if (opener) {
+    // skip the fly-in; this press must not also reveal a far-away cell
+    endOpener();
+    gesture = 'spent';
+    return;
+  }
   if (pointers.size === 2) {
     clearTimeout(longPress);
     gesture = 'pinch';
@@ -334,12 +378,14 @@ function zoomAt(px, py, factor) {
 }
 cv.addEventListener('wheel', (e) => {
   e.preventDefault();
+  endOpener();
   cam.glide = null;
   zoomAt(e.offsetX, e.offsetY, Math.pow(1.0015, -e.deltaY));
 }, { passive: false });
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
+  endOpener();
   const k = e.key.toLowerCase();
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { keys.add(k); cam.glide = null; }
   else if (k === '+' || k === '=') zoomAt(W / 2, H / 2, 1.25);
@@ -350,6 +396,21 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'escape') hideOverlays();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+function startOpener() {
+  opener = { t: 0 };
+  cam.x = 0.5; cam.y = 0.5; cam.scale = OPEN_FROM; cam.glide = null;
+  document.body.classList.add('opening');
+}
+/* Ends the fly-in, however it ended: completed, clicked through, or a key.
+ * Idempotent — every input path calls it without checking. */
+function endOpener() {
+  if (!opener) return;
+  opener = null;
+  cam.scale = ZOOM_START;
+  document.body.classList.remove('opening');
+  try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* private mode */ }
+}
 
 function goOrigin() {
   const t = world && world.origin ? { x: world.origin.x + 0.5, y: world.origin.y + 0.5 } : { x: 0.5, y: 0.5 };
@@ -371,6 +432,15 @@ function frame(t) {
   if (keys.has('s') || keys.has('arrowdown')) cam.y += step;
   if (keys.has('a') || keys.has('arrowleft')) cam.x -= step;
   if (keys.has('d') || keys.has('arrowright')) cam.x += step;
+  if (opener) {
+    opener.t += dt;
+    const p = Math.min(1, opener.t / OPEN_T);
+    // ease-out cubic, and interpolate zoom geometrically so the fly-in reads
+    // as constant speed rather than braking hard at the end
+    const e = 1 - Math.pow(1 - p, 3);
+    cam.scale = OPEN_FROM * Math.pow(ZOOM_START / OPEN_FROM, e);
+    if (p >= 1) endOpener();
+  }
   if (cam.glide) {
     const dx = cam.glide.x - cam.x, dy = cam.glide.y - cam.y;
     if (Math.hypot(dx, dy) < 0.05) { cam.x = cam.glide.x; cam.y = cam.glide.y; cam.glide = null; }
@@ -381,8 +451,14 @@ function frame(t) {
 }
 
 // ── boot ─────────────────────────────────────────────────────────────────────
-if (!loadRun()) newRun();
+const restored = loadRun();
+if (!restored) newRun();
 updateHud();
+/* The fly-in runs only for a true first-timer: no saved run, no previous
+ * visit, and not for anyone who asked for less motion. A returning player
+ * gets straight to the field. */
+if (!restored && !localStorage.getItem(SEEN_KEY) && !best &&
+    !matchMedia('(prefers-reduced-motion: reduce)').matches) startOpener();
 window.addEventListener('beforeunload', saveRun);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveRun(); });
 requestAnimationFrame(frame);
@@ -398,5 +474,9 @@ if (HARNESS) {
     flag: doFlag,
     cellAt,
     newRun,
+    render,
+    opening: () => !!opener,
+    startOpener,
+    endOpener,
   };
 }

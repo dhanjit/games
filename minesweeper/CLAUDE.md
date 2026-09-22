@@ -102,10 +102,40 @@ components >20 cells reported as `unknown` rather than guessed at.
   (Map lookup per cell) or the revealed Map (bounds check per entry). Zoomed
   in the rect wins; zoomed far out over a long run the Map wins. Both sides
   are O(min), so a 100k-cell run stays flat.
-- Fog is flat fill + checker grain + grid, no per-cell state. After death the
-  renderer hashes the visible rect to chart nearby mines (gated ≤40k cells).
+- Fog is a **scaled pattern fill**, not a per-cell loop: a two-cell checker
+  tile is built once at 16 px/cell and rescaled every frame, anchored to the
+  parity of the first visible cell so the checker doesn't swim as the camera
+  crosses a boundary. Cost is O(1) at any zoom. The old per-cell loop was
+  gated at `GRID_MIN`, which is why a wide zoom-out used to be a flat dark
+  screen — fatal for the opener below. Grid *lines* still stop at `GRID_MIN`.
+  After death the renderer hashes the visible rect to chart nearby mines
+  (gated ≤40k cells).
 - **Return to origin**: `◎` / `O` glides `cam` back to `world.origin`; when
   the origin is off-screen an arrow at the screen edge points home.
+
+## The opener (first visit only)
+
+A new player sees a dark grid and has no way to know the board has no edges —
+the one thing that makes this not ordinary minesweeper is invisible in a still
+frame. So a first-time visitor starts at `ZOOM_MIN` and flies in to
+`ZOOM_START` over 2.4 s, with two lines of copy over it
+("The field has no edges. / Sweep as far as you dare.").
+
+- Zoom is interpolated **geometrically** (`from · (to/from)^e`, ease-out
+  cubic) — linear interpolation of px/cell reads as braking hard at the end,
+  because perceived zoom speed is proportional to the ratio, not the
+  difference.
+- Shown when *all* of: no restored run, no `minesweeper.seen` flag, no best
+  score, and not `prefers-reduced-motion`. Belt and braces on purpose — a
+  returning player must never be held up by a cutscene.
+- Any input ends it: `endOpener()` is idempotent and called from pointerdown,
+  wheel and keydown. The pointerdown that skips sets `gesture = 'spent'` so
+  the skip tap does **not** also reveal a far-away cell — that would be a
+  first-click-safe reveal at a random coordinate, moving the origin somewhere
+  the player never chose.
+- Testing note: a plain `Page.reload` cannot simulate a first-time visitor,
+  because `beforeunload` fires `saveRun()` and writes the live run straight
+  back. Park on `about:blank`, clear the origin's storage, then navigate in.
 
 ## Input
 
@@ -140,7 +170,10 @@ this catalogue.
 ## Query flags
 
 `?harness` — no SW; exposes `window.__ms = { world(), cam, reveal, flag,
-cellAt, newRun }` for scripted driving.
+cellAt, newRun, render, opening(), startOpener, endOpener }` for scripted
+driving. `render` is exposed so a perf check can time the draw call directly
+— timing `requestAnimationFrame` gaps only measures vsync (16.6 ms) and says
+nothing about render cost.
 
 ## Rules of the repo that bite here
 

@@ -49,6 +49,33 @@ body {
 }
 #hud button:hover { border-color: rgba(239, 230, 208, 0.5); }
 
+/* First-visit fly-in copy. Visible only while body.opening; the HUD dims out
+   of the way so the scale of the field is the only thing on screen. */
+#tagline {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  z-index: 3;
+  text-align: center;
+  padding: 20px;
+}
+body.opening #tagline { opacity: 1; }
+#tagline p { margin: 0; text-shadow: 0 2px 18px rgba(11, 14, 18, 0.9); }
+#tagline .line1 { font-size: clamp(22px, 5vw, 36px); letter-spacing: 0.01em; }
+#tagline .line2 { font-size: clamp(13px, 2.6vw, 16px); color: #9aa4ad; font-style: italic; }
+#hud { transition: opacity 0.6s ease; }
+body.opening #hud { opacity: 0.25; }
+@media (prefers-reduced-motion: reduce) {
+  #tagline, #hud { transition: none; }
+}
+
 .overlay {
   position: fixed; inset: 0;
   display: none;
