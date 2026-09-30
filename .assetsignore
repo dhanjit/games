@@ -8,6 +8,7 @@ node_modules
 *.diff
 *.bak
 *.ps1
+**/icons/make-icons.*
 wrangler.jsonc
 .assetsignore
 
