@@ -79,6 +79,15 @@ score is the number of cells you reveal; one mine ends the run, and your best
 run is kept. Right-click or long-press to flag. Offline PWA, works on phone
 and desktop.
 
+**Runoff** (`runoff/`) is a portrait tilt game. A few hundred drops of
+rainwater fall down an alley between two buildings; ledges on both walls catch
+and pool them. Tilt the phone to rotate gravity and tip the water off each
+ledge — tilt the wrong way and it's pinned against the wall. The sun comes down
+from above and evaporates whatever it catches. **Chase** mode: the sun descends
+on its own, faster and faster. **Scroll** mode: you thumb the alley down
+yourself; the top of the screen is the sun, the bottom is the edge of the
+unbuilt city. No tilt sensor? Hold ← / → or drag sideways. Offline PWA.
+
 To add a game later, drop it in a new top-level folder and add a card to the
 hub's `index.html`.
 
