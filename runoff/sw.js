@@ -1,6 +1,6 @@
 /* Runoff service worker — precache the static build, serve it
  * stale-while-revalidate. Bump CACHE whenever a cached asset changes. */
-const CACHE = 'runoff-v1';
+const CACHE = 'runoff-v2';
 const ASSETS = ['./', './index.html', './style.css', './game.js', './rules.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
   './icons/icon-512-maskable.png', './icons/apple-touch-icon.png'];
