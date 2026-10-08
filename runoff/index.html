@@ -25,12 +25,7 @@
     <div class="panel">
       <h1>Runoff</h1>
       <p class="tag">The monsoon's over. The sun is out.<br />Get the last of the rain down the alley before it burns off.</p>
-      <button class="mode primary" data-mode="chase">
-        <strong>Chase</strong><span>The sun comes down after you, faster and faster.</span>
-      </button>
-      <button class="mode" data-mode="scroll">
-        <strong>Scroll</strong><span>Thumb the alley down yourself. Whatever you scroll past burns.</span>
-      </button>
+      <button id="btnPlay" class="primary">Play</button>
       <p class="how">Tilt your phone to tip water off the ledges.<br />
         <span id="noTilt">No tilt sensor? Hold ← / → (or A / D), or press and drag sideways.</span></p>
     </div>
@@ -40,9 +35,8 @@
     <div class="panel">
       <h2>Evaporated</h2>
       <p class="big"><span id="finalDepth">0</span> m</p>
-      <p class="dim">best <span id="finalBest">0</span> m · <span id="finalMode">chase</span></p>
+      <p class="dim">best <span id="finalBest">0</span> m</p>
       <button id="btnAgain" class="primary">Again</button>
-      <button id="btnMenu">Modes</button>
     </div>
   </div>
 

@@ -66,6 +66,3 @@ button {
 }
 button.primary { background: rgba(94, 200, 240, 0.18); border-color: rgba(94, 200, 240, 0.5); }
 button:active { transform: translateY(1px); }
-button.mode { text-align: left; }
-button.mode strong { display: block; font-size: 18px; margin-bottom: 2px; }
-button.mode span { color: var(--muted); font-size: 13px; }
