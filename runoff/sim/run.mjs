@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/* Runoff balance harness — plays runs of rules.js with scripted tilt policies and prints how deep the water gets. DECISIONS #7/#8: no tuning
+/* Runoff balance harness — plays runs of rules.js with scripted tilt
+ * policies and prints how deep the water gets. DECISIONS #7/#8: no tuning
  * number ships on reading well.
  *
  *   node sim/run.mjs                        # all bots, 40 seeds each
