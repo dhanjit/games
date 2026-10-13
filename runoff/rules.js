@@ -15,16 +15,12 @@
  * the collision response there is.
  *
  * The sun is a horizontal line `sunY` descending from above; any drop above it
- * evaporates. Two modes differ only in who moves it:
- *   chase  — it descends on its own after `T.sunDelay`, speeding up with time.
- *   scroll — the host passes `viewTop` (the player's scroll position); the sun
- *            sits at max(its own slow creep, viewTop), and `floorY` (the bottom
- *            of the view — the city isn't built below it yet) holds water up.
+ * evaporates. It starts moving after `T.sunDelay` and speeds up with time.
  *
  * API:
- *   makeWorld({seed, mode, drops, sun}) → world. `sun: false` never moves
- *     the sun (the title screen's attract loop).
- *   step(world, {tilt, viewTop?, floorY?}) — advance T.dt. `tilt` is the
+ *   makeWorld({seed, drops, sun}) → world. `sun: false` never moves the sun
+ *     (the title screen's attract loop).
+ *   step(world, {tilt}) — advance T.dt. `tilt` is the
  *     gravity angle in radians from straight down, positive toward +x (right).
  *     Evaporations this step are appended to world.steam as x,y pairs; the
  *     host drains it.
@@ -64,11 +60,9 @@ export const T = {
 
   // sun
   sunStart: -40,     // y where the sun starts (screen top is y = 0)
-  sunDelay: 4,       // s before it starts to move (chase)
+  sunDelay: 4,       // s before it starts to move
   sunV0: 16,         // u/s when it starts moving
   sunAccel: 1.2,     // u/s² — linear in time, not depth (depth-keyed is exponential: a wall)
-  creep: 6,          // scroll mode: u/s the sun descends on its own, however you scroll
-  creepAccel: 0.3,   // …and its u/s², so standing still is never safe for long
   mPerU: 1 / 20,     // metres per world unit, display only
 };
 
@@ -92,7 +86,6 @@ export function makeWorld(opts = {}) {
   const w = {
     seed,
     rand: rng(seed),
-    mode: opts.mode === 'scroll' ? 'scroll' : 'chase',
     t: 0,
     n: drops,
     x: new Float32Array(drops), y: new Float32Array(drops),
@@ -152,20 +145,12 @@ export function step(w, input = {}) {
   const gx = T.g * Math.sin(tilt), gy = T.g * Math.cos(tilt);
 
   // ── sun ────────────────────────────────────────────────────────────────
-  if (w.t > T.sunDelay && !w.sunOff) {
-    if (w.mode === 'chase') {
-      w.sunY += (T.sunV0 + T.sunAccel * (w.t - T.sunDelay)) * dt;
-    } else {
-      w.sunY += (T.creep + T.creepAccel * (w.t - T.sunDelay)) * dt;
-    }
-  }
-  if (w.mode === 'scroll' && input.viewTop != null) w.sunY = Math.max(w.sunY, input.viewTop);
-  const floorY = w.mode === 'scroll' && input.floorY != null ? input.floorY : Infinity;
+  if (w.t > T.sunDelay && !w.sunOff) w.sunY += (T.sunV0 + T.sunAccel * (w.t - T.sunDelay)) * dt;
 
   // ── ledges: build ahead, drop what the sun has passed ─────────────────
   let deepest = -Infinity, highest = Infinity;
   for (let i = 0; i < w.n; i++) { if (w.y[i] > deepest) deepest = w.y[i]; if (w.y[i] < highest) highest = w.y[i]; }
-  generate(w, Math.max(deepest, floorY === Infinity ? 0 : floorY) + 500);
+  generate(w, Math.max(deepest, 0) + 500);
   const cut = w.sunOff ? highest - 300 : w.sunY - 60;
   while (w.ledges.length && w.ledges[0].ay < cut) w.ledges.shift();
 
@@ -247,7 +232,7 @@ export function step(w, input = {}) {
     x[i] += ddx; y[i] += ddy;
   }
 
-  // ── collisions: walls, ledges, scroll floor ─────────────────────────────
+  // ── collisions: walls, ledges ───────────────────────────────────────────
   const lo = T.pr, hi = T.W - T.pr, reach = T.ledgeR + T.pr;
   const L = w.ledges;
   for (let i = 0; i < n; i++) {
@@ -270,7 +255,6 @@ export function step(w, input = {}) {
         x[i] = cx + nx * reach; y[i] = cy + ny * reach;
       }
     }
-    if (y[i] > floorY - T.pr) y[i] = floorY - T.pr;
     if (x[i] < lo) x[i] = lo; else if (x[i] > hi) x[i] = hi;
   }
 

@@ -1,6 +1,6 @@
 /* Runoff — host: canvas render, tilt input, camera, HUD, overlays.
  * All physics and scoring live in rules.js; this file only feeds it a tilt
- * angle (and, in scroll mode, where the view is) and draws what comes back. */
+ * angle and draws what comes back. */
 import { makeWorld, step, T, depthM } from './rules.js';
 
 const HARNESS = new URLSearchParams(location.search).has('harness');
@@ -24,14 +24,15 @@ addEventListener('resize', resize);
 resize();
 
 // ── persistence ───────────────────────────────────────────────────────────
-const bestKey = (mode) => 'runoff.best.' + mode;
-const loadBest = (mode) => { try { return Number(localStorage.getItem(bestKey(mode))) || 0; } catch { return 0; } };
-const saveBest = (mode, m) => { try { localStorage.setItem(bestKey(mode), String(m)); } catch { /* storage off: play on */ } };
+// Key kept from when there were two modes, so existing bests survive.
+const BEST_KEY = 'runoff.best.chase';
+const loadBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } };
+const saveBest = (m) => { try { localStorage.setItem(BEST_KEY, String(m)); } catch { /* storage off: play on */ } };
 
 // ── input: tilt ───────────────────────────────────────────────────────────
-// Sources, highest priority first: a held key, a pressed pointer (when there
-// is no gyro, or in chase mode), the gyro. All produce a target angle; the
-// applied tilt eases toward it.
+// Sources, highest priority first: a held key, a pressed pointer (only when
+// there is no gyro), the gyro. All produce a target angle; the applied tilt
+// eases toward it.
 const TILT_GAIN = 1.3;              // sensor degrees → gravity degrees
 let gyro = null;                    // latest gyro angle, rad, or null if none
 let keyDir = 0;                     // -1 / 0 / 1
@@ -65,9 +66,9 @@ async function enableGyro() {
 const keys = new Set();
 addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
-  if (['arrowleft', 'a', 'arrowright', 'd', 'arrowdown', 's', ' '].includes(k)) e.preventDefault();
+  if (['arrowleft', 'a', 'arrowright', 'd', ' '].includes(k)) e.preventDefault();
   keys.add(k);
-  if (state === 'over' && (k === 'enter' || k === ' ')) start(mode);
+  if (state === 'over' && (k === 'enter' || k === ' ')) start();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
@@ -75,37 +76,23 @@ addEventListener('blur', () => keys.clear());
 // ── input: pointer ────────────────────────────────────────────────────────
 // Without a gyro, press-and-drag steers: tilt follows the pointer's sideways
 // offset from where it went down. With one, touches never steer — a thumb
-// resting on the glass would otherwise pin gravity straight down. Scroll mode:
-// vertical drag scrolls the alley (with fling).
-let drag = null;                    // {id, x0, y0, y, t}
-let scrollVel = 0;                  // u/s, scroll-mode fling
+// resting on the glass would otherwise pin gravity straight down.
+let drag = null;                    // {id, x0}
 cv.addEventListener('pointerdown', (e) => {
   if (state !== 'play') return;
   cv.setPointerCapture(e.pointerId);
-  drag = { id: e.pointerId, x0: e.clientX, y: e.clientY, t: performance.now() };
-  scrollVel = 0;
+  drag = { id: e.pointerId, x0: e.clientX };
 });
 cv.addEventListener('pointermove', (e) => {
   if (!drag || e.pointerId !== drag.id) return;
   if (gyro === null) pointerTilt = Math.max(-1, Math.min(1, (e.clientX - drag.x0) / (colW * 0.3))) * T.maxTilt;
-  if (mode === 'scroll') {
-    const now = performance.now(), dy = drag.y - e.clientY;
-    if (dy > 0) {
-      scrollBy(dy / scale);
-      const inst = (dy / scale) / Math.max(1, now - drag.t) * 1000;
-      scrollVel = scrollVel * 0.6 + inst * 0.4;
-    }
-    drag.y = e.clientY; drag.t = now;
-  }
 });
 const endDrag = (e) => {
   if (!drag || e.pointerId !== drag.id) return;
-  if (performance.now() - drag.t > 80) scrollVel = 0; // held still before lifting: no fling
   drag = null; pointerTilt = null;
 };
 cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', endDrag);
-addEventListener('wheel', (e) => { if (state === 'play' && mode === 'scroll' && e.deltaY > 0) scrollBy(e.deltaY / scale * 0.6); }, { passive: true });
 
 function targetTilt() {
   const kd = (keys.has('arrowright') || keys.has('d') ? 1 : 0) - (keys.has('arrowleft') || keys.has('a') ? 1 : 0);
@@ -116,26 +103,15 @@ function targetTilt() {
 }
 
 // ── run state ─────────────────────────────────────────────────────────────
-let state = 'title', mode = 'chase', world = null, best = 0;
+let state = 'title', world = null, best = 0;
 let camY = 0;                       // world y at the top of the screen
-let scrollWant = 0;                 // scroll mode: where the thumb has asked the view to be
-const SCROLL_MAX = 150;             // u/s the view may actually move — a flick can't wipe the screen
 const steam = [];                   // {x, y, age}
-const SCROLL_MARGIN_TOP = 0.06;     // fraction of VH: sun line sits this far into the view
-const SCROLL_MARGIN_BOT = 0.05;     // fraction of VH: mist band at the bottom
 
-// Scroll only goes down: what's above the view has already burned. The view
-// moves at most SCROLL_MAX, and the backlog is capped at half a screen so a
-// hard flick can't queue seconds of scrolling after the thumb has lifted.
-function scrollBy(du) { if (du > 0) scrollWant = Math.min(scrollWant + du, camY + VH * 0.5); }
-
-function start(m, seed) {
-  mode = m;
-  world = makeWorld({ seed, mode });
-  best = loadBest(mode);
-  // scroll mode opens with the rain burst mid-screen, clear of the sun line
-  camY = scrollWant = mode === 'scroll' ? 26 - VH * 0.4 : 0;
-  steam.length = 0; scrollVel = 0; tilt = 0;
+function start(seed) {
+  world = makeWorld({ seed });
+  best = loadBest();
+  camY = 0;
+  steam.length = 0; tilt = 0;
   state = 'play';
   $('title').classList.remove('show'); $('over').classList.remove('show');
   $('hud').classList.remove('hide');
@@ -145,10 +121,9 @@ function start(m, seed) {
 function gameOver() {
   state = 'over';
   const d = depthM(world.depth);
-  if (d > best) { best = d; saveBest(mode, d); }
+  if (d > best) { best = d; saveBest(d); }
   $('finalDepth').textContent = d;
   $('finalBest').textContent = best;
-  $('finalMode').textContent = mode;
   $('over').classList.add('show');
 }
 
@@ -156,17 +131,16 @@ function gameOver() {
 // disappears before the first run. iOS waits for the tap (requestPermission).
 if (!(window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function')) enableGyro();
 
-document.querySelectorAll('button.mode').forEach((b) => b.addEventListener('click', async () => {
+$('btnPlay').addEventListener('click', async () => {
   await enableGyro();
-  start(b.dataset.mode);
-}));
-$('btnAgain').addEventListener('click', () => start(mode));
-$('btnMenu').addEventListener('click', () => { $('over').classList.remove('show'); showTitle(); });
+  start();
+});
+$('btnAgain').addEventListener('click', () => start());
 
 // Title: an attract loop — the water sloshes down the alley behind the menu,
 // tilted by a slow sine, with no sun.
 function showTitle() {
-  state = 'title'; mode = 'chase';
+  state = 'title';
   world = makeWorld({ seed: 1, sun: false });
   camY = 0;
   $('title').classList.add('show'); $('hud').classList.add('hide');
@@ -189,21 +163,10 @@ function update(dtReal) {
   const smooth = gyro !== null && pointerTilt === null && !keys.size ? 1 - Math.exp(-dtReal * 14) : 1;
   tilt += Math.max(-maxD, Math.min(maxD, (want - tilt) * smooth));
 
-  if (mode === 'scroll') {
-    if (keys.has('arrowdown') || keys.has('s') || keys.has(' ')) scrollBy(90 * dtReal);
-    if (!drag && scrollVel > 1) { scrollBy(scrollVel * dtReal); scrollVel *= Math.exp(-dtReal * 3); }
-    camY += Math.min(scrollWant - camY, SCROLL_MAX * dtReal);
-  }
-
   acc += dtReal;
   let n = 0;
   while (acc >= T.dt && n < 8) {
-    const input = { tilt };
-    if (mode === 'scroll') {
-      input.viewTop = camY + VH * SCROLL_MARGIN_TOP;
-      input.floorY = camY + VH * (1 - SCROLL_MARGIN_BOT);
-    }
-    step(world, input);
+    step(world, { tilt });
     acc -= T.dt; n++;
   }
   if (n === 8) acc = 0; // too slow to keep up: drop time rather than spiral
@@ -214,14 +177,14 @@ function update(dtReal) {
   world.steam.length = 0;
   for (let i = steam.length - 1; i >= 0; i--) { steam[i].age += dtReal; if (steam[i].age > 1.2) steam.splice(i, 1); }
 
-  if (mode === 'chase') followWater(dtReal);
+  followWater(dtReal);
 
   $('depth').textContent = depthM(world.depth) + ' m';
   $('drops').textContent = world.n;
   if (world.dead) gameOver();
 }
 
-// Chase camera: follow the body of the water, slightly ahead of its middle;
+// Camera: follow the body of the water, slightly ahead of its middle;
 // keep a sliver of the sun in view when it's close.
 function followWater(dtReal) {
   const ys = Array.from(world.y.subarray(0, world.n)).sort((a, b) => a - b);
@@ -280,11 +243,11 @@ function drawFacades() {
   ctx.globalAlpha = 1;
 }
 
-function drawLedges(floorY) {
+function drawLedges() {
   const R = T.ledgeR * scale;
   ctx.lineCap = 'round';
   for (const s of world.ledges) {
-    if (s.ay < camY - 10 || s.by > camY + VH + 10 || s.by > floorY) continue;
+    if (s.ay < camY - 10 || s.by > camY + VH + 10) continue;
     const ax = sx(s.ax), ay = sy(s.ay), bx = sx(s.bx), by = sy(s.by);
     ctx.strokeStyle = C.slabUnder; ctx.lineWidth = R * 2;
     ctx.beginPath(); ctx.moveTo(ax, ay + R * 0.35); ctx.lineTo(bx, by + R * 0.35); ctx.stroke();
@@ -362,7 +325,7 @@ function drawSun(t) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = gl; ctx.fillRect(colX, Math.max(0, e), colW, 34 * scale);
     ctx.globalCompositeOperation = 'source-over';
-  } else if (mode === 'chase' && state === 'play') {
+  } else if (state === 'play') {
     // sun off-screen above: say how far
     const m = Math.max(1, Math.round((camY - world.sunY) * T.mPerU));
     ctx.fillStyle = 'rgba(255,177,59,0.9)'; ctx.font = `${Math.max(12, 3.6 * scale)}px Trebuchet MS, sans-serif`;
@@ -384,13 +347,6 @@ function drawSteam() {
   ctx.globalAlpha = 1;
 }
 
-function drawFloorMist(floorY) {
-  const y = sy(floorY);
-  const g = ctx.createLinearGradient(0, y - 16 * scale, 0, vh);
-  g.addColorStop(0, 'rgba(160,180,200,0)'); g.addColorStop(0.45, 'rgba(160,180,200,0.55)'); g.addColorStop(1, 'rgba(190,205,220,0.85)');
-  ctx.fillStyle = g; ctx.fillRect(colX, y - 16 * scale, colW, vh - y + 16 * scale);
-}
-
 function drawLevel() {
   // a spirit level at the foot of the screen: where gravity points now
   const cx = colX + colW / 2, cy = vh - Math.max(26, 7 * scale), len = Math.min(120, colW * 0.34);
@@ -407,13 +363,11 @@ function render(t) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   drawBackWall();
   if (!world) return;
-  const floorY = mode === 'scroll' ? camY + VH * (1 - SCROLL_MARGIN_BOT) : Infinity;
   ctx.save();
   ctx.beginPath(); ctx.rect(colX, 0, colW, vh); ctx.clip();
-  drawLedges(floorY);
+  drawLedges();
   drawWater();
   drawSteam();
-  if (mode === 'scroll') drawFloorMist(floorY);
   drawSun(t);
   ctx.restore();
   drawFacades();
@@ -435,7 +389,7 @@ showTitle();
 if (HARNESS) {
   window.__ro = {
     start, get world() { return world; }, get cam() { return camY; }, get state() { return state; },
-    setTilt: (a) => { pointerTilt = a; }, scrollBy, T,
+    setTilt: (a) => { pointerTilt = a; }, T,
   };
 } else if ('serviceWorker' in navigator) {
   addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));

@@ -6,16 +6,17 @@ phone rotates gravity**, so water can be tipped off a ledge's free end — or
 pinned against its wall. The sun descends from above and evaporates whatever it
 catches. Score is how deep the water gets. Tracker: issue #87.
 
-**Status: M1 — the thinnest playable slice.** Both camera modes, tilt input with
-fallbacks, the harness. No hazards, pickups, sound, or ledge variety yet.
+**Status: M1 — the thinnest playable slice, live.** One mode (the sun chases),
+tilt input with fallbacks, the harness. No hazards, pickups, sound, or ledge
+variety yet.
 
 ## Files
 
 | File | Role |
 |---|---|
 | `rules.js` | **Pure engine, no DOM.** `makeWorld` / `step` / `ledgeUnder` / `depthM`. Every tunable in `T`. |
-| `game.js` | Canvas render (metaball water), tilt input, both cameras, HUD, overlays, title attract loop, SW registration. |
-| `sim/run.mjs` | Harness: `node sim/run.mjs [--mode chase\|scroll] [--runs N] [--bot none,flip,greedy] [--set key=val]`. |
+| `game.js` | Canvas render (metaball water), tilt input, camera, HUD, overlays, title attract loop, SW registration. |
+| `sim/run.mjs` | Harness: `node sim/run.mjs [--runs N] [--bot none,flip,greedy] [--set key=val]`. |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA, portrait. Bump `CACHE` in `sw.js` when a cached asset changes. Icons: `node icons/make-icons.mjs` (no deps). |
 
 ## The one rule everything hangs off
@@ -54,44 +55,45 @@ residual speed:
 
 Cost is ~0.15 ms per step in Node (two steps per 60 Hz frame).
 
-## The sun, per mode
+## The sun
 
-- **Chase** — `sunY` descends at `sunV0 + sunAccel · (t − sunDelay)`. Linear in
-  *time*: an earlier depth-keyed version was exponential, a wall rather than a
-  chase. The camera follows the water's 55th-percentile drop and keeps a sliver
-  of sun in view when it's close; off-screen, a "☀ N m above" readout.
-- **Scroll** — the host passes `viewTop` and `floorY` each step. The sun sits at
-  `max(own creep, viewTop)`, where creep is `creep + creepAccel · t` so standing
-  still is never safe for long. `floorY` is the bottom of the view — the city
-  isn't built below it yet — and holds water up until you scroll. Scrolling is
-  **down only** and **rate-limited** to `SCROLL_MAX` 150 u/s in `game.js`; at
-  first it was unlimited, and one flick burned the whole opening burst.
+`sunY` descends at `sunV0 + sunAccel · (t − sunDelay)`. Linear in *time*: an
+earlier depth-keyed version was exponential, a wall rather than a chase. The
+camera follows the water's 55th-percentile drop and keeps a sliver of sun in
+view when it's close; off-screen, a "☀ N m above" readout.
 
-## Harness numbers (40 seeds, 2026-09-30)
+## Scroll mode was cut (2026-10-08)
+
+M1 shipped a second mode alongside Chase: the player thumb-scrolled the alley
+down Instagram-style; the top edge of the view was the sun and the bottom edge
+held the water until scrolled. Played on a phone, **Chase felt better and
+scrolling while tilting felt weird** — two simultaneous inputs on the one device
+you're holding fight each other, and the thumb drag also jolts the tilt. Tilt
+is the game, so the competing input went. Its harness numbers did show one
+thing worth keeping: stragglers burning off one by one (scroll greedy: 156 →
+46 drops between 20 s and 60 s) reads better than Chase's all-at-once wipe. If
+attrition is wanted, get it from the sun's shape (a heat band rather than a
+hard line), not from a second input. Code is in git history at `3d6adb8`.
+
+## Harness numbers (40 seeds, 2026-10-08)
 
 `none` never tilts; `flip` swings full left/right every 1.2 s, blind; `greedy`
 tilts toward the free tip of the highest ledge holding water. Tilt slews at
 `maxTilt` per 0.25 s for all bots.
 
-| mode | bot | depth p10 / p50 / p90 (m) | secs p50 | drops @20 s / @60 s |
-|---|---|---|---|---|
-| chase | none | 12 / 16 / 22 | 19 | 0 / 0 |
-| chase | flip | 190 / 225 / 247 | 79 | 180 / 178 |
-| chase | greedy | 178 / 210 / 237 | 76 | 180 / 159 |
-| scroll | none | 12 / 17 / 21 | 26 | 45 / 0 |
-| scroll | flip | 194 / 220 / 253 | 89 | 162 / 80 |
-| scroll | greedy | 154 / 172 / 196 | 75 | 156 / 46 |
+| bot | depth p10 / p50 / p90 (m) | secs p50 | drops @20 s / @60 s |
+|---|---|---|---|
+| none | 12 / 16 / 22 | 19 | 0 / 0 |
+| flip | 190 / 225 / 247 | 79 | 180 / 178 |
+| greedy | 178 / 210 / 237 | 76 | 180 / 159 |
 
-`sunAccel` 1.2 and `creepAccel` 0.3 were picked to put a *perfect-reflex* bot at
-~75–90 s; people will die sooner. In chase the sun wipes the whole body in a
-few seconds once it's faster than the water; in scroll the stragglers burn off
-one by one — the attrition the concept describes. Scroll's bot keeps the sun
-line 30 u above the top drop: hugging it by 8 u burned a third of the water to
-landing spray, which is a real hazard for players too.
+`sunAccel` 1.2 was picked to put a *perfect-reflex* bot at ~75–80 s; people
+will die sooner. The sun wipes the whole body in a few seconds once it's
+faster than the water.
 
 ## Known gap: blind waggling wins
 
-**`flip` beats `greedy` in both modes.** Rhythmically swinging the phone
+**`flip` beats `greedy`.** Rhythmically swinging the phone
 left-right drains alternating ledges about as well as reading the screen, and
 nothing punishes it — max tilt either way always drains *something* and never
 costs water. That's the first thing M2 has to fix, and the harness is the check
@@ -114,14 +116,11 @@ with light smoothing on the gyro only.
 
 - **Gyro**: `deviceorientation` `gamma` (adjusted for screen angle) × 1.3,
   clamped to `maxTilt` (55°). iOS needs `DeviceOrientationEvent.requestPermission()`
-  inside a tap — the mode buttons call it; elsewhere the listener is bound at
+  inside a tap — the Play button calls it; elsewhere the listener is bound at
   load so the no-sensor hint hides early.
 - **Pointer, no gyro**: press and drag sideways; tilt = offset from press
   point over 30% of column width. With a gyro, touches never steer — a thumb
   resting on the glass would pin gravity straight down.
-- **Pointer, scroll**: vertical drag scrolls (with fling); the backlog is
-  capped at half a screen so a flick can't queue seconds of scrolling.
-- Wheel / ↓ / S / Space scroll on desktop.
 
 ## Rendering
 
@@ -136,13 +135,13 @@ with light smoothing on the gyro only.
 
 ## Persistence
 
-`runoff.best.chase`, `runoff.best.scroll` — best depth in metres. Storage
-failures are swallowed.
+`runoff.best.chase` — best depth in metres (key name kept from the two-mode
+build so existing bests survive). Storage failures are swallowed.
 
 ## Query flags
 
-`?harness` — no SW; `window.__ro = { start(mode, seed), world, cam, state,
-setTilt(rad), scrollBy(u), T }` for scripted driving.
+`?harness` — no SW; `window.__ro = { start(seed), world, cam, state,
+setTilt(rad), T }` for scripted driving.
 
 ## Theme
 
