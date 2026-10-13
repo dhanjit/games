@@ -130,9 +130,24 @@ with light smoothing on the gyro only.
 
 ## Rendering
 
-- **View**: 140 u across on a phone; on a wide screen, as wide as keeps 240 u
-  in view. The camera follows `bulk()` in x and y, and keeps a sliver of the
-  sun in view when it's close; off-screen, a "☀ N m above" readout.
+- **View**: 120 u across on a phone, so the roof the water is on and both
+  roofs below it fit; on a wide screen, as wide as keeps 240 u in view. The
+  camera follows `bulk()` with the water 30% down the screen, leans toward
+  the roof it's headed for, and keeps a sliver of the sun in view when it's
+  close; off-screen, a "☀ N m above" readout.
+- **Only the way down is shown** (asked for 2026-10-13: "I don't need the user
+  to see the entire hill — only the current path and local things; he may want
+  to explore different paths on a divergence"):
+  - A pale **mist veil** covers the town. It parts, with one soft puff per
+    house eased in and out, over the roofs holding water (≥ 4 drops), the
+    roof the lead water is on with its fork (both roofs it can drop to), and
+    the predicted path.
+  - The **path** is where the *current* tilt sends the water for 4 rows,
+    using the same exit rule as the planner bot (over the high end when the
+    tilt beats the pitch; a parapet or tank stops it). It's drawn as
+    droplets drifting roof to roof, with a pulsing orange ring where the
+    water would stop. Tilting swings it from branch to branch, so a fork can
+    be read before committing to it.
 - **Backdrop**, back to front, each at a fraction of the camera: sky, a snow
   range (0.04), a pine ridge (0.12), the hill face (0.35), which is a
   pre-drawn tile of far houses and pines, then mist bands (0.6). The range and

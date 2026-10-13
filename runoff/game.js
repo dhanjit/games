@@ -1,7 +1,7 @@
 /* Runoff — host: canvas render, tilt input, camera, HUD, overlays.
  * All physics and scoring live in rules.js; this file only feeds it a tilt
  * angle and draws what comes back. */
-import { makeWorld, step, T, depthM, bulk, houseAt, rowOf, colOf, TANK } from './rules.js';
+import { makeWorld, step, T, depthM, bulk, houseAt, rowOf, colOf, childrenOf, TANK } from './rules.js';
 
 const HARNESS = new URLSearchParams(location.search).has('harness');
 const $ = (id) => document.getElementById(id);
@@ -9,9 +9,10 @@ const cv = $('view'), ctx = cv.getContext('2d');
 
 // ── layout ────────────────────────────────────────────────────────────────
 // The town is unbounded sideways; the view is VIEW_W world units across on a
-// phone, and on a wide screen as wide as keeps VIEW_H units in view. colW is
-// the portrait column the HUD and the drag gesture are sized to.
-const VIEW_W = 140, VIEW_H = 240;
+// phone — the roof the water is on and both roofs below it — and on a wide
+// screen as wide as keeps VIEW_H units in view. colW is the portrait column
+// the HUD and the drag gesture are sized to.
+const VIEW_W = 120, VIEW_H = 240;
 let dpr = 1, vw = 0, vh = 0, colW = 0, scale = 1, VW = 140, VH = 200;
 function resize() {
   vw = innerWidth; vh = innerHeight;
@@ -114,7 +115,8 @@ const steam = [];                   // {x, y, age}
 function aim() {
   focusX = camX = world.spoutX;
   focusY = T.Y0;
-  camY = focusY - VH * 0.42;
+  camY = focusY - VH * 0.3;
+  lead = null; clear.clear();
 }
 
 function start(seed) {
@@ -158,7 +160,7 @@ function showTitle() {
 function attract(dtReal) {
   if (world.t > 30) { world = makeWorld({ seed: 1 + Math.floor(Math.random() * 1e6), sun: false }); aim(); }
   acc += dtReal;
-  for (let n = 0; acc >= T.dt && n < 8; n++, acc -= T.dt) step(world, { tilt: Math.sin(world.t * 0.7) * 0.6 });
+  for (let n = 0; acc >= T.dt && n < 8; n++, acc -= T.dt) step(world, { tilt: (tilt = Math.sin(world.t * 0.7) * 0.6) });
   acc = Math.min(acc, T.dt);
   world.steam.length = 0;
   followWater(dtReal);
@@ -195,14 +197,79 @@ function update(dtReal) {
   if (world.dead) gameOver();
 }
 
-// Camera: follow the leading clump of water (rules.js `bulk`), slightly above
-// its middle; keep a sliver of the sun in view when it's close.
+// Camera: follow the leading clump of water (rules.js `bulk`), leaning
+// toward the roof it's headed for, with most of the screen below it to read
+// the way down; keep a sliver of the sun in view when it's close.
 function followWater(dtReal) {
   const b = bulk(world);
-  if (b) { focusX = b.x; focusY = b.y; }
-  const ty = Math.max(focusY - VH * 0.42, world.sunY - VH * 0.12);
+  if (b) {
+    focusX = b.x; focusY = b.y;
+    const r = Math.max(0, Math.floor((b.y - T.Y0 + 20) / T.DY));
+    lead = houseAt(world, r, colOf(r, b.x));
+  }
+  tracePath();
+  updateClear(dtReal);
+  const next = path.length ? path[0].to.x : focusX;
+  const ty = Math.max(focusY - VH * 0.3, world.sunY - VH * 0.12);
   camY += (ty - camY) * (1 - Math.exp(-dtReal * 4));
-  camX += (focusX - camX) * (1 - Math.exp(-dtReal * 3));
+  camX += (focusX * 0.65 + next * 0.35 - camX) * (1 - Math.exp(-dtReal * 3));
+}
+
+// ── the water's neighbourhood ─────────────────────────────────────────────
+// The view shows the way down, not the whole hill. Kept clear: the roofs
+// holding water, the roof the lead water is on and the fork below it (both
+// roofs it can drop to), and every roof the current tilt sends it across for
+// PATH_ROWS rows. The rest of the town fades into mist. Tilting
+// swings the path from branch to branch, so a fork can be read before
+// committing to it.
+const PATH_ROWS = 4;
+let lead = null;                    // the house the leading water is on
+const path = [];                    // [{from, to, side}] under the current tilt
+let pathEnd = null;                 // the house where it stops, if it does
+const clear = new Map();            // house → 0..1, eased
+
+/* Which way water leaves h under tilt t: −1 left, +1 right, 0 it stays. The
+ * tank's threshold is a hard tilt; a share stays behind even then. */
+function exitSide(h, t) {
+  if (h.type === TANK) return Math.abs(t) > 0.75 ? Math.sign(t) : 0;
+  if (-h.dir * t > h.pitch) return -h.dir;
+  return h.wall ? 0 : h.dir;
+}
+
+function tracePath() {
+  path.length = 0; pathEnd = null;
+  let h = lead;
+  for (let k = 0; h && k < PATH_ROWS; k++) {
+    const side = exitSide(h, tilt);
+    if (!side) { pathEnd = h; break; }
+    const [L, R] = childrenOf(h.r, h.c), to = houseAt(world, h.r + 1, side < 0 ? L : R);
+    path.push({ from: h, to, side });
+    h = to;
+  }
+}
+
+function updateClear(dtReal) {
+  const want = new Set(), held = new Map();
+  for (let i = 0; i < world.n; i++) {
+    const r = rowOf(world.y[i] + 8);
+    if (r < 0) continue;
+    const h = houseAt(world, r, colOf(r, world.x[i])), n = (held.get(h) || 0) + 1;
+    held.set(h, n);
+    if (n === 4) want.add(h);       // a few stray drops don't clear the mist
+  }
+  if (lead) {
+    let lo = lead.c, hi = lead.c;
+    for (let k = 0; k <= 1; k++) {
+      for (let c = lo; c <= hi; c++) want.add(houseAt(world, lead.r + k, c));
+      lo = childrenOf(lead.r + k, lo)[0]; hi = childrenOf(lead.r + k, hi)[1];
+    }
+  }
+  for (const p of path) want.add(p.to);
+  for (const h of want) clear.set(h, Math.min(1, (clear.get(h) || 0) + dtReal * 4));
+  for (const [h, v] of clear) {
+    if (want.has(h)) continue;
+    if (v <= dtReal * 2.5) clear.delete(h); else clear.set(h, v - dtReal * 2.5);
+  }
 }
 
 // ── render ────────────────────────────────────────────────────────────────
@@ -515,6 +582,71 @@ function drawWater() {
   ctx.drawImage(wcv, x0, y0, bw, bh, x0 * WDS, y0 * WDS, bw * WDS, bh * WDS);
 }
 
+// The mist: a pale veil over the whole view, wiped away where the water's
+// neighbourhood is by one soft elliptical puff per house (destination-out,
+// eased per house), so the clear patch reads as fog parting, not a cut-out.
+const veil = document.createElement('canvas'), vctx = veil.getContext('2d');
+const puff = document.createElement('canvas');
+puff.width = puff.height = 128;
+{
+  const g = puff.getContext('2d'), rg = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  rg.addColorStop(0, '#000'); rg.addColorStop(0.55, '#000'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
+}
+function sizeVeil() { veil.width = cv.width; veil.height = cv.height; }
+addEventListener('resize', sizeVeil);
+sizeVeil();
+function drawMist() {
+  vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  vctx.globalCompositeOperation = 'source-over'; vctx.globalAlpha = 1;
+  vctx.clearRect(0, 0, vw, vh);
+  vctx.fillStyle = 'rgba(232,240,238,0.66)'; vctx.fillRect(0, 0, vw, vh);
+  vctx.globalCompositeOperation = 'destination-out';
+  const rx = T.eave + 18, ry = 38;
+  for (const [h, v] of clear) {
+    vctx.globalAlpha = v;
+    vctx.drawImage(puff, sx(h.x - rx), sy(h.ry + 4 - ry), 2 * rx * scale, 2 * ry * scale);
+  }
+  ctx.drawImage(veil, 0, 0, vw, vh);
+}
+
+// The path under the current tilt: droplets drifting roof to roof, fading
+// with distance, and a ring where the water would stop.
+const roofAt = (h, x) => h.type === TANK ? h.ry + T.tankFloor - T.roofR : roofYAt(h, Math.max(h.x - T.eave, Math.min(h.x + T.eave, x))) - T.roofR;
+function drawPath(t) {
+  if (!lead) return;
+  const pts = [[focusX, roofAt(lead, focusX)]];
+  for (const { from, to, side } of path) {
+    const ex = from.x + side * (from.type === TANK ? T.tankHalf : T.eave);
+    pts.push([ex, from.type === TANK ? from.ry + T.tankFloor - T.tankWall - T.roofR : roofAt(from, ex)], [ex, roofAt(to, ex)]);
+  }
+  if (path.length) { const l = path[path.length - 1].to; pts.push([l.x, roofAt(l, l.x)]); }
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  const GAP = 4.5;
+  let d = (t * 14) % GAP;
+  for (let i = 1, run = 0; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1], [bx, by] = pts[i], len = Math.hypot(bx - ax, by - ay);
+    for (; d < run + len; d += GAP) {
+      const u = (d - run) / len, x = ax + (bx - ax) * u, y = ay + (by - ay) * u;
+      ctx.globalAlpha = 0.9 * (1 - d / (total + GAP));
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#2280d4'; ctx.lineWidth = Math.max(1, 0.35 * scale);
+      ctx.beginPath(); ctx.arc(sx(x), sy(y - 1.4), 0.95 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+    run += len;
+  }
+  ctx.globalAlpha = 1;
+  if (pathEnd) {
+    // where the water would stop: in a tank, or against a parapet
+    const x = pathEnd.type === TANK ? pathEnd.x : pathEnd.x + pathEnd.dir * (T.eave - 4);
+    const y = pathEnd.type === TANK ? pathEnd.ry - 4 : roofYAt(pathEnd, x) - 5;
+    ctx.strokeStyle = '#e8762c'; ctx.lineWidth = Math.max(2, 0.7 * scale);
+    ctx.globalAlpha = 0.65 + 0.35 * Math.sin(t * 6);
+    ctx.beginPath(); ctx.arc(sx(x), sy(y), 5 * scale, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawSun(t) {
   const edge = sy(world.sunY);
   if (edge > -40) {
@@ -573,6 +705,8 @@ function render(t) {
   if (!world) return;
   drawBackdrop(t);
   drawTown();
+  drawMist();
+  drawPath(t);
   drawWater();
   drawSteam();
   drawSun(t);
