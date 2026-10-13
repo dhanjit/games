@@ -163,8 +163,11 @@ with light smoothing on the gyro only.
   the drops cover: a full-screen readback halved desktop frame rates.
 - **Pixel budget**: `dpr` is capped so the backing store stays ≤ 2.6 MP. A
   phone keeps 2×; a big monitor drops a little, since every frame repaints
-  the whole screen. Headless Chromium (software): 54 fps at 390×844,
-  ~30 fps at 1280×800.
+  the whole screen. Headless Chromium (software raster, no GPU), 390×844:
+  ~42 fps, of which the mist's full-screen blend costs ~13 fps (55 without
+  it). Its buffer is quarter-resolution, but resolution wasn't the cost; a
+  GPU canvas composites it as one quad. Real-device frame rates are still
+  unmeasured.
 - Sun glow below the line uses `lighter` compositing — source-over orange
   went brown.
 

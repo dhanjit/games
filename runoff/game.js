@@ -593,11 +593,12 @@ puff.width = puff.height = 128;
   rg.addColorStop(0, '#000'); rg.addColorStop(0.55, '#000'); rg.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
 }
-function sizeVeil() { veil.width = cv.width; veil.height = cv.height; }
+const VDS = 4;                      // the mist is soft: a quarter-resolution buffer will do
+function sizeVeil() { veil.width = Math.ceil(vw / VDS); veil.height = Math.ceil(vh / VDS); }
 addEventListener('resize', sizeVeil);
 sizeVeil();
 function drawMist() {
-  vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  vctx.setTransform(1 / VDS, 0, 0, 1 / VDS, 0, 0);
   vctx.globalCompositeOperation = 'source-over'; vctx.globalAlpha = 1;
   vctx.clearRect(0, 0, vw, vh);
   vctx.fillStyle = 'rgba(232,240,238,0.66)'; vctx.fillRect(0, 0, vw, vh);
@@ -607,7 +608,8 @@ function drawMist() {
     vctx.globalAlpha = v;
     vctx.drawImage(puff, sx(h.x - rx), sy(h.ry + 4 - ry), 2 * rx * scale, 2 * ry * scale);
   }
-  ctx.drawImage(veil, 0, 0, vw, vh);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(veil, 0, 0, veil.width * VDS, veil.height * VDS);
 }
 
 // The path under the current tilt: droplets drifting roof to roof, fading
