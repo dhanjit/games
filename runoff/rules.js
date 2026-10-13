@@ -1,139 +1,228 @@
 /* Runoff — pure rules. No DOM, no canvas, no timers (DECISIONS #8).
  *
- * The world is a vertical alley between two buildings, `T.W` units wide and
- * endless downward (+y is down). Ledges — chajjas, balcony slabs, rooftops —
- * stick out of both walls. Each is a capsule (a thick line segment) rooted at
- * its wall and rising gently toward its free tip, so with gravity straight down
- * water pools in the corner against the wall. Tilting gravity toward the free
- * tip by more than the slope drains it; tilting the other way pins it.
+ * The world is a hillside town seen side-on, endless downward (+y is down) and
+ * sideways: terraces of houses, each row's roofs eave to eave with a narrow
+ * drain slot between them. Row r has its roof centres at y = T.Y0 + r·DY,
+ * house c of that row at x = (c + (r&1)/2)·DX. So every house has two
+ * children in the row below, half a house to the left and half to the right,
+ * and each eave sits over one of them, 5 u from its middle — dropping down
+ * is walking a tree (`childrenOf`). Each slot is decided by a seeded hash of
+ * (r, c):
+ *
+ *   ROOF — a lean-to tin roof sloping one way (`dir`). Water leaves by its low
+ *          eave onto that side's child. Tilting gravity against the slope by
+ *          more than its pitch sends it off the high end instead: that is the
+ *          lane change. Some roofs have a parapet (`wall`) at the low end that
+ *          pools water until it is tipped back uphill.
+ *   TANK — an open rooftop cistern as wide as a roof. Water that lands in it
+ *          stays, unless a hard tilt sloshes it over the rim; a share always
+ *          stays behind.
+ *
+ * Roofs are single-pitch on purpose: a gable's ridge is a knife-edge, and a
+ * stream landing near one splits in two however it is aimed. Rows have no gaps
+ * on purpose too: with gaps, a hard tilt flings water over a whole row, which
+ * makes blind full-tilt waggling the fastest way down. Here every row costs a
+ * roof; a hard tilt only drifts the fall sideways (H·tanθ), landing it a house
+ * or two over in the next row. No two tanks stand side by side, so every roof
+ * has at least one child that is not a tank.
  *
  * The water is `T.drops` particles run through Clavet et al.'s double-density
- * relaxation ("Particle-based Viscoelastic Fluid Simulation", SCA 2005) —
- * the usual 2-D game liquid: position-based, unconditionally stable at a fixed
- * step, and cheap with a uniform grid. Velocity is recovered from positions
- * after relaxation and collision, so pushing a particle out of a ledge is all
- * the collision response there is.
+ * relaxation ("Particle-based Viscoelastic Fluid Simulation", SCA 2005),
+ * position-based and stable at a fixed step. The neighbour grid is a spatial
+ * hash, so drops can spread across an unbounded world. Collision response is
+ * projection out of capsules (roofs, parapets, tank walls); velocity
+ * is recovered from positions afterwards.
  *
- * The sun is a horizontal line `sunY` descending from above; any drop above it
- * evaporates. It starts moving after `T.sunDelay` and speeds up with time.
+ * The sun is a horizontal line `sunY` descending from above, speeding up with
+ * time; any drop above it evaporates.
  *
  * API:
  *   makeWorld({seed, drops, sun}) → world. `sun: false` never moves the sun
- *     (the title screen's attract loop).
- *   step(world, {tilt}) — advance T.dt. `tilt` is the
- *     gravity angle in radians from straight down, positive toward +x (right).
- *     Evaporations this step are appended to world.steam as x,y pairs; the
- *     host drains it.
+ *     (the title screen's attract loop). Drops 0…n−1 are in play; `pending`
+ *     more are still to come out of the spout over the first ~2.5 s.
+ *   step(world, {tilt}) — advance T.dt. `tilt` is the gravity angle in
+ *     radians from straight down, positive toward +x (right). Evaporations
+ *     this step are appended to world.steam as x,y pairs; the host drains it.
+ *   houseAt(world, r, c) → {type, r, c, x, ry, dir, wall, pitch, rise, segs}
+ *     (memoised). A roof runs from its high end (x − dir·eave, ry − rise/2) to
+ *     its low end (x + dir·eave, ry + rise/2).
+ *   rowOf(y), xOf(r, c), colOf(r, x), childrenOf(r, c) — lattice helpers.
+ *   bulk(world) → {x, y, n} of the leading clump of water, or null.
  *   depthM(y) → metres, for display. Score is world.depth (deepest y any drop
- *     has reached), shown via depthM.
+ *     has reached).
  */
 
 export const T = {
-  W: 100,            // alley width in world units (u); maps to the screen width
   dt: 1 / 120,       // fixed step, seconds
   g: 420,            // gravity, u/s²
   maxTilt: 0.96,     // clamp on the gravity angle, rad (~55°)
-  vmax: 240,         // terminal speed, u/s — keeps a step (2 u) under ledge thickness
+  vmax: 240,         // terminal speed, u/s — keeps a step (2 u) under slab thickness
   drops: 180,
 
   // fluid (Clavet double-density relaxation; stiffness has dt² folded in)
   h: 5,              // interaction radius
   rho0: 1.6,         // rest density — settles drops ~2.1 u apart
-  k: 0.5,            // pressure stiffness; higher splashes water over ledge tips
+  k: 0.5,            // pressure stiffness
   kNear: 1,          // near-pressure stiffness (anti-clumping, gives surface tension)
   sigma: 0.06,       // linear viscosity, per step
   beta: 0.004,       // quadratic viscosity, s/u
-  pr: 1.2,           // drop radius against walls and ledges
+  pr: 1.2,           // drop radius against geometry
+  slideMax: 50,      // u/s — fastest a drop slides along a surface it touches
+  airDrag: 6,        // 1/s, on the sideways speed of water falling faster than fallV …
+  fallV: 60,         // … u/s: streams drop off an eave instead of sailing past the roof below
 
-  // ledges
-  ledgeR: 2.5,       // capsule radius (half the slab thickness)
-  lenMin: 0.50,      // ledge length as a fraction of W
-  lenMax: 0.70,
-  shortChance: 0.12, // chance of a short ledge that leaves a clear drop beside it
-  sameSide: 0.2,     // chance the next ledge is on the same wall
-  clearMin: 30,      // vertical clearance, this ledge's root → next ledge's tip
-  clearMax: 52,
-  slopeMin: 6,       // degrees, rising toward the tip
-  slopeMax: 16,
-  slopeGrow: 1.2,    // extra degrees per 100 m of depth, capped at slopeCap
-  slopeCap: 30,
+  // the town lattice
+  Y0: 80,            // roof-centre y of row 0
+  DX: 56,            // house spacing within a row
+  DY: 45,            // row spacing
+  eave: 23,          // roof half-span: leaves a 10 u drain slot between neighbours (one under 2·(roofR + pr) closes)
+  pitchMin: 14,      // roof pitch, degrees, at the top of the hill …
+  pitchMax: 26,      // … and the most it ever reaches
+  pitchRamp: 40,     // rows over which the range climbs from pitchMin toward pitchMax
+  roofR: 2.2,        // roof slab capsule radius
+  wallR: 1.5,
+  parapet: 9,        // parapet height above the low eave
+  tankHalf: 21,      // tank inner half-width
+  tankFloor: 6,      // tank floor, below the row's centre line
+  tankWall: 24,      // tank wall height above its floor
+  pTank: 0.12,
+  pWall: 0.18,       // share of roofs with a parapet
+  safeRows: 3,       // the first rows are all plain roofs
 
   // sun
-  sunStart: -40,     // y where the sun starts (screen top is y = 0)
+  sunStart: -60,     // y where the sun starts (the town begins at y ≈ 80)
   sunDelay: 4,       // s before it starts to move
   sunV0: 16,         // u/s when it starts moving
-  sunAccel: 1.2,     // u/s² — linear in time, not depth (depth-keyed is exponential: a wall)
+  sunAccel: 0.6,     // u/s² — linear in time, not depth (depth-keyed is exponential: a wall)
   mPerU: 1 / 20,     // metres per world unit, display only
 };
 
+export const ROOF = 0, TANK = 1;
+
 export const depthM = (y) => Math.max(0, Math.floor(y * T.mPerU));
 
-/* mulberry32 — small seeded PRNG so a seed reproduces an alley. */
-function rng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+// ── hashing ───────────────────────────────────────────────────────────────
+// Two rounds of a splitmix32-style finalizer per coordinate (constants from
+// bryc's public-domain PRNG survey), so neighbouring slots share no structure.
+function mix(h) {
+  h = Math.imul(h ^ (h >>> 16), 0x21f0aaad);
+  h = Math.imul(h ^ (h >>> 15), 0x735a2d97);
+  return (h ^ (h >>> 15)) >>> 0;
+}
+export function cellHash(seed, a, b) {
+  let h = (seed ^ 0x9e3779b9) >>> 0;
+  h = mix(h ^ (a >>> 0));
+  h = mix(h ^ (b >>> 0));
+  return h;
+}
+const unit = (seed, a, b) => cellHash(seed, a, b) / 4294967296;
+
+// ── the lattice ───────────────────────────────────────────────────────────
+export const xOf = (r, c) => (c + (r & 1) / 2) * T.DX;
+export const rowOf = (y) => Math.round((y - T.Y0) / T.DY);
+export const colOf = (r, x) => Math.round(x / T.DX - (r & 1) / 2);
+/* The two houses below (r, c), left then right. */
+export const childrenOf = (r, c) => (r & 1) ? [c, c + 1] : [c - 1, c];
+
+function baseType(seed, r, c) {
+  return r >= T.safeRows && unit(seed, r, c) < T.pTank ? TANK : ROOF;
 }
 
+const key = (r, c) => r * 4194304 + c + 2097152;
+
+export function houseAt(w, r, c) {
+  const k = key(r, c);
+  let h = w.houses.get(k);
+  if (h) return h;
+  let type = baseType(w.seed, r, c);
+  if (type === TANK && baseType(w.seed, r, c - 1) === TANK) type = ROOF; // never two tanks side by side
+  const x = xOf(r, c), ry = T.Y0 + r * T.DY;
+  const u2 = unit(w.seed ^ 0x51ed, r, c), u3 = unit(w.seed ^ 0x7a11, r, c);
+  const dir = u2 < 0.5 ? -1 : 1;
+  const wall = type === ROOF && r >= T.safeRows && u3 < T.pWall;
+  const top = T.pitchMin + (T.pitchMax - T.pitchMin) * Math.min(1, Math.max(0, r) / T.pitchRamp);
+  const pitch = (T.pitchMin + (top - T.pitchMin) * ((u2 * 2) % 1)) * Math.PI / 180;
+  const rise = 2 * T.eave * Math.tan(pitch);
+  const segs = [];                      // [ax, ay, bx, by, radius] per capsule
+  if (type === ROOF) {
+    const lx = x + dir * T.eave, ly = ry + rise / 2;
+    segs.push([x - dir * T.eave, ry - rise / 2, lx, ly, T.roofR]);
+    if (wall) segs.push([lx, ly, lx, ly - T.parapet, T.wallR]);
+    // the spout pours faster than a roof drains, so the first roof gets a
+    // parapet at its high end: the pool can only spill the way it slopes
+    if (r === 0 && c === 0) segs.push([x - dir * T.eave, ry - rise / 2, x - dir * T.eave, ry - rise / 2 - T.parapet, T.wallR]);
+  } else {
+    const fy = ry + T.tankFloor, ty = fy - T.tankWall, hw = T.tankHalf;
+    segs.push([x - hw, fy, x + hw, fy, T.roofR], [x - hw, fy, x - hw, ty, T.roofR], [x + hw, fy, x + hw, ty, T.roofR]);
+  }
+  h = { type, r, c, x, ry, dir, wall, pitch, rise, segs };
+  w.houses.set(k, h);
+  return h;
+}
+
+// ── world ────────────────────────────────────────────────────────────────
 export function makeWorld(opts = {}) {
   const drops = opts.drops ?? T.drops;
   const seed = (opts.seed ?? Math.floor(Math.random() * 4294967296)) >>> 0;
   const w = {
     seed,
-    rand: rng(seed),
     t: 0,
-    n: drops,
+    n: 0,              // drops in play; the rest are still in the spout
+    pending: drops,
     x: new Float32Array(drops), y: new Float32Array(drops),
     vx: new Float32Array(drops), vy: new Float32Array(drops),
     px: new Float32Array(drops), py: new Float32Array(drops),
-    ledges: [],        // {ax, ay, bx, by, side: -1 left | 1 right, slope}
-    genY: 0,           // root y of the last generated ledge
-    side: opts.firstSide ?? -1,
+    houses: new Map(),
     sunY: T.sunStart,
     sunOff: opts.sun === false,
     depth: 0,
     tilt: 0,
     dead: false,
     steam: [],
-    // grid scratch, grown on demand
-    _cell: new Int32Array(drops), _order: new Int32Array(drops),
-    _start: new Int32Array(0), _count: new Int32Array(0),
+    spoutX: 0, spoutY: 0, spoutDir: 1,
+    _cx: new Int32Array(drops), _cy: new Int32Array(drops), _cell: new Int32Array(drops),
+    _order: new Int32Array(drops), _start: new Int32Array(HBUCKETS + 1), _count: new Int32Array(HBUCKETS + 1),
   };
-  // A rain burst: a loose disc of drops just below the top edge.
-  for (let i = 0; i < drops; i++) {
-    const a = w.rand() * Math.PI * 2, r = Math.sqrt(w.rand()) * 16;
-    w.x[i] = T.W / 2 + Math.cos(a) * r * 1.4;
-    w.y[i] = 26 + Math.sin(a) * r;
-    w.vy[i] = 20;
-  }
-  // First ledge well clear of the burst.
-  w.genY = 40;
-  generate(w, 400);
+  // The water arrives from a gutter spout over the high end of the first roof
+  // (see `pour`), not all at once: a block of it dropped or set on the roof
+  // dam-breaks over both ends before the player has touched anything.
+  const roof = houseAt(w, 0, 0);
+  w.spoutX = -roof.dir * (T.eave - 12);
+  w.spoutY = roof.ry - roof.rise / 2 + roof.rise * 12 / (2 * T.eave) - 5;
+  w.spoutDir = roof.dir;
   return w;
 }
 
-/* Append ledges until the last root is below `untilY`. */
-function generate(w, untilY) {
-  const R = w.rand;
-  while (w.genY < untilY) {
-    if (R() >= T.sameSide || w.ledges.length === 0) w.side = -w.side;
-    const short = R() < T.shortChance;
-    const len = T.W * (short ? 0.28 + R() * 0.1 : T.lenMin + R() * (T.lenMax - T.lenMin));
-    const grow = Math.min(T.slopeCap - T.slopeMax, T.slopeGrow * (w.genY * T.mPerU) / 100);
-    const slope = (T.slopeMin + R() * (T.slopeMax - T.slopeMin) + grow) * Math.PI / 180;
-    const rise = len * Math.tan(slope);
-    const clear = T.clearMin + R() * (T.clearMax - T.clearMin);
-    const y = w.genY + clear + rise;          // root y; the tip is `rise` higher
-    const ax = w.side < 0 ? 0 : T.W;
-    const bx = w.side < 0 ? len : T.W - len;
-    w.ledges.push({ ax, ay: y, bx, by: y - rise, side: w.side, slope });
-    w.genY = y;
+/* The spout lets a row of 3 drops out every 5 steps at ~50 u/s, angled down
+ * the roof: rows leave ~2 u apart, about rest spacing, so the stream neither
+ * tears nor detonates, and lands soft enough not to splash over the high end. */
+function pour(w) {
+  if (!w.pending || Math.round(w.t / T.dt) % 5) return;
+  for (let k = -1; k <= 1 && w.pending; k++) {
+    const i = w.n++;
+    w.pending--;
+    w.x[i] = w.spoutX + k * 2.2 + ((w.pending * 7) % 5 - 2) * 0.05;
+    w.y[i] = w.spoutY;
+    w.vx[i] = w.spoutDir * 30; w.vy[i] = 40;
   }
+}
+
+// ── spatial hash for the fluid ───────────────────────────────────────────
+const HBUCKETS = 4096, HMASK = HBUCKETS - 1;
+const bucket = (cx, cy) => ((Math.imul(cx, 73856093) ^ Math.imul(cy, 19349663)) & HMASK);
+const nbBuckets = new Int32Array(9);
+/* The distinct buckets of the 3×3 cells around (cx, cy) — deduplicated, since
+ * two cells can hash to one bucket and visiting it twice would double-count
+ * density. Returns how many were written to nbBuckets. */
+function neighbourBuckets(cx, cy) {
+  let m = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const b = bucket(cx + dx, cy + dy);
+    let dup = false;
+    for (let k = 0; k < m; k++) if (nbBuckets[k] === b) { dup = true; break; }
+    if (!dup) nbBuckets[m++] = b;
+  }
+  return m;
 }
 
 export function step(w, input = {}) {
@@ -147,55 +236,53 @@ export function step(w, input = {}) {
   // ── sun ────────────────────────────────────────────────────────────────
   if (w.t > T.sunDelay && !w.sunOff) w.sunY += (T.sunV0 + T.sunAccel * (w.t - T.sunDelay)) * dt;
 
-  // ── ledges: build ahead, drop what the sun has passed ─────────────────
-  let deepest = -Infinity, highest = Infinity;
-  for (let i = 0; i < w.n; i++) { if (w.y[i] > deepest) deepest = w.y[i]; if (w.y[i] < highest) highest = w.y[i]; }
-  generate(w, Math.max(deepest, 0) + 500);
-  const cut = w.sunOff ? highest - 300 : w.sunY - 60;
-  while (w.ledges.length && w.ledges[0].ay < cut) w.ledges.shift();
+  // forget houses well above the sun (or the water, with no sun) now and then
+  if ((Math.round(w.t / dt) & 255) === 0) {
+    let top = w.sunY;
+    if (w.sunOff) { top = Infinity; for (let i = 0; i < w.n; i++) if (w.y[i] < top) top = w.y[i]; }
+    for (const [k, h] of w.houses) if (h.ry < top - 300) w.houses.delete(k);
+  }
 
+  pour(w);
   const n = w.n, x = w.x, y = w.y, vx = w.vx, vy = w.vy, px = w.px, py = w.py;
-
-  // ── grid (counting sort into cells of size h) ───────────────────────────
-  const h = T.h, cols = Math.ceil(T.W / h) + 2;
-  let yMin = Infinity, yMax = -Infinity;
-  for (let i = 0; i < n; i++) { if (y[i] < yMin) yMin = y[i]; if (y[i] > yMax) yMax = y[i]; }
-  const rows = n ? Math.floor((yMax - yMin) / h) + 3 : 0;
-  const cells = rows * cols;
-  if (w._start.length < cells + 1) { w._start = new Int32Array(cells * 2 + 1); w._count = new Int32Array(cells * 2 + 1); }
-  const start = w._start, count = w._count, cellOf = w._cell, order = w._order;
-  const cellIndex = (xi, yi) => (Math.floor((yi - yMin) / h) + 1) * cols + Math.min(cols - 2, Math.max(0, Math.floor(xi / h))) + 1;
+  const h = T.h, cxA = w._cx, cyA = w._cy, cellOf = w._cell, order = w._order, start = w._start, count = w._count;
   const buildGrid = () => {
-    count.fill(0, 0, cells + 1);
-    for (let i = 0; i < n; i++) { const c = cellIndex(x[i], y[i]); cellOf[i] = c; count[c]++; }
+    count.fill(0);
+    for (let i = 0; i < n; i++) {
+      const cx = Math.floor(x[i] / h), cy = Math.floor(y[i] / h), b = bucket(cx, cy);
+      cxA[i] = cx; cyA[i] = cy; cellOf[i] = b; count[b]++;
+    }
     let s = 0;
-    for (let c = 0; c <= cells; c++) { start[c] = s; s += count[c]; count[c] = 0; }
-    for (let i = 0; i < n; i++) { const c = cellOf[i]; order[start[c] + count[c]++] = i; }
+    for (let b = 0; b < HBUCKETS; b++) { start[b] = s; s += count[b]; count[b] = 0; }
+    for (let i = 0; i < n; i++) { const b = cellOf[i]; order[start[b] + count[b]++] = i; }
   };
   buildGrid();
 
   // ── viscosity impulses (pairwise, approaching pairs only) ───────────────
   for (let i = 0; i < n; i++) {
-    const ci = cellOf[i];
-    for (let dr = -cols; dr <= cols; dr += cols) for (let dc = -1; dc <= 1; dc++) {
-      const c = ci + dr + dc; if (c < 0 || c >= cells) continue;
-      for (let k = start[c], e = start[c] + count[c]; k < e; k++) {
+    const m = neighbourBuckets(cxA[i], cyA[i]);
+    for (let q0 = 0; q0 < m; q0++) {
+      const b = nbBuckets[q0];
+      for (let k = start[b], e = start[b] + count[b]; k < e; k++) {
         const j = order[k]; if (j <= i) continue;
         const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy;
         if (d2 >= h * h || d2 < 1e-8) continue;
         const d = Math.sqrt(d2), q = d / h, nx = dx / d, ny = dy / d;
         const u = (vx[i] - vx[j]) * nx + (vy[i] - vy[j]) * ny;
         if (u <= 0) continue;
-        const I = (1 - q) * (T.sigma * u + T.beta * u * u) * 0.5;
+        // capped so a pair never more than stops approaching: past that a high
+        // viscosity overshoots and flings the pair apart
+        const I = Math.min(u, (1 - q) * (T.sigma * u + T.beta * u * u)) * 0.5;
         vx[i] -= I * nx; vy[i] -= I * ny; vx[j] += I * nx; vy[j] += I * ny;
       }
     }
   }
 
   // ── gravity, terminal speed, predict ───────────────────────────────────
-  const vmax2 = T.vmax * T.vmax;
+  const vmax2 = T.vmax * T.vmax, drag = Math.exp(-T.airDrag * dt);
   for (let i = 0; i < n; i++) {
     vx[i] += gx * dt; vy[i] += gy * dt;
+    if (vy[i] > T.fallV) vx[i] *= drag;
     const s2 = vx[i] * vx[i] + vy[i] * vy[i];
     if (s2 > vmax2) { const s = T.vmax / Math.sqrt(s2); vx[i] *= s; vy[i] *= s; }
     px[i] = x[i]; py[i] = y[i];
@@ -206,11 +293,11 @@ export function step(w, input = {}) {
   buildGrid();
   const nb = new Int32Array(64), nq = new Float32Array(64);
   for (let i = 0; i < n; i++) {
-    const ci = cellOf[i];
     let rho = 0, rhoN = 0, m = 0;
-    for (let dr = -cols; dr <= cols; dr += cols) for (let dc = -1; dc <= 1; dc++) {
-      const c = ci + dr + dc; if (c < 0 || c >= cells) continue;
-      for (let k = start[c], e = start[c] + count[c]; k < e; k++) {
+    const mb = neighbourBuckets(cxA[i], cyA[i]);
+    for (let q0 = 0; q0 < mb; q0++) {
+      const b = nbBuckets[q0];
+      for (let k = start[b], e = start[b] + count[b]; k < e; k++) {
         const j = order[k]; if (j === i) continue;
         const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy;
         if (d2 >= h * h) continue;
@@ -232,30 +319,18 @@ export function step(w, input = {}) {
     x[i] += ddx; y[i] += ddy;
   }
 
-  // ── collisions: walls, ledges ───────────────────────────────────────────
-  const lo = T.pr, hi = T.W - T.pr, reach = T.ledgeR + T.pr;
-  const L = w.ledges;
+  // ── collisions: the (at most two) houses whose geometry can reach a drop ─
+  // A house spans ry − (tank wall or high end + parapet) … ry + (tank floor or
+  // low end) vertically and ±(eave + roofR) horizontally — less than DX/2, so
+  // one column per row.
+  const upReach = Math.max(T.tankWall - T.tankFloor, T.eave * Math.tan(T.pitchMax * Math.PI / 180) + T.parapet) + T.roofR + T.pr;
+  const downReach = Math.max(T.tankFloor, T.eave * Math.tan(T.pitchMax * Math.PI / 180)) + T.roofR + T.pr;
   for (let i = 0; i < n; i++) {
-    if (x[i] < lo) x[i] = lo; else if (x[i] > hi) x[i] = hi;
-    for (let l = 0; l < L.length; l++) {
-      const s = L[l];
-      if (y[i] < s.by - reach || y[i] > s.ay + reach) continue;
-      const ex = s.bx - s.ax, ey = s.by - s.ay;
-      let t = ((x[i] - s.ax) * ex + (y[i] - s.ay) * ey) / (ex * ex + ey * ey);
-      t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const cx = s.ax + ex * t, cy = s.ay + ey * t;
-      const dx = x[i] - cx, dy = y[i] - cy, d2 = dx * dx + dy * dy;
-      if (d2 >= reach * reach) continue;
-      if (d2 > 1e-10) {
-        const d = Math.sqrt(d2), push = (reach - d) / d;
-        x[i] += dx * push; y[i] += dy * push;
-      } else {
-        // dead centre: push along the slab's upward normal
-        const el = Math.hypot(ex, ey), nx = ey / el * -s.side, ny = -Math.abs(ex / el);
-        x[i] = cx + nx * reach; y[i] = cy + ny * reach;
-      }
+    const r0 = Math.ceil((y[i] - downReach - T.Y0) / T.DY), r1 = Math.floor((y[i] + upReach - T.Y0) / T.DY);
+    for (let r = Math.max(0, r0); r <= r1; r++) {
+      const hs = houseAt(w, r, colOf(r, x[i]));
+      for (const s of hs.segs) collide(x, y, px, py, i, s);
     }
-    if (x[i] < lo) x[i] = lo; else if (x[i] > hi) x[i] = hi;
   }
 
   // ── recover velocity; evaporate; score ─────────────────────────────────
@@ -270,22 +345,62 @@ export function step(w, input = {}) {
     x[i] = x[last]; y[i] = y[last]; vx[i] = vx[last]; vy[i] = vy[last];
   }
   for (let i = 0; i < w.n; i++) if (y[i] > w.depth) w.depth = y[i];
-  if (w.n === 0) w.dead = true;
+  if (w.n === 0 && !w.pending) w.dead = true;
 }
 
-/* Which ledge (index into world.ledges) a point is resting on, or -1: the
- * nearest ledge whose span covers x and whose top surface lies within `band`
- * below y. Used by the harness bot and the HUD hint — not by the physics. */
-export function ledgeUnder(w, xi, yi, band = 14) {
-  let best = -1, bestGap = Infinity;
-  for (let l = 0; l < w.ledges.length; l++) {
-    const s = w.ledges[l];
-    const x0 = Math.min(s.ax, s.bx), x1 = Math.max(s.ax, s.bx);
-    if (xi < x0 || xi > x1) continue;
-    const t = (xi - s.ax) / (s.bx - s.ax);
-    const top = s.ay + (s.by - s.ay) * t - T.ledgeR;
-    const gap = top - yi;
-    if (gap >= -T.pr && gap < band && gap < bestGap) { best = l; bestGap = gap; }
+/* Push drop i out of capsule s = [ax, ay, bx, by, radius], and cap its speed
+ * along the surface at T.slideMax. Uncapped, water leaves a steep roof fast
+ * enough to sail past the child roof below; proportional friction instead
+ * stalls the one-drop film a light rain leaves on a gentle one. */
+function collide(x, y, px, py, i, s) {
+  const reach = s[4] + T.pr;
+  const ax = s[0], ay = s[1], ex = s[2] - ax, ey = s[3] - ay;
+  let t = ((x[i] - ax) * ex + (y[i] - ay) * ey) / (ex * ex + ey * ey);
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const cx = ax + ex * t, cy = ay + ey * t;
+  const dx = x[i] - cx, dy = y[i] - cy, d2 = dx * dx + dy * dy;
+  if (d2 >= reach * reach) return;
+  if (d2 > 1e-10) {
+    const d = Math.sqrt(d2), push = (reach - d) / d, nx = dx / d, ny = dy / d;
+    x[i] += dx * push; y[i] += dy * push;
+    const mx = x[i] - px[i], my = y[i] - py[i], mn = mx * nx + my * ny;
+    const tx = mx - mn * nx, ty = my - mn * ny, tl = Math.sqrt(tx * tx + ty * ty), cap = T.slideMax * T.dt;
+    if (tl > cap) { const k = 1 - cap / tl; x[i] -= tx * k; y[i] -= ty * k; }
+  } else {
+    y[i] = cy - reach; // dead centre: out the top
   }
-  return best;
+}
+
+/* Where the water is: drops binned on a (DX/2 × DY) grid, each 3×3 block of
+ * bins a candidate clump. The lowest clump holding at least a fifth of the
+ * live drops wins — the front of the water, so the camera and the bot leave
+ * a remnant stranded in a tank behind instead of waiting on it — falling
+ * back to the biggest. Returns its mean x, its 55th-percentile y and its
+ * count. */
+export function bulk(w) {
+  if (w.n === 0) return null;
+  const bx = T.DX / 2, by = T.DY, bins = new Map();
+  const K = (ix, iy) => ix * 1048576 + iy; // iy stays well inside ±2^19 for any reachable depth
+  for (let i = 0; i < w.n; i++) {
+    const ix = Math.floor(w.x[i] / bx), iy = Math.floor(w.y[i] / by), k = K(ix, iy);
+    const b = bins.get(k);
+    if (b) b[2]++; else bins.set(k, [ix, iy, 1]);
+  }
+  const need = Math.max(1, Math.ceil(w.n / 5));
+  let big = -1, bigX = 0, bigY = 0, deep = -Infinity, kx = 0, ky = 0;
+  for (const [ix, iy] of bins.values()) {
+    let s = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const e = bins.get(K(ix + a, iy + b)); if (e) s += e[2]; }
+    if (s > big) { big = s; bigX = ix; bigY = iy; }
+    if (s >= need && iy > deep) { deep = iy; kx = ix; ky = iy; }
+  }
+  if (deep === -Infinity) { kx = bigX; ky = bigY; }
+  let sx = 0, cnt = 0;
+  const ys = [];
+  for (let i = 0; i < w.n; i++) {
+    if (Math.abs(Math.floor(w.x[i] / bx) - kx) > 1 || Math.abs(Math.floor(w.y[i] / by) - ky) > 1) continue;
+    sx += w.x[i]; ys.push(w.y[i]); cnt++;
+  }
+  ys.sort((a, b) => a - b);
+  return { x: sx / cnt, y: ys[Math.floor(cnt * 0.55)], n: cnt };
 }

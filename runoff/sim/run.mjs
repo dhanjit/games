@@ -4,16 +4,17 @@
  * number ships on reading well.
  *
  *   node sim/run.mjs                        # all bots, 40 seeds each
- *   node sim/run.mjs --runs 100 --bot greedy
- *   node sim/run.mjs --set sunAccel=0.6 --set drops=120
+ *   node sim/run.mjs --runs 100 --bot planner
+ *   node sim/run.mjs --set sunAccel=0.6 --set pTank=0.2
  *
  * Bots:
- *   none   — never tilts. The floor: with every ledge sloping toward its wall,
- *            only overflow moves water, so this should die near the top.
- *   flip   — alternates full left / full right every 1.2 s, blind.
- *   greedy — finds the highest drop resting on a ledge (the one the sun gets
- *            first) and tilts fully toward that ledge's free tip. A player who
- *            reads the screen and always rescues the top.
+ *   none    — never tilts. Water follows every roof's slope until a parapet or
+ *             a tank stops it, so this should die near the top.
+ *   flip    — alternates full left / full right every 1.2 s, blind.
+ *   planner — reads the lattice like a player reading the screen: counts the
+ *             water resting on each roof and tank, and picks the tilt (of 21)
+ *             that sends the most of it somewhere good, looking 4 rows down
+ *             the tree past tanks and parapets.
  *
  * Tilt reaches a bot's target at a finite rate (T.maxTilt in ~0.25 s), since
  * a hand doesn't snap a phone from one side to the other.
@@ -21,7 +22,8 @@
  * Reports per bot: depth reached (m) median / p10 / p90, seconds survived,
  * drops alive at 20 s and 60 s, and runs still alive at the time cap.
  */
-import { makeWorld, step, T, ledgeUnder, depthM } from '../rules.js';
+import { makeWorld, step, T, depthM } from '../rules.js';
+import { bots } from './bots.mjs';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; };
@@ -30,28 +32,12 @@ for (let i = 0; i < args.length; i++)
 const RUNS = Number(opt('runs', 40));
 const SEED0 = Number(opt('seed', 1));
 const CAP = Number(opt('cap', 240));          // seconds; a run still alive here is censored
-const BOTS = opt('bot', 'none,flip,greedy').split(',');
+const BOTS = opt('bot', 'none,flip,planner').split(',');
 const TILT_RATE = T.maxTilt / 0.25;           // rad/s a hand can swing the phone
-
-const bots = {
-  none: () => 0,
-  flip: (w) => (Math.floor(w.t / 1.2) % 2 ? 1 : -1) * T.maxTilt,
-  greedy: (w, mem) => {
-    let top = Infinity, side = 0;
-    for (let i = 0; i < w.n; i++) {
-      if (w.y[i] >= top) continue;
-      const l = ledgeUnder(w, w.x[i], w.y[i]);
-      if (l < 0) continue;
-      top = w.y[i]; side = w.ledges[l].side;
-    }
-    if (side) mem.target = -side * T.maxTilt; // left ledge (-1) → tilt right (+)
-    return mem.target ?? 0;
-  },
-};
 
 function play(bot, seed) {
   const w = makeWorld({ seed });
-  const mem = {};
+  const mem = { tilt: 0 };
   let tilt = 0, at20 = null, at60 = null;
   const maxStep = TILT_RATE * T.dt;
   while (!w.dead && w.t < CAP) {
