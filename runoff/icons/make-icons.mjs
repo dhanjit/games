@@ -9,8 +9,9 @@ import { fileURLToPath } from 'node:url';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const BG = hex('#1c2530'), WIN = hex('#243040'), SLAB = hex('#7d8791'), TOP = hex('#b3bdc6');
-const WATER = hex('#5ec8f0'), HI = hex('#d8f4ff'), SUN0 = hex('#fff6d8'), SUN1 = hex('#ffb13b');
+const SKY = hex('#86b9df'), HILL = hex('#557562'), WALL0 = hex('#f2d58a'), WALL1 = hex('#a8d8c4'), GLASS = hex('#2c3e4f');
+const TIN0 = hex('#b8432f'), TIN1 = hex('#3f7d5a'), RIB = hex('#f3e9e2');
+const WATER = hex('#2280d4'), HI = hex('#d6f0ff'), SUN0 = hex('#fff6d8'), SUN1 = hex('#ffb13b');
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 // Shapes in a 512 design space; `k` shrinks toward the centre for maskable.
@@ -18,18 +19,19 @@ function sample(x, y) {
   // sun band across the top with a wavy edge
   const edge = 92 + Math.sin(x * 0.045) * 7;
   if (y < edge) return mix(SUN0, SUN1, y / edge);
-  let c = BG;
-  // back-wall windows
-  for (const [wx, wy] of [[70, 150], [390, 150], [70, 420], [390, 420]])
-    if (x > wx && x < wx + 52 && y > wy && y < wy + 70) c = WIN;
-  // two slabs: left one rising to the right, right one rising to the left
-  const slab = (ax, ay, bx, by, r) => {
+  // sky over a pine hill
+  let c = y > 300 + Math.sin(x * 0.02) * 20 ? HILL : SKY;
+  // two houses stepped down the hill, each under a lean-to tin roof
+  if (x > 10 && x < 250 && y > 240) c = WALL0;
+  if (x > 262 && x < 502 && y > 440) c = WALL1;
+  if ((x > 60 && x < 110 || x > 150 && x < 200) && y > 300 && y < 370) c = GLASS;
+  const slab = (ax, ay, bx, by, r, tin) => {
     const ex = bx - ax, ey = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / (ex * ex + ey * ey)));
     const dx = x - (ax + ex * t), dy = y - (ay + ey * t), d = Math.hypot(dx, dy);
-    return d < r ? (dy < -r * 0.45 ? TOP : SLAB) : null;
+    return d < r ? (dy < -r * 0.45 ? RIB : tin) : null;
   };
-  c = slab(-20, 250, 250, 222, 18) ?? slab(532, 452, 262, 424, 18) ?? c;
-  // the drop: a circle with a cone tangent to it
+  c = slab(-20, 200, 262, 250, 18, TIN0) ?? slab(240, 400, 532, 452, 18, TIN1) ?? c;
+  // the drop leaving the red roof's low eave: a circle with a cone tangent to it
   const cx = 300, cy = 330, r = 64, ax = 300, ay = 200;
   const inCircle = Math.hypot(x - cx, y - cy) < r;
   const d = cy - ay, alpha = Math.asin(r / d);

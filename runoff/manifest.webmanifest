@@ -1,14 +1,14 @@
 {
   "name": "Runoff",
   "short_name": "Runoff",
-  "description": "Tilt your phone to tip the last rainwater off the ledges and down the alley before the sun burns it off.",
+  "description": "Tilt your phone to steer the last rainwater from roof to roof down a hill town before the sun burns it off.",
   "id": "/runoff/",
   "scope": "./",
   "start_url": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#1c2530",
-  "theme_color": "#1c2530",
+  "background_color": "#1d2a26",
+  "theme_color": "#1d2a26",
   "categories": ["games"],
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
