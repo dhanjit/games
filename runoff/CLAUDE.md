@@ -5,11 +5,13 @@ a hill town and runs down terraces of lean-to tin roofs. **Tilting the phone
 rotates gravity**, which decides which way each roof sheds its water. Every
 roof drops onto one of two roofs below, so the way down is a tree of paths.
 The sun descends from above and evaporates whatever it catches. Score is how
-deep the water gets. Tracker: issue #87; the branching town is #90.
+deep the water gets. Tracker: issue #87; the branching town is #90, the
+power-ups #92.
 
-**Status: M2 — branching town, live.** One mode (the sun chases), tilt input
-with fallbacks, the harness with a lattice-reading bot. No pickups, sound or
-hazards beyond tanks and parapets yet.
+**Status: M3 — power-ups.** One mode (the sun chases), tilt input with
+fallbacks, three pickups (rain barrel, cloud shade, downpipe), the harness
+with a lattice-reading bot. No sound, and no meta progression (cosmetics)
+yet.
 
 ## Files
 
@@ -56,6 +58,41 @@ Three geometry rules, each learned the hard way (2026-10-13):
    the wrong way. Proportional friction was tried first: it stalls the
    one-drop film a pour leaves on a gentle roof.
 
+## Power-ups
+
+Pickups are seeded per house like everything else (`houseAt`'s `loot`), never
+on the first three rows. They're taken when five drops are over one at the
+same time. Each one sits next to danger, so it pays to read the fork above it:
+
+| Pickup | Where | Effect |
+|---|---|---|
+| **Rain barrel** (`BARREL`) | Roof beside a tank (`pLoot`, split with shade) | +`barrelDrops` (30) drops on the roof |
+| **Cloud shade** (`SHADE`) | Roof beside a tank, like a barrel | Sun stands still `shadeTime` (3 s): `sunT`, the sun's own clock, stops |
+| **Downpipe** (`PIPE`) | Roof with a tank below it (`pPipe` 0.15), whose outlet `pipeRows` (3) rows down isn't a tank | Water leaving the low eave comes out of the outlet; never used up |
+
+- **Beside a tank** means the fork above a barrel or shade is
+  pickup-or-tank. A reader takes the pickup; a waggler gets the tank half the
+  time. The first placement put shades on parapet roofs, and pickups made
+  `flip` win (240 m vs planner 217 m). Waggling escapes parapets anyway, so
+  a parapet shade was free for it.
+- **Barrels are the strongest skill reward**, because of that fork. Pipes
+  help blind play about as much as reading, so they're the rarest. A 20-seed
+  sweep, median flip / planner m:
+
+  | Setting | flip / planner |
+  |---|---|
+  | Barrel 20, pipe 0.25 | 123 / 150 |
+  | Barrel 30 | 116 / 199 |
+  | Pipe 0.15 | 109 / 149 |
+  | No pipes | 105 / 145 |
+  | Shade 2 s | 123 / 165 |
+- A barrel's drops are laid at rest spacing; pipe arrivals are fanned out.
+  Drops set on top of each other detonate (see the spout). Worlds hold up
+  to `cap` (360) drops.
+- `world.events` gets `{kind: 'barrel' | 'shade' | 'pipe', x, y}` per pickup
+  (a pipe at most once a second); the host turns them into call-outs and
+  must drain them, as the harness does.
+
 `bulk(world)` is the leading clump: the lowest 3×3 block of (DX/2 × DY) bins
 holding at least a fifth of the live drops. The camera and the planner both
 follow it. The biggest clump was used first, and both waited on a remnant
@@ -90,29 +127,34 @@ Cost is ~0.4 ms per step in Node (two steps per 60 Hz frame).
 
 ## The sun
 
-`sunY` descends at `sunV0 + sunAccel · (t − sunDelay)`. Linear in *time*: an
+`sunY` descends at `sunV0 + sunAccel · sunT`, where `sunT` is the time since
+`sunDelay` not spent in a cloud's shade. Linear in *time*: an
 earlier depth-keyed version was exponential, a wall rather than a chase. Water
 moves slower down terraces (a roof is crossed, not fallen past), so `sunAccel`
 is 0.6, down from M1's 1.2.
 
-## Harness numbers (40 seeds, 2026-10-13)
+## Harness numbers (40 seeds, 2026-10-14, with power-ups)
 
 `none` never tilts. `flip` swings full left/right every 1.2 s, blind.
 `planner` reads the lattice: it counts the water resting on each roof and
 tank, and picks the tilt (21 candidates) that sends the most of it somewhere
-good, looking 4 rows down the tree. Tilt slews at `maxTilt` per 0.25 s for
-all bots.
+good, looking 4 rows down the tree. It values barrels (+20) and shades (+15)
+and follows downpipes. Tilt slews at `maxTilt` per 0.25 s for all bots.
 
 | bot | depth p10 / p50 / p90 (m) | secs p50 | drops @20 s / @60 s |
 |---|---|---|---|
-| none | 19 / 31 / 51 | 32 | 142 / 0 |
-| flip | 64 / 73 / 94 | 54 | 154 / 0 |
-| planner | 73 / **98** / 125 | 64 | 176 / 3 |
+| none | 19 / 33 / 60 | 35 | 180 / 0 |
+| flip | 82 / 121 / 200 | 77 | 208 / 45 |
+| planner | 105 / **172** / 280 | 106 | 210 / 179 |
 
-**Reading the screen now beats waggling** (98 vs 73 m), the check M1 failed.
-With `sunAccel` 0.5 runs are longer (planner 114 m / 74 s) but the gap
-narrows (flip 91 m). The planner isn't perfect: it still lands in tanks
-sometimes, so people should die sooner than 64 s.
+Before power-ups (M2): none 31 m, flip 73 m, planner 98 m. **The
+screen-reading lead grew from +25 m (34%) to +51 m (42%).**
+
+Runs got longer: the planner went from 64 s to 106 s, and flip from 54 s to
+77 s. If that drags in play, raise `sunAccel` to shorten runs. Re-check the
+lead in the harness afterwards: in M2, a gentler sun (0.5 vs 0.6) narrowed
+it. The planner isn't perfect: it still lands in tanks sometimes, so people
+should die sooner.
 
 ## Input
 
@@ -152,6 +194,16 @@ with light smoothing on the gyro only.
   range (0.04), a pine ridge (0.12), the hill face (0.35), which is a
   pre-drawn tile of far houses and pines, then mist bands (0.6). The range and
   ridge slide up out of view as the water descends.
+- **Pickups** are drawn with their house, so off-path ones sit in the mist:
+  - a wooden barrel with water at the top;
+  - a small cloud bobbing over its shadow;
+  - a grey downpipe with a hopper and wall brackets. Pipes are drawn after
+    all rows, so the rows below don't cover them.
+
+  A pickup on the path gets a pulsing gold ring, and the path follows a pipe
+  to its outlet. Taking one shows a call-out ("+30 water", "☁ sun stopped
+  3 s", "↓ downpipe"), clamped on-screen. While the sun is shaded, a cloud
+  bank covers its edge and the readout counts down.
 - **Town**: per row, pastel bodies with framed windows, then roofs. A roof is
   a slab matching its capsule, with a ribbed tin plane receding above it and a
   gutter lip at the low eave. Parapets are concrete blocks. Tanks are concrete

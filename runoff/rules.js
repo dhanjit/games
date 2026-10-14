@@ -18,6 +18,17 @@
  *          stays, unless a hard tilt sloshes it over the rim; a share always
  *          stays behind.
  *
+ * Pickups sit on roofs next to danger, so a fork is worth reading
+ * (`houseAt`'s `loot`). Five drops over one at once take it:
+ *
+ *   BARREL — a rain barrel on a roof beside a tank: +T.barrelDrops drops.
+ *            The fork above it is barrel-or-tank.
+ *   SHADE  — a cloud's shade, placed like a barrel: the sun stands still
+ *            for T.shadeTime s.
+ *   PIPE   — a downpipe at the low eave of a roof with a tank below it. It
+ *            isn't used up: water leaving that eave comes out T.pipeRows rows
+ *            down, past the tank, onto a roof (never a tank).
+ *
  * Roofs are single-pitch on purpose: a gable's ridge is a knife-edge, and a
  * stream landing near one splits in two however it is aimed. Rows have no gaps
  * on purpose too: with gaps, a hard tilt flings water over a whole row, which
@@ -42,9 +53,11 @@
  *     more are still to come out of the spout over the first ~2.5 s.
  *   step(world, {tilt}) — advance T.dt. `tilt` is the gravity angle in
  *     radians from straight down, positive toward +x (right). Evaporations
- *     this step are appended to world.steam as x,y pairs; the host drains it.
- *   houseAt(world, r, c) → {type, r, c, x, ry, dir, wall, pitch, rise, segs}
- *     (memoised). A roof runs from its high end (x − dir·eave, ry − rise/2) to
+ *     this step are appended to world.steam as x,y pairs, and pickups taken
+ *     to world.events as {kind, x, y}; the host drains both.
+ *   houseAt(world, r, c) → {type, r, c, x, ry, dir, wall, pitch, rise, segs,
+ *     loot, taken, pipe} (memoised; `pipe` = {x, y, r, c}: inlet and outlet
+ *     house). A roof runs from its high end (x − dir·eave, ry − rise/2) to
  *     its low end (x + dir·eave, ry + rise/2).
  *   rowOf(y), xOf(r, c), colOf(r, x), childrenOf(r, c) — lattice helpers.
  *   bulk(world) → {x, y, n} of the leading clump of water, or null.
@@ -89,6 +102,15 @@ export const T = {
   pWall: 0.18,       // share of roofs with a parapet
   safeRows: 3,       // the first rows are all plain roofs
 
+  // pickups (see the header and houseAt)
+  pLoot: 0.35,       // chance a roof beside a tank carries a barrel or a shade …
+  pPipe: 0.15,       // … and a roof with a tank below it a downpipe
+  lootNeed: 5,       // drops over a pickup at once to take it
+  barrelDrops: 30,
+  shadeTime: 3,      // s the sun stands still
+  pipeRows: 3,       // rows a downpipe drops water
+  cap: 360,          // most drops a world holds (spout + barrels)
+
   // sun
   sunStart: -60,     // y where the sun starts (the town begins at y ≈ 80)
   sunDelay: 4,       // s before it starts to move
@@ -98,6 +120,7 @@ export const T = {
 };
 
 export const ROOF = 0, TANK = 1;
+export const NONE = 0, BARREL = 1, SHADE = 2, PIPE = 3;
 
 export const depthM = (y) => Math.max(0, Math.floor(y * T.mPerU));
 
@@ -127,6 +150,11 @@ export const childrenOf = (r, c) => (r & 1) ? [c, c + 1] : [c - 1, c];
 function baseType(seed, r, c) {
   return r >= T.safeRows && unit(seed, r, c) < T.pTank ? TANK : ROOF;
 }
+/* Never two tanks side by side: the right one of a pair becomes a roof. */
+function typeAt(seed, r, c) {
+  const t = baseType(seed, r, c);
+  return t === TANK && baseType(seed, r, c - 1) === TANK ? ROOF : t;
+}
 
 const key = (r, c) => r * 4194304 + c + 2097152;
 
@@ -134,8 +162,7 @@ export function houseAt(w, r, c) {
   const k = key(r, c);
   let h = w.houses.get(k);
   if (h) return h;
-  let type = baseType(w.seed, r, c);
-  if (type === TANK && baseType(w.seed, r, c - 1) === TANK) type = ROOF; // never two tanks side by side
+  const type = typeAt(w.seed, r, c);
   const x = xOf(r, c), ry = T.Y0 + r * T.DY;
   const u2 = unit(w.seed ^ 0x51ed, r, c), u3 = unit(w.seed ^ 0x7a11, r, c);
   const dir = u2 < 0.5 ? -1 : 1;
@@ -155,33 +182,49 @@ export function houseAt(w, r, c) {
     const fy = ry + T.tankFloor, ty = fy - T.tankWall, hw = T.tankHalf;
     segs.push([x - hw, fy, x + hw, fy, T.roofR], [x - hw, fy, x - hw, ty, T.roofR], [x + hw, fy, x + hw, ty, T.roofR]);
   }
-  h = { type, r, c, x, ry, dir, wall, pitch, rise, segs };
+  // pickups. A barrel or a shade sits beside a tank, so the fork above them
+  // is tank-or-pickup; a downpipe sits on a roof with a tank below, so its
+  // low eave skips past it (only where its outlet isn't a tank).
+  let loot = NONE, pipe = null;
+  if (type === ROOF && !wall && r >= T.safeRows) {
+    const u4 = unit(w.seed ^ 0x1007, r, c), [L, R] = childrenOf(r, c);
+    const lx = x + dir * T.eave, pr = r + T.pipeRows, pc = colOf(pr, lx);
+    if (u4 < T.pLoot && (typeAt(w.seed, r, c - 1) === TANK || typeAt(w.seed, r, c + 1) === TANK)) {
+      loot = u4 < T.pLoot / 2 ? BARREL : SHADE;
+    } else if (u4 < T.pPipe && (typeAt(w.seed, r + 1, L) === TANK || typeAt(w.seed, r + 1, R) === TANK) && typeAt(w.seed, pr, pc) !== TANK) {
+      loot = PIPE; pipe = { x: lx, y: ry + rise / 2, r: pr, c: pc };
+    }
+  }
+  h = { type, r, c, x, ry, dir, wall, pitch, rise, segs, loot, taken: false, pipe, stamp: -1, hits: 0 };
   w.houses.set(k, h);
   return h;
 }
 
 // ── world ────────────────────────────────────────────────────────────────
 export function makeWorld(opts = {}) {
-  const drops = opts.drops ?? T.drops;
+  const drops = opts.drops ?? T.drops, cap = Math.max(drops, T.cap);
   const seed = (opts.seed ?? Math.floor(Math.random() * 4294967296)) >>> 0;
   const w = {
     seed,
     t: 0,
     n: 0,              // drops in play; the rest are still in the spout
     pending: drops,
-    x: new Float32Array(drops), y: new Float32Array(drops),
-    vx: new Float32Array(drops), vy: new Float32Array(drops),
-    px: new Float32Array(drops), py: new Float32Array(drops),
+    x: new Float32Array(cap), y: new Float32Array(cap),
+    vx: new Float32Array(cap), vy: new Float32Array(cap),
+    px: new Float32Array(cap), py: new Float32Array(cap),
     houses: new Map(),
     sunY: T.sunStart,
+    sunT: 0,           // the sun's own clock: it stops while shaded
+    shade: 0,          // s of shade left
     sunOff: opts.sun === false,
     depth: 0,
     tilt: 0,
     dead: false,
     steam: [],
+    events: [],
     spoutX: 0, spoutY: 0, spoutDir: 1,
-    _cx: new Int32Array(drops), _cy: new Int32Array(drops), _cell: new Int32Array(drops),
-    _order: new Int32Array(drops), _start: new Int32Array(HBUCKETS + 1), _count: new Int32Array(HBUCKETS + 1),
+    _cx: new Int32Array(cap), _cy: new Int32Array(cap), _cell: new Int32Array(cap),
+    _order: new Int32Array(cap), _start: new Int32Array(HBUCKETS + 1), _count: new Int32Array(HBUCKETS + 1),
   };
   // The water arrives from a gutter spout over the high end of the first roof
   // (see `pour`), not all at once: a block of it dropped or set on the roof
@@ -234,7 +277,8 @@ export function step(w, input = {}) {
   const gx = T.g * Math.sin(tilt), gy = T.g * Math.cos(tilt);
 
   // ── sun ────────────────────────────────────────────────────────────────
-  if (w.t > T.sunDelay && !w.sunOff) w.sunY += (T.sunV0 + T.sunAccel * (w.t - T.sunDelay)) * dt;
+  if (w.shade > 0) w.shade = Math.max(0, w.shade - dt);
+  else if (w.t > T.sunDelay && !w.sunOff) { w.sunT += dt; w.sunY += (T.sunV0 + T.sunAccel * w.sunT) * dt; }
 
   // forget houses well above the sun (or the water, with no sun) now and then
   if ((Math.round(w.t / dt) & 255) === 0) {
@@ -325,11 +369,21 @@ export function step(w, input = {}) {
   // one column per row.
   const upReach = Math.max(T.tankWall - T.tankFloor, T.eave * Math.tan(T.pitchMax * Math.PI / 180) + T.parapet) + T.roofR + T.pr;
   const downReach = Math.max(T.tankFloor, T.eave * Math.tan(T.pitchMax * Math.PI / 180)) + T.roofR + T.pr;
+  const stepNo = Math.round(w.t / dt), piped = [], taken = [];
   for (let i = 0; i < n; i++) {
     const r0 = Math.ceil((y[i] - downReach - T.Y0) / T.DY), r1 = Math.floor((y[i] + upReach - T.Y0) / T.DY);
     for (let r = Math.max(0, r0); r <= r1; r++) {
       const hs = houseAt(w, r, colOf(r, x[i]));
       for (const s of hs.segs) collide(x, y, px, py, i, s);
+      if (!hs.loot || hs.taken) continue;
+      if (hs.loot === PIPE) {
+        // into the hopper just past the low eave
+        const p = hs.pipe, a = hs.dir * (x[i] - p.x);
+        if (a > -1 && a < 5 && y[i] > p.y - 4 && y[i] < p.y + 10) { piped.push(i, hs); break; }
+      } else if (Math.abs(x[i] - hs.x) < T.eave && Math.abs(y[i] - (hs.ry + hs.dir * (x[i] - hs.x) / T.eave * hs.rise / 2) + 4) < 6) {
+        if (hs.stamp !== stepNo) { hs.stamp = stepNo; hs.hits = 0; }
+        if (++hs.hits === T.lootNeed) { hs.taken = true; taken.push(hs); }
+      }
     }
   }
 
@@ -337,6 +391,31 @@ export function step(w, input = {}) {
   const inv = 1 / dt;
   for (let i = 0; i < w.n; i++) {
     vx[i] = (x[i] - px[i]) * inv; vy[i] = (y[i] - py[i]) * inv;
+  }
+  // down the pipes: out of the outlet above the roof T.pipeRows rows down,
+  // fanned out so drops arriving together don't land on top of each other
+  for (let k = 0; k < piped.length; k += 2) {
+    const i = piped[k], hs = piped[k + 1], p = hs.pipe, out = houseAt(w, p.r, p.c);
+    const oy = out.ry + out.dir * (p.x - out.x) / T.eave * out.rise / 2 - 6;
+    x[i] = p.x + ((k * 7) % 5 - 2) * 1.1; y[i] = oy - ((k * 3) % 4) * 1.6;
+    vx[i] = 0; vy[i] = 40;
+    if (w.t - (hs.used ?? -9) > 1) w.events.push({ kind: 'pipe', x: p.x, y: p.y });
+    hs.used = w.t;
+  }
+  for (const hs of taken) {
+    const ty = hs.ry - 4;            // just above the roof's middle
+    if (hs.loot === SHADE) {
+      w.shade = T.shadeTime;
+    } else {
+      // a barrel's worth laid at rest spacing on the roof's middle
+      const add = Math.min(T.barrelDrops, x.length - w.n - w.pending), cols = 5;
+      for (let k = 0; k < add; k++) {
+        const i = w.n++;             // the spout appends at n too, so pending drops still fit
+        x[i] = hs.x + ((k % cols) - (cols - 1) / 2) * 2.2; y[i] = ty - Math.floor(k / cols) * 2.2;
+        vx[i] = 0; vy[i] = 0;
+      }
+    }
+    w.events.push({ kind: hs.loot === SHADE ? 'shade' : 'barrel', x: hs.x, y: ty });
   }
   for (let i = w.n - 1; i >= 0; i--) {
     if (y[i] >= w.sunY) continue;
