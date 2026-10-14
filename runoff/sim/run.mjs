@@ -44,7 +44,7 @@ function play(bot, seed) {
     const want = bots[bot](w, mem);
     tilt += Math.max(-maxStep, Math.min(maxStep, want - tilt));
     step(w, { tilt });
-    w.steam.length = 0;
+    w.steam.length = 0; w.events.length = 0;
     if (at20 === null && w.t >= 20) at20 = w.n;
     if (at60 === null && w.t >= 60) at60 = w.n;
   }

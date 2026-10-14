@@ -1,7 +1,7 @@
 /* Runoff — host: canvas render, tilt input, camera, HUD, overlays.
  * All physics and scoring live in rules.js; this file only feeds it a tilt
  * angle and draws what comes back. */
-import { makeWorld, step, T, depthM, bulk, houseAt, rowOf, colOf, childrenOf, TANK } from './rules.js';
+import { makeWorld, step, T, depthM, bulk, houseAt, rowOf, colOf, childrenOf, TANK, BARREL, SHADE, PIPE } from './rules.js';
 
 const HARNESS = new URLSearchParams(location.search).has('harness');
 const $ = (id) => document.getElementById(id);
@@ -111,6 +111,12 @@ let state = 'title', world = null, best = 0;
 let camX = 0, camY = 0;             // world x at the screen's centre, world y at its top
 let focusX = 0, focusY = 0;         // where the camera is heading: the leading water
 const steam = [];                   // {x, y, age}
+const pops = [];                    // pickup call-outs: {x, y, age, text, color}
+const POP = {
+  barrel: { text: `+${T.barrelDrops} water`, color: '#1f6fb8' },
+  shade: { text: `☁ sun stopped ${T.shadeTime} s`, color: '#3a4a58' },
+  pipe: { text: '↓ downpipe', color: '#4d565c' },
+};
 
 function aim() {
   focusX = camX = world.spoutX;
@@ -123,7 +129,7 @@ function start(seed) {
   world = makeWorld({ seed });
   best = loadBest();
   aim();
-  steam.length = 0; tilt = 0;
+  steam.length = 0; pops.length = 0; tilt = 0;
   state = 'play';
   $('title').classList.remove('show'); $('over').classList.remove('show');
   $('hud').classList.remove('hide');
@@ -162,7 +168,7 @@ function attract(dtReal) {
   acc += dtReal;
   for (let n = 0; acc >= T.dt && n < 8; n++, acc -= T.dt) step(world, { tilt: (tilt = Math.sin(world.t * 0.7) * 0.6) });
   acc = Math.min(acc, T.dt);
-  world.steam.length = 0;
+  world.steam.length = 0; world.events.length = 0;
   followWater(dtReal);
 }
 
@@ -189,6 +195,9 @@ function update(dtReal) {
   }
   world.steam.length = 0;
   for (let i = steam.length - 1; i >= 0; i--) { steam[i].age += dtReal; if (steam[i].age > 1.2) steam.splice(i, 1); }
+  for (const e of world.events) pops.push({ x: e.x, y: e.y, age: 0, ...POP[e.kind] });
+  world.events.length = 0;
+  for (let i = pops.length - 1; i >= 0; i--) { pops[i].age += dtReal; if (pops[i].age > 1.6) pops.splice(i, 1); }
 
   followWater(dtReal);
 
@@ -229,7 +238,8 @@ let pathEnd = null;                 // the house where it stops, if it does
 const clear = new Map();            // house → 0..1, eased
 
 /* Which way water leaves h under tilt t: −1 left, +1 right, 0 it stays. The
- * tank's threshold is a hard tilt; a share stays behind even then. */
+ * tank's threshold is a hard tilt; a share stays behind even then. (Leaving
+ * by a downpipe's eave, `tracePath` follows the pipe to its outlet.) */
 function exitSide(h, t) {
   if (h.type === TANK) return Math.abs(t) > 0.75 ? Math.sign(t) : 0;
   if (-h.dir * t > h.pitch) return -h.dir;
@@ -242,7 +252,8 @@ function tracePath() {
   for (let k = 0; h && k < PATH_ROWS; k++) {
     const side = exitSide(h, tilt);
     if (!side) { pathEnd = h; break; }
-    const [L, R] = childrenOf(h.r, h.c), to = houseAt(world, h.r + 1, side < 0 ? L : R);
+    const [L, R] = childrenOf(h.r, h.c);
+    const to = h.loot === PIPE && side === h.dir ? houseAt(world, h.pipe.r, h.pipe.c) : houseAt(world, h.r + 1, side < 0 ? L : R);
     path.push({ from: h, to, side });
     h = to;
   }
@@ -497,14 +508,64 @@ function drawFlags(r, c) {
   }
 }
 
-function drawTown() {
-  const r0 = Math.max(0, rowOf(camY) - 1), r1 = rowOf(camY + VH) + 1;
+// ── pickups ───────────────────────────────────────────────────────────────
+function drawBarrel(h) {
+  const x = h.x, y = roofYAt(h, x) - T.roofR, w = 3.6, hh = 9;
+  ctx.fillStyle = '#9a5f34';
+  ctx.beginPath();
+  ctx.moveTo(sx(x - w), sy(y)); ctx.quadraticCurveTo(sx(x - w - 1.1), sy(y - hh / 2), sx(x - w), sy(y - hh));
+  ctx.lineTo(sx(x + w), sy(y - hh)); ctx.quadraticCurveTo(sx(x + w + 1.1), sy(y - hh / 2), sx(x + w), sy(y));
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,230,190,0.25)'; ctx.fillRect(sx(x - w * 0.55), sy(y - hh + 0.5), 1.1 * scale, (hh - 1) * scale);
+  ctx.fillStyle = '#4b3120';
+  for (const f of [0.22, 0.78]) ctx.fillRect(sx(x - w - 0.7), sy(y - hh * f - 0.5), (2 * w + 1.4) * scale, 1 * scale);
+  ctx.fillStyle = '#3d2a1c'; ctx.beginPath(); ctx.ellipse(sx(x), sy(y - hh), w * scale, 1.2 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2f8ee0'; ctx.beginPath(); ctx.ellipse(sx(x), sy(y - hh + 0.2), (w - 0.8) * scale, 0.75 * scale, 0, 0, Math.PI * 2); ctx.fill();
+}
+function drawShadeCloud(h, t) {
+  const x = h.x, y = h.ry - 17 + Math.sin(t * 2 + h.c) * 1.2;
+  ctx.fillStyle = 'rgba(40,60,80,0.18)';
+  ctx.beginPath(); ctx.ellipse(sx(x), sy(roofYAt(h, x) - T.roofR), 9 * scale, 1.6 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  for (const [dx, dy, r, c] of [[-4.5, 1, 3.6, '#dfe6ec'], [4.5, 1, 3.4, '#dfe6ec'], [0, 0.6, 4.6, '#dfe6ec'], [-4.2, -0.3, 3.4, '#fff'], [4.2, -0.2, 3.2, '#fff'], [0, -1.6, 4.4, '#fff']]) {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sx(x + dx), sy(y + dy), r * scale, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function drawPipe(h) {
+  const p = h.pipe, out = houseAt(world, p.r, p.c), d = h.dir;
+  const px = p.x + d * 1.2, top = p.y + 2.5, bot = roofYAt(out, p.x) - 8;
+  ctx.fillStyle = '#5c646a';
+  ctx.beginPath(); ctx.moveTo(sx(px - 3.6), sy(p.y - 1)); ctx.lineTo(sx(px + 3.6), sy(p.y - 1));
+  ctx.lineTo(sx(px + 1.7), sy(top + 1)); ctx.lineTo(sx(px - 1.7), sy(top + 1)); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = C.pipe; ctx.fillRect(sx(px - 1.6), sy(top), 3.2 * scale, (bot - top) * scale);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(sx(px - 0.9), sy(top), 0.7 * scale, (bot - top) * scale);
+  ctx.fillStyle = '#4a5156';
+  for (let y = top + 10; y < bot - 4; y += 15) ctx.fillRect(sx(px - 2.3), sy(y), 4.6 * scale, 1.1 * scale);
+  ctx.fillStyle = C.pipe;
+  ctx.beginPath(); ctx.moveTo(sx(px - 1.6), sy(bot)); ctx.lineTo(sx(px + 1.6), sy(bot));
+  ctx.lineTo(sx(px + 2.6), sy(bot + 3)); ctx.lineTo(sx(px - 2.6), sy(bot + 3)); ctx.closePath(); ctx.fill();
+}
+
+function drawTown(t) {
+  const r0 = Math.max(0, rowOf(camY) - 1), r1 = rowOf(camY + VH) + 1, pipes = [];
+  for (let r = Math.max(0, r0 - T.pipeRows); r < r0; r++) {
+    // pipes from rows above the view still run down through it
+    for (let c = colOf(r, camX - VW / 2) - 1, c1 = colOf(r, camX + VW / 2) + 1; c <= c1; c++) {
+      const h = houseAt(world, r, c);
+      if (h.loot === PIPE) pipes.push(h);
+    }
+  }
   for (let r = r0; r <= r1; r++) {
     const c0 = colOf(r, camX - VW / 2) - 1, c1 = colOf(r, camX + VW / 2) + 1;
     for (let c = c0; c <= c1; c++) drawBody(houseAt(world, r, c));
-    for (let c = c0; c <= c1; c++) drawRoof(houseAt(world, r, c));
+    for (let c = c0; c <= c1; c++) {
+      const h = houseAt(world, r, c);
+      drawRoof(h);
+      if (h.loot === PIPE) pipes.push(h);
+      else if (h.loot && !h.taken) (h.loot === BARREL ? drawBarrel : drawShadeCloud)(h, t);
+    }
     for (let c = c0; c < c1; c++) drawFlags(r, c);
   }
+  for (const h of pipes) drawPipe(h);
   // the downpipe the rain arrives through
   const px = world.spoutX - world.spoutDir * 2, py = world.spoutY - 2;
   ctx.lineCap = 'butt'; ctx.strokeStyle = C.pipe; ctx.lineWidth = 3.4 * scale;
@@ -638,6 +699,15 @@ function drawPath(t) {
     run += len;
   }
   ctx.globalAlpha = 1;
+  // a pickup the path crosses gets a gold ring
+  for (const { to } of path) {
+    if (!to.loot || to.taken || to.loot === PIPE) continue;
+    const y = to.loot === BARREL ? roofYAt(to, to.x) - 6 : to.ry - 17;
+    ctx.strokeStyle = '#f2b62e'; ctx.lineWidth = Math.max(2, 0.6 * scale);
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 7);
+    ctx.beginPath(); ctx.arc(sx(to.x), sy(y), 8.5 * scale, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   if (pathEnd) {
     // where the water would stop: in a tank, or against a parapet
     const x = pathEnd.type === TANK ? pathEnd.x : pathEnd.x + pathEnd.dir * (T.eave - 4);
@@ -668,6 +738,21 @@ function drawSun(t) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = gl; ctx.fillRect(0, Math.max(0, e), vw, 34 * scale);
     ctx.globalCompositeOperation = 'source-over';
+    if (world.shade > 0) {
+      // a bank of cloud across the sun while it stands still
+      ctx.globalAlpha = Math.min(1, world.shade * 2);
+      for (let x = -20; x < vw + 40; x += 9 * scale) {
+        const r = (6 + Math.sin(x * 0.07) * 2) * scale;
+        ctx.fillStyle = '#e9eef2'; ctx.beginPath(); ctx.arc(x, e + r * 0.2, r * 1.15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x + 3, e - r * 0.25, r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  } else if (state === 'play' && world.shade > 0) {
+    ctx.fillStyle = '#3a4a58'; ctx.font = `bold ${Math.max(12, 3.6 * scale)}px Trebuchet MS, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(`☁ sun stopped · ${world.shade.toFixed(1)} s`, vw / 2, 58);
+    ctx.textAlign = 'left';
   } else if (state === 'play') {
     // sun off-screen above: say how far
     const m = Math.max(1, Math.round((camY - world.sunY) * T.mPerU));
@@ -676,6 +761,19 @@ function drawSun(t) {
     ctx.fillText(`☀ ${m} m above`, vw / 2, 58);
     ctx.textAlign = 'left';
   }
+}
+
+function drawPops() {
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `bold ${Math.max(13, 4 * scale)}px Trebuchet MS, sans-serif`;
+  for (const p of pops) {
+    const k = p.age / 1.6, half = ctx.measureText(p.text).width / 2 + 8;
+    const x = Math.max(half, Math.min(vw - half, sx(p.x))), y = sy(p.y - 10 - k * 14);
+    ctx.globalAlpha = k < 0.75 ? 1 : (1 - k) / 0.25;
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(p.text, x, y);
+    ctx.fillStyle = p.color; ctx.fillText(p.text, x, y);
+  }
+  ctx.globalAlpha = 1; ctx.textAlign = 'left';
 }
 
 function drawSteam() {
@@ -706,11 +804,12 @@ function render(t) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (!world) return;
   drawBackdrop(t);
-  drawTown();
+  drawTown(t);
   drawMist();
   drawPath(t);
   drawWater();
   drawSteam();
+  drawPops();
   drawSun(t);
   drawRuler();
   if (state === 'play') {
