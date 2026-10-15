@@ -6,10 +6,10 @@ rotates gravity**, which decides which way each roof sheds its water. Every
 roof drops onto one of two roofs below, so the way down is a tree of paths.
 The sun descends from above and evaporates whatever it catches. Score is how
 deep the water gets. Tracker: issue #87; the branching town is #90, the
-power-ups #92.
+power-ups #92, the gutter funnel #95.
 
 **Status: M3 — power-ups.** One mode (the sun chases), tilt input with
-fallbacks, three pickups (rain barrel, cloud shade, downpipe), the harness
+fallbacks, four pickups (rain barrel, cloud shade, gutter funnel, downpipe), the harness
 with a lattice-reading bot. No sound, and no meta progression (cosmetics)
 yet.
 
@@ -66,8 +66,9 @@ same time. Each one sits next to danger, so it pays to read the fork above it:
 
 | Pickup | Where | Effect |
 |---|---|---|
-| **Rain barrel** (`BARREL`) | Roof beside a tank (`pLoot`, split with shade) | +`barrelDrops` (30) drops on the roof |
+| **Rain barrel** (`BARREL`) | Roof beside a tank (`pLoot`, split three ways with shade and funnel) | +`barrelDrops` (30) drops on the roof |
 | **Cloud shade** (`SHADE`) | Roof beside a tank, like a barrel | Sun stands still `shadeTime` (3 s): `sunT`, the sun's own clock, stops |
+| **Gutter funnel** (`FUNNEL`) | Roof beside a tank, like a barrel | Every drop more than `funnelReach` (100 u, about two rows) away and not below it drains into the gutters and pours back out of the funnel (a second pour, like the spout) |
 | **Downpipe** (`PIPE`) | Roof with a tank below it (`pPipe` 0.15), whose outlet `pipeRows` (3) rows down isn't a tank | Water leaving the low eave comes out of the outlet; never used up |
 
 - **Beside a tank** means the fork above a barrel or shade is
@@ -86,12 +87,31 @@ same time. Each one sits next to danger, so it pays to read the fork above it:
   | Pipe 0.15 | 109 / 149 |
   | No pipes | 105 / 145 |
   | Shade 2 s | 123 / 165 |
-- A barrel's drops are laid at rest spacing; pipe arrivals are fanned out.
+- **The gutter funnel is the regroup** (#95). Only ~25% of the water travels
+  with the lead clump; the rest is split off by forks and left for the sun.
+  On the same maps, funnels on vs inert (40 seeds):
+
+  | Funnels | flip | planner | Lead descent | Stragglers |
+  |---|---|---|---|---|
+  | Inert | 105 m | 159 m | 0.77 m/s | 74% |
+  | On | 132 m | 217 m | 1.61 m/s | 66% |
+
+  It's skill-weighted: +27 m for blind play, +58 m for reading. Lead
+  descent and stragglers are from the planner, sun off, 20 seeds. Its reach is
+  100 u because at 40 it also pulled the main body a row behind (165 of 180
+  drops), a free teleport rather than a regroup. Drops below the funnel stay
+  put, so it never pulls water back up.
+- A barrel's drops are laid at rest spacing; pipe arrivals are fanned out;
+  a funnel re-pours at the spout's rate.
   Drops set on top of each other detonate (see the spout). Worlds hold up
   to `cap` (360) drops.
-- `world.events` gets `{kind: 'barrel' | 'shade' | 'pipe', x, y}` per pickup
-  (a pipe at most once a second); the host turns them into call-outs and
-  must drain them, as the harness does.
+- `world.events` gets `{kind: 'barrel' | 'shade' | 'pipe' | 'funnel', x, y}`
+  per pickup (a pipe at most once a second; a funnel adds `n` and up to 40
+  `from` points); the host turns them into call-outs and streaks and must
+  drain them, as the harness does.
+- A viscous "slush" power-up was measured and dropped (#94): even absurd
+  viscosity only moved the lead clump from 25% to 34%, because splitting
+  comes from forks, not thin water.
 
 `bulk(world)` is the leading clump: the lowest 3×3 block of (DX/2 × DY) bins
 holding at least a fifth of the live drops. The camera and the planner both
@@ -102,7 +122,7 @@ stranded in a tank.
 
 Clavet, Beaudoin & Poulin, *Particle-based Viscoelastic Fluid Simulation*
 (SCA 2005) — position-based, stable at a fixed step, the usual 2-D game liquid.
-Per step: pour from the spout → viscosity impulses → gravity (+ air drag on
+Per step: pour (spout, funnels) → viscosity impulses → gravity (+ air drag on
 falling water) → predict → relax density → project out of capsules, capping
 slide speed → recover velocity from positions.
 
@@ -133,25 +153,28 @@ earlier depth-keyed version was exponential, a wall rather than a chase. Water
 moves slower down terraces (a roof is crossed, not fallen past), so `sunAccel`
 is 0.6, down from M1's 1.2.
 
-## Harness numbers (40 seeds, 2026-10-14, with power-ups)
+## Harness numbers (40 seeds, 2026-10-15, with power-ups)
 
 `none` never tilts. `flip` swings full left/right every 1.2 s, blind.
 `planner` reads the lattice: it counts the water resting on each roof and
 tank, and picks the tilt (21 candidates) that sends the most of it somewhere
-good, looking 4 rows down the tree. It values barrels (+20) and shades (+15)
-and follows downpipes. Tilt slews at `maxTilt` per 0.25 s for all bots.
+good, looking 4 rows down the tree. It values barrels (+20), shades and
+funnels (+15), and follows downpipes. Tilt slews at `maxTilt` per 0.25 s for all bots.
 
 | bot | depth p10 / p50 / p90 (m) | secs p50 | drops @20 s / @60 s |
 |---|---|---|---|
-| none | 19 / 33 / 60 | 35 | 180 / 0 |
-| flip | 82 / 121 / 200 | 77 | 208 / 45 |
-| planner | 105 / **172** / 280 | 106 | 210 / 179 |
+| none | 19 / 33 / 67 | 35 | 180 / 0 |
+| flip | 98 / 132 / 256 | 85 | 200 / 84 |
+| planner | 130 / **217** / 318 | 126 | 195 / 272 |
 
-Before power-ups (M2): none 31 m, flip 73 m, planner 98 m. **The
-screen-reading lead grew from +25 m (34%) to +51 m (42%).**
+| Milestone | flip | planner | Lead |
+|---|---|---|---|
+| M2 (no pickups) | 73 m | 98 m | +25 m (34%) |
+| Barrel, shade, pipe | 121 m | 172 m | +51 m (42%) |
+| + gutter funnel | 132 m | 217 m | **+85 m (64%)** |
 
-Runs got longer: the planner went from 64 s to 106 s, and flip from 54 s to
-77 s. If that drags in play, raise `sunAccel` to shorten runs. Re-check the
+Runs got longer: the planner went from 64 s (M2) to 126 s, and flip from
+54 s to 85 s. If that drags in play, raise `sunAccel` to shorten runs. Re-check the
 lead in the harness afterwards: in M2, a gentler sun (0.5 vs 0.6) narrowed
 it. The planner isn't perfect: it still lands in tanks sometimes, so people
 should die sooner.
@@ -197,12 +220,14 @@ with light smoothing on the gyro only.
 - **Pickups** are drawn with their house, so off-path ones sit in the mist:
   - a wooden barrel with water at the top;
   - a small cloud bobbing over its shadow;
+  - a galvanised funnel on short legs, mouth up;
   - a grey downpipe with a hopper and wall brackets. Pipes are drawn after
     all rows, so the rows below don't cover them.
 
   A pickup on the path gets a pulsing gold ring, and the path follows a pipe
   to its outlet. Taking one shows a call-out ("+30 water", "☁ sun stopped
-  3 s", "↓ downpipe"), clamped on-screen. While the sun is shaded, a cloud
+  3 s", "⤵ N drops regrouped", "↓ downpipe"), clamped on-screen. A funnel
+  also draws fading streaks from where its drops were. While the sun is shaded, a cloud
   bank covers its edge and the readout counts down.
 - **Town**: per row, pastel bodies with framed windows, then roofs. A roof is
   a slab matching its capsule, with a ribbed tin plane receding above it and a

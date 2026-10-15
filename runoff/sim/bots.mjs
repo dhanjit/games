@@ -1,12 +1,12 @@
 /* Tilt policies for the harness (run.mjs). Each is (world, mem) → target
  * tilt in radians; mem is a per-run scratch object. See run.mjs for what each
  * bot stands for. */
-import { T, houseAt, childrenOf, colOf, rowOf, TANK, BARREL, SHADE, PIPE } from '../rules.js';
+import { T, houseAt, childrenOf, colOf, rowOf, TANK, BARREL, SHADE, PIPE, FUNNEL } from '../rules.js';
 
 /* How good is it for the water to arrive at (r, c), looking d rows ahead?
  * Tanks are worst; a parapet's low end is a dead end until tipped back.
  * Pickups are worth a detour; a downpipe skips rows past its tank. */
-const BONUS = { [BARREL]: 20, [SHADE]: 15 };
+const BONUS = { [BARREL]: 20, [SHADE]: 15, [FUNNEL]: 15 };
 function value(w, r, c, d) {
   if (d === 0) return 0;
   const h = houseAt(w, r, c);

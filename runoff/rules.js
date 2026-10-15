@@ -25,6 +25,10 @@
  *            The fork above it is barrel-or-tank.
  *   SHADE  — a cloud's shade, placed like a barrel: the sun stands still
  *            for T.shadeTime s.
+ *   FUNNEL — a gutter funnel, placed like a barrel. Every drop behind it or
+ *            off to the side (not within T.funnelReach, not below it) drains
+ *            into the gutters and pours back out of the funnel, so the water
+ *            the fork split off catches up instead of waiting for the sun.
  *   PIPE   — a downpipe at the low eave of a roof with a tank below it. It
  *            isn't used up: water leaving that eave comes out T.pipeRows rows
  *            down, past the tank, onto a roof (never a tank).
@@ -50,7 +54,8 @@
  * API:
  *   makeWorld({seed, drops, sun}) → world. `sun: false` never moves the sun
  *     (the title screen's attract loop). Drops 0…n−1 are in play; `pending`
- *     more are still to come out of the spout over the first ~2.5 s.
+ *     more are still to come out of a pour (`world.pours`): the spout over
+ *     the first ~2.5 s, or a funnel.
  *   step(world, {tilt}) — advance T.dt. `tilt` is the gravity angle in
  *     radians from straight down, positive toward +x (right). Evaporations
  *     this step are appended to world.steam as x,y pairs, and pickups taken
@@ -103,12 +108,13 @@ export const T = {
   safeRows: 3,       // the first rows are all plain roofs
 
   // pickups (see the header and houseAt)
-  pLoot: 0.35,       // chance a roof beside a tank carries a barrel or a shade …
+  pLoot: 0.35,       // chance a roof beside a tank carries a barrel, shade or funnel …
   pPipe: 0.15,       // … and a roof with a tank below it a downpipe
   lootNeed: 5,       // drops over a pickup at once to take it
   barrelDrops: 30,
   shadeTime: 3,      // s the sun stands still
   pipeRows: 3,       // rows a downpipe drops water
+  funnelReach: 100,  // drops this close to a funnel (about two rows), or below it, stay where they are
   cap: 360,          // most drops a world holds (spout + barrels)
 
   // sun
@@ -120,7 +126,7 @@ export const T = {
 };
 
 export const ROOF = 0, TANK = 1;
-export const NONE = 0, BARREL = 1, SHADE = 2, PIPE = 3;
+export const NONE = 0, BARREL = 1, SHADE = 2, PIPE = 3, FUNNEL = 4;
 
 export const depthM = (y) => Math.max(0, Math.floor(y * T.mPerU));
 
@@ -182,7 +188,7 @@ export function houseAt(w, r, c) {
     const fy = ry + T.tankFloor, ty = fy - T.tankWall, hw = T.tankHalf;
     segs.push([x - hw, fy, x + hw, fy, T.roofR], [x - hw, fy, x - hw, ty, T.roofR], [x + hw, fy, x + hw, ty, T.roofR]);
   }
-  // pickups. A barrel or a shade sits beside a tank, so the fork above them
+  // pickups. A barrel, shade or funnel sits beside a tank, so the fork above them
   // is tank-or-pickup; a downpipe sits on a roof with a tank below, so its
   // low eave skips past it (only where its outlet isn't a tank).
   let loot = NONE, pipe = null;
@@ -190,7 +196,7 @@ export function houseAt(w, r, c) {
     const u4 = unit(w.seed ^ 0x1007, r, c), [L, R] = childrenOf(r, c);
     const lx = x + dir * T.eave, pr = r + T.pipeRows, pc = colOf(pr, lx);
     if (u4 < T.pLoot && (typeAt(w.seed, r, c - 1) === TANK || typeAt(w.seed, r, c + 1) === TANK)) {
-      loot = u4 < T.pLoot / 2 ? BARREL : SHADE;
+      loot = u4 < T.pLoot / 3 ? BARREL : u4 < T.pLoot * 2 / 3 ? SHADE : FUNNEL;
     } else if (u4 < T.pPipe && (typeAt(w.seed, r + 1, L) === TANK || typeAt(w.seed, r + 1, R) === TANK) && typeAt(w.seed, pr, pc) !== TANK) {
       loot = PIPE; pipe = { x: lx, y: ry + rise / 2, r: pr, c: pc };
     }
@@ -223,6 +229,7 @@ export function makeWorld(opts = {}) {
     steam: [],
     events: [],
     spoutX: 0, spoutY: 0, spoutDir: 1,
+    pours: [],         // {x, y, dir, n}: the spout, then any funnels
     _cx: new Int32Array(cap), _cy: new Int32Array(cap), _cell: new Int32Array(cap),
     _order: new Int32Array(cap), _start: new Int32Array(HBUCKETS + 1), _count: new Int32Array(HBUCKETS + 1),
   };
@@ -233,21 +240,25 @@ export function makeWorld(opts = {}) {
   w.spoutX = -roof.dir * (T.eave - 12);
   w.spoutY = roof.ry - roof.rise / 2 + roof.rise * 12 / (2 * T.eave) - 5;
   w.spoutDir = roof.dir;
+  w.pours.push({ x: w.spoutX, y: w.spoutY, dir: w.spoutDir, n: drops });
   return w;
 }
 
-/* The spout lets a row of 3 drops out every 5 steps at ~50 u/s, angled down
+/* A pour lets a row of 3 drops out every 5 steps at ~50 u/s, angled down
  * the roof: rows leave ~2 u apart, about rest spacing, so the stream neither
  * tears nor detonates, and lands soft enough not to splash over the high end. */
 function pour(w) {
   if (!w.pending || Math.round(w.t / T.dt) % 5) return;
-  for (let k = -1; k <= 1 && w.pending; k++) {
-    const i = w.n++;
-    w.pending--;
-    w.x[i] = w.spoutX + k * 2.2 + ((w.pending * 7) % 5 - 2) * 0.05;
-    w.y[i] = w.spoutY;
-    w.vx[i] = w.spoutDir * 30; w.vy[i] = 40;
+  for (const p of w.pours) {
+    for (let k = -1; k <= 1 && p.n; k++) {
+      const i = w.n++;
+      p.n--; w.pending--;
+      w.x[i] = p.x + k * 2.2 + ((p.n * 7) % 5 - 2) * 0.05;
+      w.y[i] = p.y;
+      w.vx[i] = p.dir * 30; w.vy[i] = 40;
+    }
   }
+  if (w.pours.length > 1) w.pours = w.pours.filter((p) => p.n);
 }
 
 // ── spatial hash for the fluid ───────────────────────────────────────────
@@ -406,6 +417,23 @@ export function step(w, input = {}) {
     const ty = hs.ry - 4;            // just above the roof's middle
     if (hs.loot === SHADE) {
       w.shade = T.shadeTime;
+    } else if (hs.loot === FUNNEL) {
+      // the stragglers drain into the gutters and queue up to pour back out
+      let got = 0;
+      const from = [];
+      for (let i = w.n - 1; i >= 0; i--) {
+        if (y[i] > hs.ry + 10 || Math.hypot(x[i] - hs.x, y[i] - hs.ry) < T.funnelReach) continue;
+        if (from.length < 80) from.push(x[i], y[i]);
+        const last = --w.n;
+        x[i] = x[last]; y[i] = y[last]; vx[i] = vx[last]; vy[i] = vy[last];
+        got++;
+      }
+      if (got) {
+        w.pours.push({ x: hs.x - hs.dir * 6, y: hs.ry - 6 / T.eave * hs.rise / 2 - 8, dir: hs.dir, n: got }); // 8 u over the roof, 6 u uphill
+        w.pending += got;
+      }
+      w.events.push({ kind: 'funnel', x: hs.x, y: ty, n: got, from });
+      continue;
     } else {
       // a barrel's worth laid at rest spacing on the roof's middle
       const add = Math.min(T.barrelDrops, x.length - w.n - w.pending), cols = 5;
