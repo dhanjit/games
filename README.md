@@ -86,8 +86,8 @@ is a tree of paths. Tilt the phone to rotate gravity: a roof sheds the way it
 slopes unless you tip the water back over its high end. Open rooftop tanks
 swallow water and parapets pool it, while the sun comes down from above,
 faster and faster, and evaporates whatever it catches. Rain barrels add
-water, a passing cloud stops the sun for a moment, and downpipes drop the
-water three rows at once. No tilt sensor? Hold
+water, a passing cloud stops the sun for a moment, gutter funnels gather the
+stragglers back up, and downpipes drop the water three rows at once. No tilt sensor? Hold
 ← / → or drag sideways. Offline PWA.
 
 To add a game later, drop it in a new top-level folder and add a card to the

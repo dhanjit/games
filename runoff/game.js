@@ -1,7 +1,7 @@
 /* Runoff — host: canvas render, tilt input, camera, HUD, overlays.
  * All physics and scoring live in rules.js; this file only feeds it a tilt
  * angle and draws what comes back. */
-import { makeWorld, step, T, depthM, bulk, houseAt, rowOf, colOf, childrenOf, TANK, BARREL, SHADE, PIPE } from './rules.js';
+import { makeWorld, step, T, depthM, bulk, houseAt, rowOf, colOf, childrenOf, TANK, BARREL, SHADE, PIPE, FUNNEL } from './rules.js';
 
 const HARNESS = new URLSearchParams(location.search).has('harness');
 const $ = (id) => document.getElementById(id);
@@ -112,10 +112,12 @@ let camX = 0, camY = 0;             // world x at the screen's centre, world y a
 let focusX = 0, focusY = 0;         // where the camera is heading: the leading water
 const steam = [];                   // {x, y, age}
 const pops = [];                    // pickup call-outs: {x, y, age, text, color}
+const streaks = [];                 // a funnel's pull: {x, y, from: [x, y, …], age}
 const POP = {
   barrel: { text: `+${T.barrelDrops} water`, color: '#1f6fb8' },
   shade: { text: `☁ sun stopped ${T.shadeTime} s`, color: '#3a4a58' },
   pipe: { text: '↓ downpipe', color: '#4d565c' },
+  funnel: { text: '⤵ regrouped', color: '#2e6b5a' },
 };
 
 function aim() {
@@ -129,7 +131,7 @@ function start(seed) {
   world = makeWorld({ seed });
   best = loadBest();
   aim();
-  steam.length = 0; pops.length = 0; tilt = 0;
+  steam.length = 0; pops.length = 0; streaks.length = 0; tilt = 0;
   state = 'play';
   $('title').classList.remove('show'); $('over').classList.remove('show');
   $('hud').classList.remove('hide');
@@ -195,9 +197,13 @@ function update(dtReal) {
   }
   world.steam.length = 0;
   for (let i = steam.length - 1; i >= 0; i--) { steam[i].age += dtReal; if (steam[i].age > 1.2) steam.splice(i, 1); }
-  for (const e of world.events) pops.push({ x: e.x, y: e.y, age: 0, ...POP[e.kind] });
+  for (const e of world.events) {
+    pops.push({ x: e.x, y: e.y, age: 0, ...POP[e.kind], ...(e.kind === 'funnel' && { text: `⤵ ${e.n} drops regrouped` }) });
+    if (e.kind === 'funnel' && e.from.length) streaks.push({ x: e.x, y: e.y, from: e.from, age: 0 });
+  }
   world.events.length = 0;
   for (let i = pops.length - 1; i >= 0; i--) { pops[i].age += dtReal; if (pops[i].age > 1.6) pops.splice(i, 1); }
+  for (let i = streaks.length - 1; i >= 0; i--) { streaks[i].age += dtReal; if (streaks[i].age > 0.7) streaks.splice(i, 1); }
 
   followWater(dtReal);
 
@@ -530,6 +536,20 @@ function drawShadeCloud(h, t) {
     ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sx(x + dx), sy(y + dy), r * scale, 0, Math.PI * 2); ctx.fill();
   }
 }
+function drawFunnel(h) {
+  // a galvanised hopper on short legs, mouth up
+  const x = h.x, y = roofYAt(h, x) - T.roofR;
+  ctx.fillStyle = '#6d767c';
+  ctx.fillRect(sx(x - 3.4), sy(y - 3), 0.9 * scale, 3 * scale); ctx.fillRect(sx(x + 2.5), sy(y - 3), 0.9 * scale, 3 * scale);
+  ctx.fillStyle = '#a9b3b9';
+  ctx.beginPath(); ctx.moveTo(sx(x - 5.5), sy(y - 10)); ctx.lineTo(sx(x + 5.5), sy(y - 10));
+  ctx.lineTo(sx(x + 1.4), sy(y - 3.5)); ctx.lineTo(sx(x - 1.4), sy(y - 3.5)); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.moveTo(sx(x - 4.2), sy(y - 9.6)); ctx.lineTo(sx(x - 2.6), sy(y - 9.6)); ctx.lineTo(sx(x - 0.6), sy(y - 4)); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#7e888e'; ctx.fillRect(sx(x - 1.4), sy(y - 3.6), 2.8 * scale, 1.4 * scale);
+  ctx.fillStyle = '#d5dde1'; ctx.beginPath(); ctx.ellipse(sx(x), sy(y - 10), 5.5 * scale, 1.3 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3b4a52'; ctx.beginPath(); ctx.ellipse(sx(x), sy(y - 10), 4.4 * scale, 0.8 * scale, 0, 0, Math.PI * 2); ctx.fill();
+}
 function drawPipe(h) {
   const p = h.pipe, out = houseAt(world, p.r, p.c), d = h.dir;
   const px = p.x + d * 1.2, top = p.y + 2.5, bot = roofYAt(out, p.x) - 8;
@@ -561,7 +581,7 @@ function drawTown(t) {
       const h = houseAt(world, r, c);
       drawRoof(h);
       if (h.loot === PIPE) pipes.push(h);
-      else if (h.loot && !h.taken) (h.loot === BARREL ? drawBarrel : drawShadeCloud)(h, t);
+      else if (h.loot && !h.taken) ({ [BARREL]: drawBarrel, [SHADE]: drawShadeCloud, [FUNNEL]: drawFunnel })[h.loot](h, t);
     }
     for (let c = c0; c < c1; c++) drawFlags(r, c);
   }
@@ -702,7 +722,7 @@ function drawPath(t) {
   // a pickup the path crosses gets a gold ring
   for (const { to } of path) {
     if (!to.loot || to.taken || to.loot === PIPE) continue;
-    const y = to.loot === BARREL ? roofYAt(to, to.x) - 6 : to.ry - 17;
+    const y = to.loot === SHADE ? to.ry - 17 : roofYAt(to, to.x) - 6;
     ctx.strokeStyle = '#f2b62e'; ctx.lineWidth = Math.max(2, 0.6 * scale);
     ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 7);
     ctx.beginPath(); ctx.arc(sx(to.x), sy(y), 8.5 * scale, 0, Math.PI * 2); ctx.stroke();
@@ -763,6 +783,22 @@ function drawSun(t) {
   }
 }
 
+function drawStreaks() {
+  // drops drawn into the funnel: lines from where they were, fading
+  ctx.strokeStyle = '#2280d4'; ctx.lineCap = 'round';
+  for (const s of streaks) {
+    const k = s.age / 0.7;
+    ctx.globalAlpha = 0.5 * (1 - k); ctx.lineWidth = Math.max(1, 0.7 * scale);
+    ctx.beginPath();
+    for (let i = 0; i < s.from.length; i += 2) {
+      const fx = s.from[i], fy = s.from[i + 1];
+      ctx.moveTo(sx(fx + (s.x - fx) * k), sy(fy + (s.y - fy) * k)); ctx.lineTo(sx(s.x), sy(s.y));
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawPops() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `bold ${Math.max(13, 4 * scale)}px Trebuchet MS, sans-serif`;
@@ -809,6 +845,7 @@ function render(t) {
   drawPath(t);
   drawWater();
   drawSteam();
+  drawStreaks();
   drawPops();
   drawSun(t);
   drawRuler();
