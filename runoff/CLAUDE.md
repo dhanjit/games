@@ -51,12 +51,17 @@ Three geometry rules, each learned the hard way (2026-10-13):
    under 2·(roofR + pr) = 6.8 u closes). With gaps, a hard tilt flung water
    past whole rows. That made blind full-tilt waggling the fastest way down,
    and `flip` beat the planner (157 m to 115 m, 12 seeds).
-3. **Streams fall straight.** Off an eave, water keeps ≤ 50 u/s along a roof
+3. **Streams fall straight.** Off an eave, water keeps ≤ 40 u/s along a roof
    (`slideMax`), and falling water (vy > `fallV`) loses sideways speed to
    `airDrag`. Without both, a stream sails ~20 u past its child, lands near
    the child's high end, and its momentum carries part of it over that end
    the wrong way. Proportional friction was tried first: it stalls the
    one-drop film a pour leaves on a gentle roof.
+
+   `slideMax` went 50 → 40 on 2026-10-16 (#95). On two separate 40-seed sets
+   it cost blind `flip` 14–18 m and the planner only 4–6 m. 30 widens the gap
+   further (flip −43 m), but it slows everyone: the planner reached 73 m by
+   40 s with the sun off, against 84 m at 50.
 
 ## Power-ups
 
@@ -91,13 +96,13 @@ same time. Each one sits next to danger, so it pays to read the fork above it:
   with the lead clump; the rest is split off by forks and left for the sun.
   On the same maps, funnels on vs inert (40 seeds):
 
-  | Funnels | flip | planner | Lead descent | Stragglers |
+  | Funnels | flip | planner | Planner depth at 40 s, sun off | Lead-clump share |
   |---|---|---|---|---|
-  | Inert | 105 m | 159 m | 0.77 m/s | 74% |
-  | On | 132 m | 217 m | 1.61 m/s | 66% |
+  | Inert | 105 m | 159 m | 70 m | 23% |
+  | On | 132 m | 217 m | 84 m | 28% |
 
-  It's skill-weighted: +27 m for blind play, +58 m for reading. Lead
-  descent and stragglers are from the planner, sun off, 20 seeds. Its reach is
+  It's skill-weighted: +27 m for blind play, +58 m for reading. These were
+  measured at `slideMax` 50, with the last two columns over 20 seeds. Its reach is
   100 u because at 40 it also pulled the main body a row behind (165 of 180
   drops), a free teleport rather than a regroup. Drops below the funnel stay
   put, so it never pulls water back up.
@@ -117,6 +122,12 @@ same time. Each one sits next to danger, so it pays to read the fork above it:
 holding at least a fifth of the live drops. The camera and the planner both
 follow it. The biggest clump was used first, and both waited on a remnant
 stranded in a tank.
+
+**Don't measure descent with `bulk()`.** It hops between clumps, so its y
+jumps. That produced two false "descent doubled" readings: the funnel
+(0.77 → 1.61 m/s by bulk; really 70 → 84 m by 40 s) and `slideMax` 30 (by
+bulk 0.60 → 1.17 m/s; really slower, 84 → 73 m). Use `world.depth`, the
+deepest drop.
 
 ## Water: Clavet double-density relaxation
 
@@ -153,7 +164,7 @@ earlier depth-keyed version was exponential, a wall rather than a chase. Water
 moves slower down terraces (a roof is crossed, not fallen past), so `sunAccel`
 is 0.6, down from M1's 1.2.
 
-## Harness numbers (40 seeds, 2026-10-15, with power-ups)
+## Harness numbers (40 seeds, 2026-10-16, power-ups + slideMax 40)
 
 `none` never tilts. `flip` swings full left/right every 1.2 s, blind.
 `planner` reads the lattice: it counts the water resting on each roof and
@@ -163,18 +174,24 @@ funnels (+15), and follows downpipes. Tilt slews at `maxTilt` per 0.25 s for all
 
 | bot | depth p10 / p50 / p90 (m) | secs p50 | drops @20 s / @60 s |
 |---|---|---|---|
-| none | 19 / 33 / 67 | 35 | 180 / 0 |
-| flip | 98 / 132 / 256 | 85 | 200 / 84 |
-| planner | 130 / **217** / 318 | 126 | 195 / 272 |
+| none | 19 / 35 / 69 | 35 | 180 / 0 |
+| flip | 75 / 118 / 193 | 78 | 180 / 50 |
+| planner | 150 / **213** / 287 | 119 | 210 / 265 |
 
 | Milestone | flip | planner | Lead |
 |---|---|---|---|
 | M2 (no pickups) | 73 m | 98 m | +25 m (34%) |
 | Barrel, shade, pipe | 121 m | 172 m | +51 m (42%) |
-| + gutter funnel | 132 m | 217 m | **+85 m (64%)** |
+| + gutter funnel | 132 m | 217 m | +85 m (64%) |
+| + `slideMax` 40 | 118 m | 213 m | **+95 m (80%)** |
 
-Runs got longer: the planner went from 64 s (M2) to 126 s, and flip from
-54 s to 85 s. If that drags in play, raise `sunAccel` to shorten runs. Re-check the
+**Seed sets differ a lot.** On seeds 41–80, `slideMax` 50 gave flip 172 m and
+planner 224 m (40 seeds 1–40: 132 / 217). Trust the *direction* of a change
+across seed sets, not a single median. Check a close call on a second set
+(`--seed 41`).
+
+Runs got longer: the planner went from 64 s (M2) to 119 s, and flip from
+54 s to 78 s. If that drags in play, raise `sunAccel` to shorten runs. Re-check the
 lead in the harness afterwards: in M2, a gentler sun (0.5 vs 0.6) narrowed
 it. The planner isn't perfect: it still lands in tanks sometimes, so people
 should die sooner.
