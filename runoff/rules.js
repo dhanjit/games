@@ -85,7 +85,7 @@ export const T = {
   sigma: 0.06,       // linear viscosity, per step
   beta: 0.004,       // quadratic viscosity, s/u
   pr: 1.2,           // drop radius against geometry
-  slideMax: 50,      // u/s — fastest a drop slides along a surface it touches
+  slideMax: 40,      // u/s — fastest a drop slides along a surface it touches (see CLAUDE.md)
   airDrag: 6,        // 1/s, on the sideways speed of water falling faster than fallV …
   fallV: 60,         // … u/s: streams drop off an eave instead of sailing past the roof below
 
